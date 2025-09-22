@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'secure_network_service.dart';
 
 /// Network service abstract class
 abstract class NetworkService {
@@ -41,12 +42,19 @@ abstract class NetworkService {
   void clearAuthToken();
 }
 
-/// Network service implementation
+/// Network service implementation with TLS 1.3 security
 class NetworkServiceImpl implements NetworkService {
   final Dio _dio;
+  final SecureNetworkService _secureService;
 
-  NetworkServiceImpl(this._dio) {
+  NetworkServiceImpl(this._dio) : _secureService = SecureNetworkService() {
     _setupInterceptors();
+  }
+
+  /// Factory constructor for medical-grade secure networking
+  factory NetworkServiceImpl.secure() {
+    final secureService = SecureNetworkService();
+    return NetworkServiceImpl(secureService.dio);
   }
 
   void _setupInterceptors() {

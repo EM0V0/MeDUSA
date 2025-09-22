@@ -27,13 +27,23 @@ class User {
   }
 
   factory User.fromJson(Map<String, dynamic> json) {
+    // Handle backend response format with first_name/last_name
+    String fullName;
+    if (json.containsKey('first_name') && json.containsKey('last_name')) {
+      final firstName = json['first_name'] ?? '';
+      final lastName = json['last_name'] ?? '';
+      fullName = '$firstName $lastName'.trim();
+    } else {
+      fullName = json['name'] ?? '';
+    }
+    
     return User(
       id: json['id'] ?? '',
       email: json['email'] ?? '',
-      name: json['name'] ?? '',
+      name: fullName,
       role: json['role'] ?? 'user',
-      lastLogin: json['lastLogin'] != null ? DateTime.parse(json['lastLogin']) : null,
-      isActive: json['isActive'] ?? true,
+      lastLogin: json['last_login'] != null ? DateTime.parse(json['last_login']) : null,
+      isActive: json['is_active'] ?? true,
     );
   }
 

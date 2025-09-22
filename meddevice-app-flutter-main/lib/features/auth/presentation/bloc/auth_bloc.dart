@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../shared/services/role_service.dart';
 import '../../domain/entities/user.dart';
+import '../../domain/repositories/auth_repository.dart';
 
 // Events
 abstract class AuthEvent {}
@@ -18,6 +19,20 @@ class LoginRequested extends AuthEvent {
   });
 }
 
+class RegisterRequested extends AuthEvent {
+  final String name;
+  final String email;
+  final String password;
+  final String role;
+
+  RegisterRequested({
+    required this.name,
+    required this.email,
+    required this.password,
+    required this.role,
+  });
+}
+
 class LogoutRequested extends AuthEvent {}
 
 class AuthStatusChanged extends AuthEvent {
@@ -25,6 +40,8 @@ class AuthStatusChanged extends AuthEvent {
 
   AuthStatusChanged({required this.isAuthenticated});
 }
+
+class CheckAuthStatus extends AuthEvent {}
 
 // States
 abstract class AuthState {}
@@ -49,12 +66,17 @@ class AuthError extends AuthState {
 
 // BLoC
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
+  final AuthRepository _authRepository;
   final RoleService _roleService = RoleService();
 
-  AuthBloc() : super(AuthInitial()) {
+  AuthBloc({required AuthRepository authRepository}) 
+      : _authRepository = authRepository,
+        super(AuthInitial()) {
     on<LoginRequested>(_onLoginRequested);
+    on<RegisterRequested>(_onRegisterRequested);
     on<LogoutRequested>(_onLogoutRequested);
     on<AuthStatusChanged>(_onAuthStatusChanged);
+    on<CheckAuthStatus>(_onCheckAuthStatus);
   }
 
   Future<void> _onLoginRequested(
@@ -64,32 +86,37 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
 
     try {
-      // Simulate authentication delay
-      await Future.delayed(const Duration(seconds: 1));
-
-      // Simple validation - accept any email/password for demo
-      if (event.email.isNotEmpty && event.password.isNotEmpty) {
-        // Create demo user with role based on email or provided role
-        String userRole = event.role ?? _determineRoleFromEmail(event.email);
-        
-        final user = User(
-          id: 'user_${DateTime.now().millisecondsSinceEpoch}',
-          email: event.email,
-          name: _getNameFromEmail(event.email),
-          role: userRole,
-          lastLogin: DateTime.now(),
-          isActive: true,
-        );
-
-        // Initialize role service with user
-        _roleService.initialize(user);
-        
-        emit(AuthAuthenticated(user: user));
-      } else {
-        emit(AuthError(message: 'Please enter email and password'));
-      }
+      final user = await _authRepository.login(event.email, event.password);
+      
+      // Initialize role service with user
+      _roleService.initialize(user);
+      
+      emit(AuthAuthenticated(user: user));
     } catch (e) {
-      emit(AuthError(message: 'Login failed: ${e.toString()}'));
+      emit(AuthError(message: e.toString()));
+    }
+  }
+
+  Future<void> _onRegisterRequested(
+    RegisterRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+
+    try {
+      final user = await _authRepository.register(
+        event.name,
+        event.email,
+        event.password,
+        event.role,
+      );
+      
+      // Initialize role service with user
+      _roleService.initialize(user);
+      
+      emit(AuthAuthenticated(user: user));
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
     }
   }
 
@@ -100,14 +127,33 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
 
     try {
+      await _authRepository.logout();
+      
       // Clear role service
       _roleService.clear();
       
-      // Simulate logout delay
-      await Future.delayed(const Duration(milliseconds: 500));
       emit(AuthUnauthenticated());
     } catch (e) {
-      emit(AuthError(message: 'Logout failed: ${e.toString()}'));
+      // Even if logout fails, clear local state
+      _roleService.clear();
+      emit(AuthUnauthenticated());
+    }
+  }
+
+  Future<void> _onCheckAuthStatus(
+    CheckAuthStatus event,
+    Emitter<AuthState> emit,
+  ) async {
+    try {
+      final user = await _authRepository.getCurrentUser();
+      if (user != null) {
+        _roleService.initialize(user);
+        emit(AuthAuthenticated(user: user));
+      } else {
+        emit(AuthUnauthenticated());
+      }
+    } catch (e) {
+      emit(AuthUnauthenticated());
     }
   }
 
@@ -116,50 +162,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) {
     if (event.isAuthenticated) {
-      // Create default demo user
-      final user = User(
-        id: 'demo_user',
-        email: 'user@medusa.com',
-        name: 'Demo User',
-        role: 'patient',
-        lastLogin: DateTime.now(),
-        isActive: true,
-      );
-      _roleService.initialize(user);
-      emit(AuthAuthenticated(user: user));
+      // Check for existing user in storage
+      add(CheckAuthStatus());
     } else {
       _roleService.clear();
       emit(AuthUnauthenticated());
     }
-  }
-
-  /// Determine user role from email for demo purposes
-  String _determineRoleFromEmail(String email) {
-    if (email.toLowerCase().contains('admin')) {
-      return 'admin';
-    } else if (email.toLowerCase().contains('doctor') || 
-               email.toLowerCase().contains('dr.') ||
-               email.toLowerCase().contains('physician')) {
-      return 'doctor';
-    } else {
-      return 'patient'; // Default role
-    }
-  }
-
-  /// Extract name from email for demo purposes
-  String _getNameFromEmail(String email) {
-    final username = email.split('@').first;
-    final parts = username.split('.');
-    if (parts.length >= 2) {
-      return '${_capitalize(parts[0])} ${_capitalize(parts[1])}';
-    } else {
-      return _capitalize(username);
-    }
-  }
-
-  /// Capitalize first letter of string
-  String _capitalize(String text) {
-    if (text.isEmpty) return text;
-    return text[0].toUpperCase() + text.substring(1);
   }
 }

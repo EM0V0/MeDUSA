@@ -90,7 +90,8 @@ deployment-*.zip
 
 # AWS SAM
 .aws-sam/
-samconfig.toml
+samconfig.toml.local  # Local configuration with secrets
+# Note: samconfig.toml template is included for reference
 
 # Terraform (if used for infrastructure)
 *.tfstate

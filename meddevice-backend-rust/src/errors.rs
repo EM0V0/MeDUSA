@@ -115,3 +115,21 @@ impl From<jsonwebtoken::errors::Error> for AppError {
         AppError::Authentication(format!("JWT error: {}", err))
     }
 }
+
+impl From<uuid::Error> for AppError {
+    fn from(err: uuid::Error) -> Self {
+        AppError::BadRequest(format!("UUID error: {}", err))
+    }
+}
+
+impl From<chrono::ParseError> for AppError {
+    fn from(err: chrono::ParseError) -> Self {
+        AppError::BadRequest(format!("Date parsing error: {}", err))
+    }
+}
+
+impl From<lambda_http::http::Error> for AppError {
+    fn from(err: lambda_http::http::Error) -> Self {
+        AppError::Internal(format!("HTTP response error: {}", err))
+    }
+}

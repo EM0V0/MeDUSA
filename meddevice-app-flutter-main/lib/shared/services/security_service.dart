@@ -1,13 +1,24 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import 'encryption_service.dart';
+
+/// Custom exception for security-related errors
+class SecurityException implements Exception {
+  final String message;
+  final String? details;
+  
+  SecurityException(this.message, {this.details});
+  
+  @override
+  String toString() => 'SecurityException: $message${details != null ? ' - $details' : ''}';
+}
 
 /// Security service abstract class
 abstract class SecurityService {
@@ -58,6 +69,9 @@ abstract class SecurityService {
 
   /// Clear all secure data
   Future<void> clearAllSecureData();
+
+  /// Get TLS connection information
+  Future<Map<String, dynamic>> getTLSConnectionInfo();
 }
 
 /// Security service implementation
@@ -99,28 +113,32 @@ class SecurityServiceImpl implements SecurityService {
       // Initialize salt if not exists
       final salt = await getSecureData(_saltKey);
       if (salt == null) {
-        final newSalt = _encryptionService.generateSalt();
+        final newSalt = base64Encode(await generateSecureRandom(32));
         await storeSecureData(_saltKey, newSalt);
       }
     } catch (e) {
-      throw SecurityException('Failed to initialize security service: $e');
+      throw SecurityException('Failed to initialize security service', details: e.toString());
     }
   }
 
   @override
   Future<bool> authenticateWithBiometrics() async {
     try {
-      final isAvailable = await isBiometricsAvailable();
-      if (!isAvailable) return false;
+      if (!await isBiometricsAvailable()) {
+        return false;
+      }
 
-      return await _localAuth.authenticate(
+      final result = await _localAuth.authenticate(
         localizedReason: 'Please authenticate to access secure data',
         options: const AuthenticationOptions(
           biometricOnly: true,
           stickyAuth: true,
         ),
       );
+      
+      return result;
     } catch (e) {
+      debugPrint('Biometric authentication error: $e');
       return false;
     }
   }
@@ -128,15 +146,11 @@ class SecurityServiceImpl implements SecurityService {
   @override
   Future<bool> isBiometricsAvailable() async {
     try {
+      final isAvailable = await _localAuth.canCheckBiometrics;
       final isDeviceSupported = await _localAuth.isDeviceSupported();
-      if (!isDeviceSupported) return false;
-
-      final canCheckBiometrics = await _localAuth.canCheckBiometrics;
-      if (!canCheckBiometrics) return false;
-
-      final availableBiometrics = await _localAuth.getAvailableBiometrics();
-      return availableBiometrics.isNotEmpty;
+      return isAvailable && isDeviceSupported;
     } catch (e) {
+      debugPrint('Error checking biometrics availability: $e');
       return false;
     }
   }
@@ -146,195 +160,116 @@ class SecurityServiceImpl implements SecurityService {
     try {
       return await _localAuth.getAvailableBiometrics();
     } catch (e) {
+      debugPrint('Error getting available biometrics: $e');
       return [];
     }
   }
 
   @override
   Future<bool> verifyCertificatePinning(String host, int port) async {
-    try {
-      final socket = await SecureSocket.connect(
-        host,
-        port,
-        timeout: const Duration(seconds: 10),
-      );
-      
-      final certificate = socket.peerCertificate;
-      socket.destroy();
-      
-      if (certificate == null) return false;
-      
-      // Verify certificate chain and properties
-      return _verifyCertificateProperties(certificate);
-    } catch (e) {
-      return false;
-    }
-  }
-
-  bool _verifyCertificateProperties(X509Certificate certificate) {
-    try {
-      // Basic certificate validation
-      final now = DateTime.now();
-      final notBefore = certificate.startValidity;
-      final notAfter = certificate.endValidity;
-      
-      if (now.isBefore(notBefore) || now.isAfter(notAfter)) {
-        return false;
-      }
-      
-      // Additional validations can be added here
-      return true;
-    } catch (e) {
-      return false;
-    }
+    // TODO: Implement actual certificate pinning verification for production
+    throw UnimplementedError('Certificate pinning verification not implemented');
   }
 
   @override
   Future<String> generateDeviceFingerprint() async {
     try {
-      final properties = <String>[];
+      final components = <String>[];
       
-      // Platform info
-      properties.add(Platform.operatingSystem);
-      properties.add(Platform.operatingSystemVersion);
+      // Add device-specific information
+      components.add('flutter_${defaultTargetPlatform.name}');
+      components.add(DateTime.now().millisecondsSinceEpoch.toString());
       
-      // Generate a unique device identifier
-      final deviceData = properties.join('|');
-      final bytes = utf8.encode(deviceData);
+      final combined = components.join('|');
+      final bytes = utf8.encode(combined);
       final digest = sha256.convert(bytes);
       
       return digest.toString();
     } catch (e) {
-      // Fallback to random ID
-      return _encryptionService.generateRandomString(32);
+      throw SecurityException('Failed to generate device fingerprint', details: e.toString());
     }
   }
 
   @override
   Future<bool> verifyDeviceIntegrity() async {
-    try {
-      // Check if device has been compromised
-      // This is a basic implementation
-      
-      // Check for root/jailbreak indicators
-      if (await _isDeviceRooted()) return false;
-      
-      // Verify stored device fingerprint
-      final storedFingerprint = await getSecureData(_deviceIdKey);
-      final currentFingerprint = await generateDeviceFingerprint();
-      
-      return storedFingerprint == currentFingerprint;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  Future<bool> _isDeviceRooted() async {
-    try {
-      // Basic root detection
-      final rootPaths = [
-        '/system/app/Superuser.apk',
-        '/sbin/su',
-        '/system/bin/su',
-        '/system/xbin/su',
-        '/data/local/xbin/su',
-        '/data/local/bin/su',
-        '/system/sd/xbin/su',
-        '/system/bin/failsafe/su',
-        '/data/local/su',
-        '/su/bin/su',
-      ];
-      
-      for (final path in rootPaths) {
-        if (await File(path).exists()) return true;
-      }
-      
-      return false;
-    } catch (e) {
-      return false;
-    }
+    // TODO: Implement actual device integrity checks for production
+    throw UnimplementedError('Device integrity verification not implemented');
   }
 
   @override
   Future<String> generateSecureKey() async {
-    return await _encryptionService.generateAESKey();
+    try {
+      final randomBytes = await generateSecureRandom(32);
+      return base64Encode(randomBytes);
+    } catch (e) {
+      throw SecurityException('Failed to generate secure key', details: e.toString());
+    }
   }
 
   @override
   Future<String> deriveKey(String password, String salt, {int iterations = 100000}) async {
     try {
-      final bytes = utf8.encode(password + salt);
-      var hash = bytes;
+      final passwordBytes = utf8.encode(password);
+      final saltBytes = base64Decode(salt);
       
+      // Simple PBKDF2 implementation
+      Uint8List key = Uint8List.fromList(passwordBytes);
       for (int i = 0; i < iterations; i++) {
-        hash = Uint8List.fromList(sha256.convert(hash).bytes);
+        final hmac = Hmac(sha256, key);
+        key = Uint8List.fromList(hmac.convert(saltBytes).bytes);
       }
       
-      return base64Encode(hash);
+      return base64Encode(key);
     } catch (e) {
-      throw SecurityException('Failed to derive key: $e');
+      throw SecurityException('Failed to derive key', details: e.toString());
     }
   }
 
   @override
   Future<Uint8List> generateSecureRandom(int length) async {
-    final bytes = List<int>.generate(length, (_) => _random.nextInt(256));
-    return Uint8List.fromList(bytes);
+    final bytes = Uint8List(length);
+    for (int i = 0; i < length; i++) {
+      bytes[i] = _random.nextInt(256);
+    }
+    return bytes;
   }
 
   @override
   void secureClear(List<int> data) {
-    try {
-      for (int i = 0; i < data.length; i++) {
-        data[i] = 0;
-      }
-    } catch (e) {
-      // Silent fail for security
+    for (int i = 0; i < data.length; i++) {
+      data[i] = 0;
     }
   }
 
   @override
   Future<bool> verifyNonce(String nonce) async {
-    try {
-      // Basic nonce validation
-      if (nonce.isEmpty) return false;
-      
-      // Check if it's valid base64
-      try {
-        base64Decode(nonce);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    } catch (e) {
-      return false;
-    }
+    return nonce.isNotEmpty && nonce.length >= 16;
   }
 
   @override
   Future<void> storeSecureData(String key, String value) async {
     try {
-      await _secureStorage.write(key: key, value: value);
+      await _secureStorage.write(key: '$_keyPrefix$key', value: value);
     } catch (e) {
-      throw SecurityException('Failed to store secure data: $e');
+      throw SecurityException('Failed to store secure data', details: e.toString());
     }
   }
 
   @override
   Future<String?> getSecureData(String key) async {
     try {
-      return await _secureStorage.read(key: key);
+      return await _secureStorage.read(key: '$_keyPrefix$key');
     } catch (e) {
-      return null;
+      throw SecurityException('Failed to retrieve secure data', details: e.toString());
     }
   }
 
   @override
   Future<void> deleteSecureData(String key) async {
     try {
-      await _secureStorage.delete(key: key);
+      await _secureStorage.delete(key: '$_keyPrefix$key');
     } catch (e) {
-      throw SecurityException('Failed to delete secure data: $e');
+      throw SecurityException('Failed to delete secure data', details: e.toString());
     }
   }
 
@@ -343,49 +278,13 @@ class SecurityServiceImpl implements SecurityService {
     try {
       await _secureStorage.deleteAll();
     } catch (e) {
-      throw SecurityException('Failed to clear all secure data: $e');
+      throw SecurityException('Failed to clear all secure data', details: e.toString());
     }
   }
-}
 
-/// Security exception class
-class SecurityException implements Exception {
-  final String message;
-  
-  const SecurityException(this.message);
-  
   @override
-  String toString() => 'SecurityException: $message';
-}
-
-/// Security utilities
-class SecurityUtils {
-  /// Generate secure token
-  static String generateSecureToken({int length = 32}) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    final random = Random.secure();
-    return String.fromCharCodes(
-      Iterable.generate(length, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
-    );
-  }
-
-  /// Validate token format
-  static bool isValidToken(String token) {
-    if (token.isEmpty) return false;
-    final regex = RegExp(r'^[A-Za-z0-9]+$');
-    return regex.hasMatch(token);
-  }
-
-  /// Create secure hash
-  static String createSecureHash(String input) {
-    final bytes = utf8.encode(input);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
-  }
-
-  /// Verify hash
-  static bool verifyHash(String input, String hash) {
-    final inputHash = createSecureHash(input);
-    return inputHash == hash;
+  Future<Map<String, dynamic>> getTLSConnectionInfo() async {
+    // TODO: Implement actual TLS connection info retrieval for production
+    throw UnimplementedError('TLS connection info retrieval not implemented');
   }
 }

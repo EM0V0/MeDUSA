@@ -13,10 +13,12 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
   // Using dynamic here to avoid analyzer resolution issues while preserving behavior
   final dynamic storageService;
 
-  AuthLocalDataSourceImpl({required this.storageService});
+  AuthLocalDataSourceImpl({this.storageService});
 
   @override
   Future<User?> getLastUser() async {
+    if (storageService == null) return null;
+    
     try {
       final userData = await storageService.getUser();
       if (userData != null) {
@@ -30,6 +32,8 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<void> cacheUser(User user) async {
+    if (storageService == null) return;
+    
     try {
       await storageService.storeUser(user.toJson());
     } catch (e) {
@@ -39,6 +43,8 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<void> clearUser() async {
+    if (storageService == null) return;
+    
     try {
       await storageService.deleteUser();
     } catch (e) {
@@ -48,6 +54,8 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<String?> getToken() async {
+    if (storageService == null) return null;
+    
     try {
       return await storageService.getSecureString('auth_token');
     } catch (e) {
@@ -57,6 +65,8 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<void> saveToken(String token) async {
+    if (storageService == null) return;
+    
     try {
       await storageService.setSecureString('auth_token', token);
     } catch (e) {
@@ -66,6 +76,8 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<void> clearToken() async {
+    if (storageService == null) return;
+    
     try {
       await storageService.removeSecure('auth_token');
     } catch (e) {

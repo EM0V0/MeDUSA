@@ -109,7 +109,7 @@ pub struct CreatePatientRequest {
     pub date_of_birth: NaiveDate,
     pub gender: Gender,
     
-    #[validate(phone)]
+    #[validate(length(min = 10, max = 15))]
     pub phone: Option<String>,
     
     #[validate(email)]
@@ -133,7 +133,7 @@ pub struct UpdatePatientRequest {
     #[validate(length(min = 1, max = 100))]
     pub last_name: Option<String>,
     
-    #[validate(phone)]
+    #[validate(length(min = 10, max = 15))]
     pub phone: Option<String>,
     
     #[validate(email)]

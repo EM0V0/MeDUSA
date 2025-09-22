@@ -29,9 +29,8 @@ pub fn extract_ip_address(request: &Request) -> String {
     }
     
     // Fallback to request context source IP
-    if let Some(source_ip) = request.request_context().source_ip() {
-        return source_ip.to_string();
-    }
+    // Note: lambda_http 0.8 may have different API structure
+    // Simplified for now - can be enhanced based on actual request context structure
     
     // Default fallback
     "unknown".to_string()
@@ -70,10 +69,9 @@ pub fn extract_request_id(request: &Request) -> String {
 pub fn parse_query_params(request: &Request) -> HashMap<String, String> {
     let mut params = HashMap::new();
     
-    if let Some(query_string_params) = request.query_string_parameters() {
-        for (key, value) in query_string_params.iter() {
-            params.insert(key.to_string(), value.to_string());
-        }
+    let query_string_params = request.query_string_parameters();
+    for (key, value) in query_string_params.iter() {
+        params.insert(key.to_string(), value.to_string());
     }
     
     params
@@ -83,10 +81,9 @@ pub fn parse_query_params(request: &Request) -> HashMap<String, String> {
 pub fn parse_path_params(request: &Request) -> HashMap<String, String> {
     let mut params = HashMap::new();
     
-    if let Some(path_params) = request.path_parameters() {
-        for (key, value) in path_params.iter() {
-            params.insert(key.to_string(), value.to_string());
-        }
+    let path_params = request.path_parameters();
+    for (key, value) in path_params.iter() {
+        params.insert(key.to_string(), value.to_string());
     }
     
     params

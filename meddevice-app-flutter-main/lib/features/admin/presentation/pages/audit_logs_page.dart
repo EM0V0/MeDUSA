@@ -968,6 +968,8 @@ class _AuditLogsPageState extends State<AuditLogsPage> with TickerProviderStateM
         return Icons.storage_rounded;
       case AuditCategory.security:
         return Icons.security_rounded;
+      case AuditCategory.system:
+        return Icons.computer_rounded;
       case AuditCategory.systemEvent:
         return Icons.computer_rounded;
       case AuditCategory.authentication:

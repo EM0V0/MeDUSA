@@ -11,7 +11,7 @@ import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
 import '../../../../shared/services/oauth_service.dart';
 import '../bloc/auth_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter_signin_button/flutter_signin_button.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -331,7 +331,7 @@ class _LoginPageState extends State<LoginPage> {
       children: [
         Row(
           children: [
-            const Expanded(child: Divider(color: AppColors.lightDivider)),
+            Expanded(child: Divider(color: AppColors.lightDivider)),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 16.w),
               child: Text(
@@ -342,7 +342,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
             ),
-            const Expanded(child: Divider(color: AppColors.lightDivider)),
+            Expanded(child: Divider(color: AppColors.lightDivider)),
           ],
         ),
         SizedBox(height: 20.h),
@@ -352,92 +352,47 @@ class _LoginPageState extends State<LoginPage> {
           spacing: 12.w,
           runSpacing: 12.h,
           children: [
-            _buildGoogleButton(),
-            _buildAppleButton(),
-            _buildMicrosoftButton(),
+            _buildProperOAuthButton(
+              Buttons.Google,
+              'Google',
+              () => _handleGoogleSignIn(),
+            ),
+            _buildProperOAuthButton(
+              Buttons.Apple,
+              'Apple',
+              () => _handleAppleSignIn(),
+            ),
+            _buildProperOAuthButton(
+              Buttons.Microsoft,
+              'Microsoft',
+              () => _handleMicrosoftSignIn(),
+            ),
           ],
         ),
       ],
     );
   }
 
-  // OAuth button builders with consistent styling
-  Widget _buildGoogleButton() {
-    return _buildOAuthButton(
-      icon: FontAwesomeIcons.google,
-      label: 'Continue with Google',
-      onPressed: _handleGoogleSignIn,
-      iconColor: const Color(0xFF4285F4), // Google brand color
-    );
-  }
-
-  Widget _buildAppleButton() {
-    return _buildOAuthButton(
-      icon: FontAwesomeIcons.apple,
-      label: 'Continue with Apple',
-      onPressed: _handleAppleSignIn,
-      iconColor: const Color(0xFF007AFF), // Apple blue color for unified style
-    );
-  }
-
-  Widget _buildMicrosoftButton() {
-    return _buildOAuthButton(
-      icon: FontAwesomeIcons.microsoft,
-      label: 'Sign in with Microsoft',
-      onPressed: _handleMicrosoftSignIn,
-      iconColor: const Color(0xFF0078D4), // Microsoft brand color
-    );
-  }
-
-  // Unified OAuth button with consistent styling
-  Widget _buildOAuthButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-    required Color iconColor,
-  }) {
+  // Build proper OAuth button using flutter_signin_button package
+  Widget _buildProperOAuthButton(Buttons buttonType, String provider, VoidCallback onPressed) {
     return ConstrainedBox(
       constraints: BoxConstraints(
         minWidth: ResponsiveBreakpoints.of(context).smallerThan(TABLET) ? 280.w : 160.w,
         maxWidth: ResponsiveBreakpoints.of(context).smallerThan(TABLET) ? double.infinity : 200.w,
       ),
-      child: OutlinedButton(
+      child: SignInButton(
+        buttonType,
         onPressed: _isLoading ? null : onPressed,
-        style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.white, // White background
-          side: const BorderSide(color: Colors.grey), // Grey border
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.r),
-          ),
-          padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
-          elevation: 0, // No elevation
+        mini: false,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.r),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FaIcon(
-              icon,
-              color: iconColor, // Brand-specific icon color
-              size: IconUtils.getResponsiveIconSize(IconSizeType.medium, context),
-            ),
-            SizedBox(width: 12.w),
-            Flexible(
-              child: Text(
-                label,
-                style: FontUtils.body(
-                  context: context,
-                  color: Colors.black87, // Dark text color
-                  fontWeight: FontWeight.w600,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
+        elevation: 0,
+        padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
       ),
     );
   }
+
 
   Future<void> _handleGoogleSignIn() async {
     setState(() => _isLoading = true);
@@ -446,36 +401,26 @@ class _LoginPageState extends State<LoginPage> {
       final result = await _oauthService.signInWithGoogle();
       
       if (result.success && result.user != null) {
-        if (mounted) {
-          _showSuccessMessage('Successfully signed in with Google');
-          
-          // Update AuthBloc with OAuth user data
-          final authBloc = BlocProvider.of<AuthBloc>(context, listen: false);
-          authBloc.add(LoginRequested(
-            email: result.user!['email'] ?? 'google_user@medusa.com',
-            password: 'oauth_login',
-          ));
-          
-          // Navigate to dashboard
-          GoRouter.of(context).go('/dashboard');
-        }
+        _showSuccessMessage('Successfully signed in with Google');
+        
+        // Update AuthBloc with OAuth user data
+        final authBloc = BlocProvider.of<AuthBloc>(context, listen: false);
+        authBloc.add(LoginRequested(
+          email: result.user!['email'] ?? 'google_user@medusa.com',
+          password: 'oauth_login',
+        ));
+        
+        // Navigate to dashboard
+        GoRouter.of(context).go('/dashboard');
       } else if (result.cancelled) {
-        if (mounted) {
-          _showErrorMessage('Google sign-in was cancelled');
-        }
+        _showErrorMessage('Google sign-in was cancelled');
       } else {
-        if (mounted) {
-          _showErrorMessage(result.error ?? 'Google sign-in failed');
-        }
+        _showErrorMessage(result.error ?? 'Google sign-in failed');
       }
     } catch (e) {
-      if (mounted) {
-        _showErrorMessage('Google sign-in error: $e');
-      }
+      _showErrorMessage('Google sign-in error: $e');
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      setState(() => _isLoading = false);
     }
   }
 
@@ -486,19 +431,17 @@ class _LoginPageState extends State<LoginPage> {
       final result = await _oauthService.signInWithApple();
       
       if (result.success && result.user != null) {
-        if (mounted) {
-          _showSuccessMessage('Successfully signed in with Apple');
-          
-          // Update AuthBloc with OAuth user data
-          final authBloc = BlocProvider.of<AuthBloc>(context, listen: false);
-          authBloc.add(LoginRequested(
-            email: result.user!['email'] ?? 'apple_user@medusa.com',
-            password: 'oauth_login',
-          ));
-          
-          // Navigate to dashboard
-          GoRouter.of(context).go('/dashboard');
-        }
+        _showSuccessMessage('Successfully signed in with Apple');
+        
+        // Update AuthBloc with OAuth user data
+        final authBloc = BlocProvider.of<AuthBloc>(context, listen: false);
+        authBloc.add(LoginRequested(
+          email: result.user!['email'] ?? 'apple_user@medusa.com',
+          password: 'oauth_login',
+        ));
+        
+        // Navigate to dashboard
+        GoRouter.of(context).go('/dashboard');
       } else if (result.cancelled) {
         _showErrorMessage('Apple sign-in was cancelled');
       } else {
@@ -518,27 +461,21 @@ class _LoginPageState extends State<LoginPage> {
       final result = await _oauthService.signInWithMicrosoft();
       
       if (result.success && result.user != null) {
-        if (mounted) {
-          _showSuccessMessage('Successfully signed in with Microsoft');
-          
-          // Update AuthBloc with OAuth user data
-          final authBloc = BlocProvider.of<AuthBloc>(context, listen: false);
-          authBloc.add(LoginRequested(
-            email: result.user!['email'] ?? 'microsoft_user@medusa.com',
-            password: 'oauth_login',
-          ));
-          
-          // Navigate to dashboard
-          GoRouter.of(context).go('/dashboard');
-        }
+        _showSuccessMessage('Successfully signed in with Microsoft');
+        
+        // Update AuthBloc with OAuth user data
+        final authBloc = BlocProvider.of<AuthBloc>(context, listen: false);
+        authBloc.add(LoginRequested(
+          email: result.user!['email'] ?? 'microsoft_user@medusa.com',
+          password: 'oauth_login',
+        ));
+        
+        // Navigate to dashboard
+        GoRouter.of(context).go('/dashboard');
       } else if (result.cancelled) {
-        if (mounted) {
-          _showErrorMessage('Microsoft sign-in was cancelled');
-        }
+        _showErrorMessage('Microsoft sign-in was cancelled');
       } else {
-        if (mounted) {
-          _showErrorMessage(result.error ?? 'Microsoft sign-in failed');
-        }
+        _showErrorMessage(result.error ?? 'Microsoft sign-in failed');
       }
     } catch (e) {
       _showErrorMessage('Microsoft sign-in error: $e');

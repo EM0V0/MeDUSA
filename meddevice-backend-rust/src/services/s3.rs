@@ -108,15 +108,10 @@ impl S3Service {
         let result = get_request.send().await
             .map_err(|e| AppError::Storage(format!("Failed to download from S3: {}", e)))?;
         
-        let content = result.body.collect().await
-            .map_err(|e| AppError::Storage(format!("Failed to read S3 object body: {}", e)))?
-            .into_bytes()
-            .to_vec();
-        
+        // Extract metadata before consuming the body
         let content_type = result.content_type().unwrap_or("application/octet-stream").to_string();
         let size = result.content_length().unwrap_or(0) as u64;
         
-        // Extract metadata
         let mut metadata = HashMap::new();
         if let Some(meta) = result.metadata() {
             for (key, value) in meta {
@@ -126,6 +121,12 @@ impl S3Service {
         
         let last_modified = result.last_modified()
             .and_then(|dt| DateTime::from_timestamp(dt.secs(), dt.subsec_nanos()));
+        
+        // Now consume the body after extracting metadata
+        let content = result.body.collect().await
+            .map_err(|e| AppError::Storage(format!("Failed to read S3 object body: {}", e)))?
+            .into_bytes()
+            .to_vec();
         
         Ok(DownloadResponse {
             content,
@@ -161,20 +162,24 @@ impl S3Service {
         
         let presigned_request = match operation.to_uppercase().as_str() {
             "GET" => {
+                let presigning_config = aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in)
+                    .map_err(|e| AppError::Storage(format!("Failed to create presigning config: {}", e)))?;
                 self.client
                     .get_object()
                     .bucket(bucket)
                     .key(key)
-                    .presigned(aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in)?)
+                    .presigned(presigning_config)
                     .await
                     .map_err(|e| AppError::Storage(format!("Failed to generate presigned GET URL: {}", e)))?
             }
             "PUT" => {
+                let presigning_config = aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in)
+                    .map_err(|e| AppError::Storage(format!("Failed to create presigning config: {}", e)))?;
                 self.client
                     .put_object()
                     .bucket(bucket)
                     .key(key)
-                    .presigned(aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in)?)
+                    .presigned(presigning_config)
                     .await
                     .map_err(|e| AppError::Storage(format!("Failed to generate presigned PUT URL: {}", e)))?
             }
@@ -207,18 +212,16 @@ impl S3Service {
             .map_err(|e| AppError::Storage(format!("Failed to list S3 objects: {}", e)))?;
         
         let mut objects = Vec::new();
-        if let Some(contents) = result.contents() {
-            for object in contents {
-                let s3_object = S3Object {
-                    key: object.key().unwrap_or("").to_string(),
-                    size: object.size().unwrap_or(0) as u64,
-                    last_modified: object.last_modified()
-                        .and_then(|dt| DateTime::from_timestamp(dt.secs(), dt.subsec_nanos())),
-                    etag: object.e_tag().unwrap_or("").to_string(),
-                    storage_class: object.storage_class().map(|sc| sc.as_str().to_string()),
-                };
-                objects.push(s3_object);
-            }
+        for object in result.contents() {
+            let s3_object = S3Object {
+                key: object.key().unwrap_or("").to_string(),
+                size: object.size().unwrap_or(0) as u64,
+                last_modified: object.last_modified()
+                    .and_then(|dt| DateTime::from_timestamp(dt.secs(), dt.subsec_nanos())),
+                etag: object.e_tag().unwrap_or("").to_string(),
+                storage_class: object.storage_class().map(|sc| sc.as_str().to_string()),
+            };
+            objects.push(s3_object);
         }
         
         Ok(objects)

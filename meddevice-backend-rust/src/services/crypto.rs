@@ -1,45 +1,36 @@
 // 高级加密服务 - 医疗级安全配置
-use argon2::{Argon2, Config, Variant, Version};
-use argon2::password_hash::{rand_core::OsRng, SaltString, PasswordHasher, PasswordVerifier, PasswordHash};
+use argon2::{Argon2, PasswordHasher, PasswordVerifier, Algorithm, Version, Params};
+use argon2::password_hash::{rand_core::OsRng, PasswordHash, SaltString};
 use crate::{Result, AppError};
 
 pub struct CryptoService;
 
 impl CryptoService {
     /// 创建医疗级Argon2id配置
-    pub fn create_argon2_config() -> Config<'static> {
-        Config {
-            variant: Variant::Argon2id,    // 最安全的变体
-            version: Version::Version13,   // 最新版本
-            mem_cost: 65536,              // 64 MB内存 (医疗级安全)
-            time_cost: 3,                 // 3次迭代 (平衡安全性和性能)
-            lanes: 4,                     // 4个并行线程
-            thread_mode: argon2::ThreadMode::Parallel,
-            secret: &[],                  // 无额外密钥
-            ad: &[],                      // 无关联数据
-            hash_length: 32,              // 32字节输出
-        }
+    pub fn create_argon2() -> Argon2<'static> {
+        let params = Params::new(65536, 3, 4, Some(32)).unwrap(); // 64MB, 3 iterations, 4 lanes, 32 byte output
+        Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
     }
     
     /// 使用医疗级配置哈希密码
     pub fn hash_password_medical_grade(password: &str) -> Result<String> {
-        let config = Self::create_argon2_config();
+        let argon2 = Self::create_argon2();
         let salt = SaltString::generate(&mut OsRng);
         
-        let hash = argon2::hash_encoded(
-            password.as_bytes(),
-            salt.as_bytes(),
-            &config
-        ).map_err(|e| AppError::Internal(format!("Argon2 hashing failed: {}", e)))?;
+        let password_hash = argon2.hash_password(password.as_bytes(), &salt)
+            .map_err(|e| AppError::Internal(format!("Argon2 hashing failed: {}", e)))?;
         
-        Ok(hash)
+        Ok(password_hash.to_string())
     }
     
     /// 验证医疗级哈希密码
     pub fn verify_password_medical_grade(password: &str, hash: &str) -> Result<bool> {
-        match argon2::verify_encoded(hash, password.as_bytes()) {
-            Ok(true) => Ok(true),
-            Ok(false) => Ok(false),
+        let parsed_hash = PasswordHash::new(hash)
+            .map_err(|_| AppError::Internal("Invalid password hash format".to_string()))?;
+            
+        let argon2 = Self::create_argon2();
+        match argon2.verify_password(password.as_bytes(), &parsed_hash) {
+            Ok(()) => Ok(true),
             Err(_) => Ok(false), // 不暴露具体错误信息
         }
     }

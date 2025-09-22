@@ -203,8 +203,18 @@ class AppConstants {
   static const double contentPaddingRatio = 0.05;     // 5% of screen width as padding
 
   // API Configuration
-  static const String baseUrl = 'http://localhost:3000';
-  static const String apiVersion = '/api/v1';
+  // TODO: Update this URL with your deployed API Gateway endpoint
+  // Get this URL from: sam deploy output or AWS Console > API Gateway
+  static const String _productionBaseUrl = 'https://YOUR-API-GATEWAY-ID.execute-api.YOUR-REGION.amazonaws.com/development';
+  
+  // Use environment-based configuration
+  static String get baseUrl {
+    // You can add environment detection here if needed
+    return _productionBaseUrl;
+  }
+  
+  // API version
+  static const String apiVersion = '';
 
   // Storage Keys
   static const String tokenKey = 'auth_token';

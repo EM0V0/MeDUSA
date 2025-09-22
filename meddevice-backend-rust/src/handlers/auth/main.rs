@@ -1,8 +1,8 @@
 // Authentication Lambda handler
 // Handles user login, registration, password reset, and token validation
 
-use lambda_http::{run, service_fn, Error, Request, RequestExt, Response, Body};
-use lambda_runtime::tracing;
+use lambda_http::{run, service_fn, Error, Request, Response, Body};
+use tracing::{info, error};
 use aws_config::BehaviorVersion;
 use aws_sdk_dynamodb::Client as DynamoClient;
 use serde_json::json;
@@ -12,19 +12,19 @@ use validator::Validate;
 // Import from the main library
 use meddevice_backend::{
     Config, Result, AppError,
-    models::{CreateUserRequest, LoginRequest, ChangePasswordRequest, User, UserRole},
+    models::{CreateUserRequest, LoginRequest, ChangePasswordRequest, User, AuditLog, AuditAction, AuditSeverity},
     services::{DynamoDbService, AuthService, AuditService},
     utils::*,
 };
 
 /// Main Lambda function entry point
-async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
-    // Initialize tracing
-    tracing_subscriber::fmt()
+async fn function_handler(event: Request) -> std::result::Result<Response<Body>, Error> {
+    // Initialize tracing only once
+    let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .with_target(false)
         .without_time()
-        .init();
+        .try_init();
     
     // Load configuration
     let config = Config::from_env();
@@ -47,17 +47,20 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
     
     tracing::info!("Processing {} {} - Request ID: {}", method, path, request_id);
     
+    // Strip stage name from path if present (for API Gateway proxy integration)
+    let normalized_path = path.strip_prefix("/development").unwrap_or(path);
+    
     // Route the request
-    let result = match (method, path) {
-        ("POST", "/auth/register") => handle_register(event, &db_service, &auth_service, &audit_service).await,
-        ("POST", "/auth/login") => handle_login(event, &db_service, &auth_service, &audit_service).await,
-        ("POST", "/auth/logout") => handle_logout(event, &auth_service, &audit_service).await,
-        ("POST", "/auth/refresh") => handle_refresh_token(event, &db_service, &auth_service).await,
-        ("POST", "/auth/change-password") => handle_change_password(event, &db_service, &auth_service, &audit_service).await,
-        ("POST", "/auth/forgot-password") => handle_forgot_password(event, &db_service, &auth_service).await,
-        ("POST", "/auth/reset-password") => handle_reset_password(event, &db_service, &auth_service).await,
-        ("GET", "/auth/me") => handle_get_current_user(event, &db_service, &auth_service).await,
-        ("POST", "/auth/verify-token") => handle_verify_token(event, &auth_service).await,
+    let result = match (method, normalized_path) {
+        ("POST", "/auth/register") => handle_register(&event, &db_service, &auth_service, &audit_service).await,
+        ("POST", "/auth/login") => handle_login(&event, &db_service, &auth_service, &audit_service).await,
+        ("POST", "/auth/logout") => handle_logout(&event, &auth_service, &audit_service).await,
+        ("POST", "/auth/refresh") => handle_refresh_token(&event, &db_service, &auth_service).await,
+        ("POST", "/auth/change-password") => handle_change_password(&event, &db_service, &auth_service, &audit_service).await,
+        ("POST", "/auth/forgot-password") => handle_forgot_password(&event, &db_service, &auth_service).await,
+        ("POST", "/auth/reset-password") => handle_reset_password(&event, &db_service, &auth_service).await,
+        ("GET", "/auth/me") => handle_get_current_user(&event, &db_service, &auth_service).await,
+        ("POST", "/auth/verify-token") => handle_verify_token(&event, &auth_service).await,
         _ => Err(AppError::NotFound("Endpoint not found".to_string())),
     };
     
@@ -73,9 +76,9 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
             // Log security events for authentication failures
             if matches!(error, AppError::Authentication(_)) {
                 let _ = audit_service.log_security_event(
-                    crate::models::AuditAction::SuspiciousActivity,
+                    AuditAction::SuspiciousActivity,
                     format!("Authentication failure: {}", error),
-                    crate::models::AuditSeverity::Warning,
+                    AuditSeverity::Warning,
                     Some(ip_address),
                     None,
                     None,
@@ -93,7 +96,7 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
 
 /// Handle user registration
 async fn handle_register(
-    event: Request,
+    event: &Request,
     db_service: &DynamoDbService,
     auth_service: &AuthService,
     audit_service: &AuditService,
@@ -135,7 +138,7 @@ async fn handle_register(
         user.id,
         user.email.clone(),
         user.role.as_str().to_string(),
-        crate::models::AuditAction::UserCreated,
+        AuditAction::UserCreated,
         user.id,
         user.email.clone(),
         ip_address,
@@ -152,7 +155,7 @@ async fn handle_register(
 
 /// Handle user login
 async fn handle_login(
-    event: Request,
+    event: &Request,
     db_service: &DynamoDbService,
     auth_service: &AuthService,
     audit_service: &AuditService,
@@ -266,7 +269,7 @@ async fn handle_login(
 
 /// Handle user logout
 async fn handle_logout(
-    event: Request,
+    event: &Request,
     auth_service: &AuthService,
     audit_service: &AuditService,
 ) -> Result<Response<Body>> {
@@ -283,8 +286,8 @@ async fn handle_logout(
     let ip_address = extract_ip_address(&event);
     let user_agent = extract_user_agent(&event);
     
-    let audit_log = crate::models::AuditLog::new(
-        crate::models::AuditAction::Logout,
+    let audit_log = AuditLog::new(
+        AuditAction::Logout,
         format!("User {} logged out", claims.email),
         "auth-service".to_string(),
     )
@@ -304,7 +307,7 @@ async fn handle_logout(
 
 /// Handle token refresh
 async fn handle_refresh_token(
-    event: Request,
+    event: &Request,
     db_service: &DynamoDbService,
     auth_service: &AuthService,
 ) -> Result<Response<Body>> {
@@ -341,7 +344,7 @@ async fn handle_refresh_token(
 
 /// Handle password change
 async fn handle_change_password(
-    event: Request,
+    event: &Request,
     db_service: &DynamoDbService,
     auth_service: &AuthService,
     audit_service: &AuditService,
@@ -382,8 +385,8 @@ async fn handle_change_password(
     let ip_address = extract_ip_address(&event);
     let user_agent = extract_user_agent(&event);
     
-    let audit_log = crate::models::AuditLog::new(
-        crate::models::AuditAction::PasswordChanged,
+    let audit_log = AuditLog::new(
+        AuditAction::PasswordChanged,
         format!("User {} changed password", user.email),
         "auth-service".to_string(),
     )
@@ -400,7 +403,7 @@ async fn handle_change_password(
 
 /// Handle forgot password
 async fn handle_forgot_password(
-    event: Request,
+    event: &Request,
     db_service: &DynamoDbService,
     auth_service: &AuthService,
 ) -> Result<Response<Body>> {
@@ -435,7 +438,7 @@ async fn handle_forgot_password(
 
 /// Handle password reset
 async fn handle_reset_password(
-    event: Request,
+    event: &Request,
     db_service: &DynamoDbService,
     auth_service: &AuthService,
 ) -> Result<Response<Body>> {
@@ -482,7 +485,7 @@ async fn handle_reset_password(
 
 /// Handle get current user
 async fn handle_get_current_user(
-    event: Request,
+    event: &Request,
     db_service: &DynamoDbService,
     auth_service: &AuthService,
 ) -> Result<Response<Body>> {
@@ -509,7 +512,7 @@ async fn handle_get_current_user(
 
 /// Handle token verification
 async fn handle_verify_token(
-    event: Request,
+    event: &Request,
     auth_service: &AuthService,
 ) -> Result<Response<Body>> {
     // Extract and validate token
@@ -538,6 +541,6 @@ async fn handle_verify_token(
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> std::result::Result<(), Error> {
     run(service_fn(function_handler)).await
 }

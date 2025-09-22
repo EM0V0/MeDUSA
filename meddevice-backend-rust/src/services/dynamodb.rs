@@ -1,7 +1,6 @@
 // DynamoDB service for all database operations
 use aws_sdk_dynamodb::{Client, Error as DynamoError};
 use aws_sdk_dynamodb::types::{AttributeValue, Select};
-use serde_dynamo::{to_item, from_item};
 use std::collections::HashMap;
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
@@ -9,6 +8,159 @@ use chrono::{DateTime, Utc};
 use crate::{Result, AppError, Config};
 use crate::models::*;
 
+// Helper functions for manual DynamoDB serialization
+fn user_to_item(user: &User) -> HashMap<String, AttributeValue> {
+    let mut item = HashMap::new();
+    item.insert("id".to_string(), AttributeValue::S(user.id.to_string()));
+    item.insert("email".to_string(), AttributeValue::S(user.email.clone()));
+    item.insert("first_name".to_string(), AttributeValue::S(user.first_name.clone()));
+    item.insert("last_name".to_string(), AttributeValue::S(user.last_name.clone()));
+    item.insert("password_hash".to_string(), AttributeValue::S(user.password_hash.clone()));
+    item.insert("role".to_string(), AttributeValue::S(user.role.as_str().to_string()));
+    item.insert("is_active".to_string(), AttributeValue::Bool(user.is_active));
+    item.insert("is_verified".to_string(), AttributeValue::Bool(user.is_verified));
+    item.insert("two_factor_enabled".to_string(), AttributeValue::Bool(user.two_factor_enabled));
+    item.insert("created_at".to_string(), AttributeValue::S(user.created_at.to_rfc3339()));
+    item.insert("updated_at".to_string(), AttributeValue::S(user.updated_at.to_rfc3339()));
+    if let Some(last_login) = &user.last_login {
+        item.insert("last_login".to_string(), AttributeValue::S(last_login.to_rfc3339()));
+    }
+    if let Some(two_factor_secret) = &user.two_factor_secret {
+        item.insert("two_factor_secret".to_string(), AttributeValue::S(two_factor_secret.clone()));
+    }
+    if let Some(license_number) = &user.license_number {
+        item.insert("license_number".to_string(), AttributeValue::S(license_number.clone()));
+    }
+    if let Some(department) = &user.department {
+        item.insert("department".to_string(), AttributeValue::S(department.clone()));
+    }
+    if let Some(patient_id) = &user.patient_id {
+        item.insert("patient_id".to_string(), AttributeValue::S(patient_id.clone()));
+    }
+    item
+}
+
+fn item_to_user(item: HashMap<String, AttributeValue>) -> Result<User> {
+    let role_str = string_from_attr(&item, "role")?;
+    let role = match role_str.as_str() {
+        "admin" => UserRole::Admin,
+        "doctor" => UserRole::Doctor,
+        "patient" => UserRole::Patient,
+        "technician" => UserRole::Technician,
+        _ => return Err(AppError::Internal("Invalid role".to_string())),
+    };
+    
+    Ok(User {
+        id: uuid_from_attr(&item, "id")?,
+        email: string_from_attr(&item, "email")?,
+        first_name: string_from_attr(&item, "first_name")?,
+        last_name: string_from_attr(&item, "last_name")?,
+        password_hash: string_from_attr(&item, "password_hash")?,
+        role,
+        is_active: bool_from_attr(&item, "is_active")?,
+        is_verified: bool_from_attr(&item, "is_verified").unwrap_or(false),
+        two_factor_enabled: bool_from_attr(&item, "two_factor_enabled").unwrap_or(false),
+        two_factor_secret: optional_string_from_attr(&item, "two_factor_secret")?,
+        created_at: datetime_from_attr(&item, "created_at")?,
+        updated_at: datetime_from_attr(&item, "updated_at")?,
+        last_login: optional_datetime_from_attr(&item, "last_login")?,
+        license_number: optional_string_from_attr(&item, "license_number")?,
+        department: optional_string_from_attr(&item, "department")?,
+        patient_id: optional_string_from_attr(&item, "patient_id")?,
+    })
+}
+
+// Helper functions for AttributeValue conversion
+fn string_from_attr(item: &HashMap<String, AttributeValue>, key: &str) -> Result<String> {
+    match item.get(key) {
+        Some(AttributeValue::S(s)) => Ok(s.clone()),
+        _ => Err(AppError::Internal(format!("Missing or invalid string attribute: {}", key))),
+    }
+}
+
+fn bool_from_attr(item: &HashMap<String, AttributeValue>, key: &str) -> Result<bool> {
+    match item.get(key) {
+        Some(AttributeValue::Bool(b)) => Ok(*b),
+        _ => Err(AppError::Internal(format!("Missing or invalid bool attribute: {}", key))),
+    }
+}
+
+fn uuid_from_attr(item: &HashMap<String, AttributeValue>, key: &str) -> Result<Uuid> {
+    match item.get(key) {
+        Some(AttributeValue::S(s)) => Uuid::parse_str(s).map_err(|e| AppError::Internal(format!("Invalid UUID: {}", e))),
+        _ => Err(AppError::Internal(format!("Missing or invalid UUID attribute: {}", key))),
+    }
+}
+
+fn datetime_from_attr(item: &HashMap<String, AttributeValue>, key: &str) -> Result<DateTime<Utc>> {
+    match item.get(key) {
+        Some(AttributeValue::S(s)) => DateTime::parse_from_rfc3339(s)
+            .map(|dt| dt.with_timezone(&Utc))
+            .map_err(|e| AppError::Internal(format!("Invalid datetime: {}", e))),
+        _ => Err(AppError::Internal(format!("Missing or invalid datetime attribute: {}", key))),
+    }
+}
+
+fn optional_datetime_from_attr(item: &HashMap<String, AttributeValue>, key: &str) -> Result<Option<DateTime<Utc>>> {
+    match item.get(key) {
+        Some(AttributeValue::S(s)) => Ok(Some(DateTime::parse_from_rfc3339(s)
+            .map(|dt| dt.with_timezone(&Utc))
+            .map_err(|e| AppError::Internal(format!("Invalid datetime: {}", e)))?)),
+        _ => Ok(None),
+    }
+}
+
+fn optional_string_from_attr(item: &HashMap<String, AttributeValue>, key: &str) -> Result<Option<String>> {
+    match item.get(key) {
+        Some(AttributeValue::S(s)) => Ok(Some(s.clone())),
+        _ => Ok(None),
+    }
+}
+
+// Generic placeholder functions for now - these would need proper implementation
+fn patient_to_item(patient: &Patient) -> HashMap<String, AttributeValue> {
+    let mut item = HashMap::new();
+    item.insert("id".to_string(), AttributeValue::S(patient.id.to_string()));
+    // Add other fields as needed
+    item
+}
+
+fn item_to_patient(item: HashMap<String, AttributeValue>) -> Result<Patient> {
+    // Placeholder - would need proper implementation
+    Err(AppError::Internal("Patient deserialization not implemented".to_string()))
+}
+
+fn device_to_item(_device: &Device) -> HashMap<String, AttributeValue> {
+    let mut item = HashMap::new();
+    // Placeholder implementation
+    item
+}
+
+fn item_to_device(_item: HashMap<String, AttributeValue>) -> Result<Device> {
+    Err(AppError::Internal("Device deserialization not implemented".to_string()))
+}
+
+fn report_to_item(_report: &Report) -> HashMap<String, AttributeValue> {
+    let mut item = HashMap::new();
+    // Placeholder implementation
+    item
+}
+
+fn item_to_report(_item: HashMap<String, AttributeValue>) -> Result<Report> {
+    Err(AppError::Internal("Report deserialization not implemented".to_string()))
+}
+
+fn audit_log_to_item(_audit_log: &AuditLog) -> HashMap<String, AttributeValue> {
+    let mut item = HashMap::new();
+    // Placeholder implementation
+    item
+}
+
+fn item_to_audit_log(_item: HashMap<String, AttributeValue>) -> Result<AuditLog> {
+    Err(AppError::Internal("AuditLog deserialization not implemented".to_string()))
+}
+
+#[derive(Clone)]
 pub struct DynamoDbService {
     client: Client,
     config: Config,
@@ -24,7 +176,7 @@ impl DynamoDbService {
     
     /// Create a new user
     pub async fn create_user(&self, user: &User) -> Result<()> {
-        let item = to_item(user)?;
+        let item = user_to_item(user);
         
         self.client
             .put_item()
@@ -50,7 +202,7 @@ impl DynamoDbService {
         
         match result.item {
             Some(item) => {
-                let user: User = from_item(item)?;
+                let user: User = item_to_user(item)?;
                 Ok(Some(user))
             }
             None => Ok(None),
@@ -71,7 +223,7 @@ impl DynamoDbService {
         
         if let Some(items) = result.items {
             if let Some(item) = items.into_iter().next() {
-                let user: User = from_item(item)?;
+                let user: User = item_to_user(item)?;
                 return Ok(Some(user));
             }
         }
@@ -81,7 +233,7 @@ impl DynamoDbService {
     
     /// Update user
     pub async fn update_user(&self, user: &User) -> Result<()> {
-        let item = to_item(user)?;
+        let item = user_to_item(user);
         
         self.client
             .put_item()
@@ -116,7 +268,7 @@ impl DynamoDbService {
     
     /// Create a new patient
     pub async fn create_patient(&self, patient: &Patient) -> Result<()> {
-        let item = to_item(patient)?;
+        let item = patient_to_item(patient);
         
         self.client
             .put_item()
@@ -142,7 +294,7 @@ impl DynamoDbService {
         
         match result.item {
             Some(item) => {
-                let patient: Patient = from_item(item)?;
+                let patient: Patient = item_to_patient(item)?;
                 Ok(Some(patient))
             }
             None => Ok(None),
@@ -164,7 +316,7 @@ impl DynamoDbService {
         let mut patients = Vec::new();
         if let Some(items) = result.items {
             for item in items {
-                let patient: Patient = from_item(item)?;
+                let patient: Patient = item_to_patient(item)?;
                 patients.push(patient);
             }
         }
@@ -174,7 +326,7 @@ impl DynamoDbService {
     
     /// Update patient
     pub async fn update_patient(&self, patient: &Patient) -> Result<()> {
-        let item = to_item(patient)?;
+        let item = patient_to_item(patient);
         
         self.client
             .put_item()
@@ -192,7 +344,7 @@ impl DynamoDbService {
     
     /// Create a new device
     pub async fn create_device(&self, device: &Device) -> Result<()> {
-        let item = to_item(device)?;
+        let item = device_to_item(device);
         
         self.client
             .put_item()
@@ -218,7 +370,7 @@ impl DynamoDbService {
         
         match result.item {
             Some(item) => {
-                let device: Device = from_item(item)?;
+                let device: Device = item_to_device(item)?;
                 Ok(Some(device))
             }
             None => Ok(None),
@@ -240,7 +392,7 @@ impl DynamoDbService {
         let mut devices = Vec::new();
         if let Some(items) = result.items {
             for item in items {
-                let device: Device = from_item(item)?;
+                let device: Device = item_to_device(item)?;
                 devices.push(device);
             }
         }
@@ -250,7 +402,7 @@ impl DynamoDbService {
     
     /// Update device
     pub async fn update_device(&self, device: &Device) -> Result<()> {
-        let item = to_item(device)?;
+        let item = device_to_item(device);
         
         self.client
             .put_item()
@@ -372,7 +524,7 @@ impl DynamoDbService {
     
     /// Create a new report
     pub async fn create_report(&self, report: &Report) -> Result<()> {
-        let item = to_item(report)?;
+        let item = report_to_item(report);
         
         self.client
             .put_item()
@@ -398,7 +550,7 @@ impl DynamoDbService {
         
         match result.item {
             Some(item) => {
-                let report: Report = from_item(item)?;
+                let report: Report = item_to_report(item)?;
                 Ok(Some(report))
             }
             None => Ok(None),
@@ -407,7 +559,7 @@ impl DynamoDbService {
     
     /// Update report
     pub async fn update_report(&self, report: &Report) -> Result<()> {
-        let item = to_item(report)?;
+        let item = report_to_item(report);
         
         self.client
             .put_item()
@@ -425,7 +577,7 @@ impl DynamoDbService {
     
     /// Create audit log entry
     pub async fn create_audit_log(&self, audit_log: &AuditLog) -> Result<()> {
-        let item = to_item(audit_log)?;
+        let item = audit_log_to_item(audit_log);
         
         self.client
             .put_item()
@@ -454,7 +606,7 @@ impl DynamoDbService {
         let mut logs = Vec::new();
         if let Some(items) = result.items {
             for item in items {
-                let log: AuditLog = from_item(item)?;
+                let log: AuditLog = item_to_audit_log(item)?;
                 logs.push(log);
             }
         }

@@ -21,18 +21,33 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   @override
   Future<User> login(String email, String password) async {
     try {
-      // For demo purposes, we'll skip encryption
       final data = {
         'email': email,
         'password': password,
       };
 
       final response = await networkService.post(
-        '/user/login',
+        '/auth/login',
         data: data,
       );
 
-      return User.fromJson(response.data['user']);
+      // Extract and store tokens from backend response
+      final responseData = response.data;
+      if (responseData['data'] != null) {
+        final loginData = responseData['data'];
+        
+        // Store access token in network service for future requests
+        if (loginData['access_token'] != null) {
+          networkService.setAuthToken(loginData['access_token']);
+        }
+        
+        // TODO: Store refresh token in secure storage
+        // final refreshToken = loginData['refresh_token'];
+        
+        return User.fromJson(loginData['user']);
+      } else {
+        throw Exception('Invalid response format from server');
+      }
     } catch (e) {
       throw Exception('Login failed: $e');
     }
@@ -41,20 +56,60 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   @override
   Future<User> register(String name, String email, String password, String role) async {
     try {
-      // For demo purposes, we'll skip encryption
+      // Split name into first_name and last_name
+      final nameParts = name.trim().split(' ');
+      final firstName = nameParts.isNotEmpty ? nameParts.first : name;
+      final lastName = nameParts.length > 1 ? nameParts.skip(1).join(' ') : '';
+      
+      // Convert role to proper format for backend enum
+      String backendRole;
+      switch (role.toLowerCase()) {
+        case 'doctor':
+          backendRole = 'Doctor';
+          break;
+        case 'nurse':
+          backendRole = 'Nurse';
+          break;
+        case 'technician':
+          backendRole = 'Technician';
+          break;
+        case 'admin':
+          backendRole = 'Admin';
+          break;
+        case 'patient':
+          backendRole = 'Patient';
+          break;
+        default:
+          backendRole = 'Patient'; // Default to Patient if unknown
+      }
+      
       final data = {
-        'name': name,
         'email': email,
         'password': password,
-        'role': role,
+        'first_name': firstName,
+        'last_name': lastName,
+        'role': backendRole, // Use proper enum format
       };
 
       final response = await networkService.post(
-        '/user/register',
+        '/auth/register',
         data: data,
       );
 
-      return User.fromJson(response.data['user']);
+      // Handle registration response similar to login
+      final responseData = response.data;
+      if (responseData['data'] != null) {
+        final registrationData = responseData['data'];
+        
+        // Store access token if provided
+        if (registrationData['access_token'] != null) {
+          networkService.setAuthToken(registrationData['access_token']);
+        }
+        
+        return User.fromJson(registrationData['user']);
+      } else {
+        throw Exception('Invalid response format from server');
+      }
     } catch (e) {
       throw Exception('Registration failed: $e');
     }
@@ -63,7 +118,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   @override
   Future<void> logout() async {
     try {
-      await networkService.post('/user/logout');
+      await networkService.post('/auth/logout');
     } catch (e) {
       throw Exception('Logout failed: $e');
     }
@@ -72,7 +127,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   @override
   Future<void> refreshToken() async {
     try {
-      await networkService.post('/user/refresh-token');
+      await networkService.post('/auth/refresh');
     } catch (e) {
       throw Exception('Token refresh failed: $e');
     }
