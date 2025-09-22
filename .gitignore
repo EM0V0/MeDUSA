@@ -1,0 +1,244 @@
+# ==============================
+# MeDUSA Project .gitignore
+# Medical Device Management System
+# Frontend: Flutter/Dart | Backend: Rust/AWS Lambda
+# ==============================
+
+# ==============================
+# Flutter / Dart Frontend
+# ==============================
+
+# Flutter/Dart build artifacts
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.pub-cache/
+build/
+coverage/
+*.lcov
+
+# Flutter metadata
+.metadata
+
+# Android
+android/.gradle/
+android/local.properties
+android/**/.cxx/
+android/**/captures/
+android/**/gradle/
+android/**/gradle-wrapper.jar
+android/**/gradlew
+android/**/gradlew.bat
+android/**/key.properties
+android/key.properties
+*.jks
+*.keystore
+
+# iOS / Xcode
+ios/Pods/
+ios/.generated/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+ios/**/*.mode1v3
+ios/**/*.mode2v3
+ios/**/*.pbxuser
+ios/**/*.perspectivev3
+ios/**/xcuserdata/
+ios/**/DerivedData/
+ios/**/.symlinks/
+ios/**/profile
+
+# macOS
+macos/Pods/
+macos/Runner/GeneratedPluginRegistrant.*
+
+# Windows
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+
+# Linux
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugin_registrant.h
+
+# Web
+web/flutter_service_worker.js
+web/.dart_tool/
+
+# ==============================
+# Rust Backend
+# ==============================
+
+# Rust build artifacts
+**/target/
+**/*.rs.bk
+Cargo.lock
+
+# AWS Lambda deployment artifacts
+*.zip
+lambda-*.zip
+deployment-*.zip
+
+# AWS SAM
+.aws-sam/
+samconfig.toml
+
+# Terraform (if used for infrastructure)
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+
+# ==============================
+# Environment & Secrets
+# ==============================
+
+# Environment files
+.env
+.env.*
+!.env.example
+*.env
+
+# AWS credentials
+.aws/
+aws-exports.js
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+local_dev.db
+local_data/
+local_storage/
+
+# API keys and secrets
+secrets.json
+config/secrets/
+**/secrets/
+*.pem
+*.key
+*.crt
+
+# ==============================
+# IDE & OS
+# ==============================
+
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.ipr
+*.iws
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ==============================
+# Logs & Temporary Files
+# ==============================
+
+# Logs
+*.log
+logs/
+log/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+*~
+*.swp
+*.swo
+.#*
+
+# ==============================
+# Node.js (if used for tooling)
+# ==============================
+
+node_modules/
+.npm/
+.pnp/
+.pnp.js
+.yarn/
+
+# ==============================
+# Docker
+# ==============================
+
+# Docker files (keep Dockerfile but ignore volumes/data)
+docker-compose.override.yml
+.docker/
+docker-data/
+
+# ==============================
+# Claude AI / Project-specific
+# ==============================
+
+# Claude AI configuration
+.claude/
+
+# Temporary/probe files
+lib/_tmp_*.dart
+**/_storage_probe.dart
+
+# Generated documentation
+doc/api/
+docs/build/
+
+# Test coverage reports
+coverage/
+test-results/
+junit.xml
+
+# ==============================
+# Medical Device Compliance
+# ==============================
+
+# FDA/regulatory submission drafts (keep final versions)
+regulatory/drafts/
+compliance/temp/
+
+# Patient data (NEVER commit real patient data)
+patient_data/
+test_patient_data/
+*.csv.patient
+*.json.patient
+
+# ==============================
+# Backup files
+# ==============================
+
+*.backup
+*.bak
+*.orig
+*~

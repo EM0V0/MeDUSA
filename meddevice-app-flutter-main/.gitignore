@@ -1,0 +1,142 @@
+﻿# ==============================
+# Flutter / Dart .gitignore
+# ==============================
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.pub-cache/
+build/
+coverage/
+*.lcov
+
+# Flutter metadata
+.metadata
+
+# Android
+android/.gradle/
+android/local.properties
+android/**/.cxx/
+android/**/captures/
+android/**/gradle/
+android/**/gradle-wrapper.jar
+android/**/gradlew
+android/**/gradlew.bat
+android/**/key.properties
+*.jks
+
+# iOS / Xcode
+ios/Pods/
+ios/.generated/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+ios/**/*.mode1v3
+ios/**/*.mode2v3
+ios/**/*.pbxuser
+ios/**/*.perspectivev3
+ios/**/xcuserdata
+ios/**/DerivedData/
+ios/**/.symlinks/
+ios/**/profile
+macos/Pods/
+macos/Runner/GeneratedPluginRegistrant.*
+
+# Web build (covered by build/), keep here for clarity
+# web/.dart_tool/
+
+# IDE / OS
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temp / logs
+*.tmp
+*.temp
+*.log
+*~
+*.swp
+*.swo
+
+# Claude AI configuration
+.claude/
+
+# Node/JS (if present)
+node_modules/
+.npm/
+.pnp/
+.pnp.js
+.yarn/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==============================
+# Project-specific ignores
+# ==============================
+
+# Temporary/probe files
+lib/_tmp_*.dart
+**/_storage_probe.dart
+
+# Security pipeline artifacts (keep extracted SBOMs)
+artifacts/*.zip
+
+# Environment & Config Files
+.env
+.env.local
+.env.production
+.env.staging
+config/secrets.json
+config/api_keys.json
+lib/config/secrets.dart
+
+# Database & Keys
+*.db
+*.sqlite
+*.sqlite3
+*.key
+*.pem
+*.p12
+*.keystore
+google-services.json
+GoogleService-Info.plist
+
+# Generated code that shouldn't be committed
+lib/**/*.g.dart
+lib/**/*.freezed.dart
+lib/**/*.chopper.dart
+lib/**/*.mocks.dart
+
+# Platform-specific builds and artifacts
+windows/
+linux/
+macos/
+artifacts/
+
+# Development & Testing
+test_driver/
+integration_test/reports/
+screenshots/
+test/coverage/
+*.profraw
