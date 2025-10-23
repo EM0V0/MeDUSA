@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -64,15 +65,19 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
 
   void _setupSubscriptions() {
     _devicesSubscription = _bluetoothService.devicesStream.listen((devices) {
-      setState(() {
-        _discoveredDevices = devices;
-      });
+      if (mounted) {
+        setState(() {
+          _discoveredDevices = devices;
+        });
+      }
     });
 
     _statusSubscription = _bluetoothService.statusStream.listen((status) {
-      setState(() {
-        _statusMessage = status;
-      });
+      if (mounted) {
+        setState(() {
+          _statusMessage = status;
+        });
+      }
     });
   }
 
@@ -487,26 +492,54 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
             ),
           ),
           ResponsiveRowColumnItem(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            child: ResponsiveRowColumn(
+              layout: ResponsiveBreakpoints.of(context).smallerThan(TABLET)
+                  ? ResponsiveRowColumnType.COLUMN
+                  : ResponsiveRowColumnType.ROW,
+              rowMainAxisAlignment: MainAxisAlignment.end,
+              rowSpacing: 8.w,
+              columnSpacing: 8.h,
               children: [
-                ElevatedButton.icon(
-                  onPressed: () => _connectToDevice(device),
-                  icon: Icon(
-                    Icons.link_rounded,
-                    size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
-                  ),
-                  label: Text(
-                    'Connect',
-                    style: FontUtils.body(
-                      context: context,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
+                ResponsiveRowColumnItem(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _connectToDevice(device),
+                    icon: Icon(
+                      Icons.link_rounded,
+                      size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
+                    ),
+                    label: Text(
+                      'Connect',
+                      style: FontUtils.body(
+                        context: context,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
                     ),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                ),
+                ResponsiveRowColumnItem(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _setupWiFi(device),
+                    icon: Icon(
+                      Icons.wifi_rounded,
+                      size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
+                    ),
+                    label: Text(
+                      'WiFi Setup',
+                      style: FontUtils.body(
+                        context: context,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                    ),
                   ),
                 ),
               ],
@@ -747,5 +780,14 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
 
   Future<void> _disconnect() async {
     await _bluetoothService.disconnect();
+  }
+
+  /// Navigate to WiFi provisioning page with the selected device
+  /// This avoids redundant scanning - the device is already discovered
+  void _setupWiFi(BluetoothDevice device) {
+    _scanAnimationController.stop();
+    
+    // Navigate to WiFi provision page, passing the device
+    context.go('/wifi-provision', extra: device);
   }
 }

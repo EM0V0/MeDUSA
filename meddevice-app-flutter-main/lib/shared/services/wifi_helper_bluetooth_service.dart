@@ -113,48 +113,29 @@ class WiFiHelperBluetoothService extends ChangeNotifier {
 
     try {
       _setStatus('🔍 Scanning for MeDUSA devices...');
-      debugPrint('='.padRight(60, '='));
-      debugPrint('Starting BLE scan for MeDUSA WiFi Helper');
-      debugPrint(
-          'Target: Device advertising service c0de0000-7e1a-4f83-bf3a-0c0ffee0c0de');
-      debugPrint('='.padRight(60, '='));
+      debugPrint('📡 [Scan] Starting BLE scan for MeDUSA WiFi Helper');
 
       // Check if Bluetooth is supported
       if (!await FlutterBlueAdapter.isSupported) {
         _setError('Bluetooth not supported on this device');
-        debugPrint('�?Bluetooth not supported');
         return [];
       }
-
-      debugPrint('�?Bluetooth is supported');
 
       // Check if Bluetooth is enabled
       final adapterState = await FlutterBlueAdapter.adapterState.first;
-      debugPrint('Bluetooth adapter state: $adapterState');
 
       if (adapterState != flutter_blue_plus.BluetoothAdapterState.on) {
         _setError('Please enable Bluetooth');
-        debugPrint('�?Bluetooth is OFF - please enable it');
         return [];
       }
 
-      debugPrint('�?Bluetooth is ON');
-
-      // Start scan with service filter for Web Bluetooth compatibility
-      // This is CRITICAL for Web - without it, browser shows "Unknown devices"
-      debugPrint('📡 Starting scan with service filter...');
-      debugPrint('   Service UUID: c0de0000-7e1a-4f83-bf3a-0c0ffee0c0de');
-      debugPrint('   Timeout: ${timeout.inSeconds}s');
-
       final targetServiceUuid = flutter_blue_plus.Guid("c0de0000-7e1a-4f83-bf3a-0c0ffee0c0de");
 
+      // Do NOT use withServices filter - many devices don't advertise services in broadcast
+      // We filter by device name "medusa" instead
       await FlutterBlueAdapter.startScan(
         timeout: timeout,
         androidUsesFineLocation: true,
-        // Web Bluetooth only needs the service in optionalServices; requiring it
-        // as a filter hides devices that fail to advertise the UUID.
-        withServices: kIsWeb ? const [] : [targetServiceUuid],
-        webOptionalServices: [targetServiceUuid],
       );
 
       debugPrint('�?Scan started');

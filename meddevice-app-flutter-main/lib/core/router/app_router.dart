@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../../features/admin/presentation/pages/audit_logs_page.dart';
 import '../../features/admin/presentation/pages/device_management_page.dart';
@@ -8,6 +11,7 @@ import '../../features/admin/presentation/pages/system_settings_page.dart';
 import '../../features/admin/presentation/pages/user_management_page.dart';
 import '../../features/devices/presentation/pages/device_connection_page.dart';
 import '../../features/devices/presentation/pages/device_scan_page.dart';
+import '../../features/devices/presentation/pages/wifi_provision_page.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
@@ -238,6 +242,30 @@ class AppRouter {
             ),
           ),
 
+          // WiFi Provisioning Route (for setting up device WiFi credentials)
+          GoRoute(
+            path: '/wifi-provision',
+            name: 'wifi-provision',
+            pageBuilder: (context, state) {
+              // Get the device from extra parameter (passed from device scan page)
+              final device = state.extra as BluetoothDevice?;
+              
+              if (device == null) {
+                // If no device provided, redirect to device scan
+                return NoTransitionPage(
+                  key: state.pageKey,
+                  child: const DeviceScanPage(),
+                );
+              }
+              
+              return CustomTransitionPage(
+                key: state.pageKey,
+                child: WiFiProvisionPage(device: device),
+                transitionsBuilder: _slideTransition,
+              );
+            },
+          ),
+
           // Profile Route
           GoRoute(
             path: '/profile',
@@ -270,24 +298,36 @@ class AppRouter {
       final authState = authBloc.state;
       
       final isAuthenticated = authState is AuthAuthenticated;
-      final isLoggingIn = state.matchedLocation == '/login' || state.matchedLocation == '/register';
+      final isAuthPage = state.matchedLocation == '/login' || 
+                         state.matchedLocation == '/register' ||
+                         state.matchedLocation.startsWith('/2fa');
+
+      // Allow access to 2FA pages without full authentication
+      if (state.matchedLocation.startsWith('/2fa')) {
+        return null;
+      }
 
       // If not authenticated and not on auth page, redirect to login
-      if (!isAuthenticated && !isLoggingIn) {
+      if (!isAuthenticated && !isAuthPage) {
+        debugPrint('[Router] User not authenticated, redirecting to login');
         return '/login';
       }
 
       // If authenticated and on auth page, redirect to dashboard
-      if (isAuthenticated && isLoggingIn) {
+      if (isAuthenticated && isAuthPage) {
+        debugPrint('[Router] User authenticated, redirecting from auth page to dashboard');
         return '/dashboard';
       }
 
       // No redirect needed
       return null;
     } catch (e) {
+      debugPrint('[Router] Error in redirect: $e');
       // If BLoC is not available (app initializing), allow auth pages
-      final isLoggingIn = state.matchedLocation == '/login' || state.matchedLocation == '/register';
-      return isLoggingIn ? null : '/login';
+      final isAuthPage = state.matchedLocation == '/login' || 
+                         state.matchedLocation == '/register' ||
+                         state.matchedLocation.startsWith('/2fa');
+      return isAuthPage ? null : '/login';
     }
   }
 

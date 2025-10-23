@@ -129,10 +129,29 @@ class MedicalBluetoothService extends ChangeNotifier {
   /// Check if Bluetooth is enabled
   Future<bool> _isBluetoothEnabled() async {
     try {
-      final adapterState = await FlutterBlueAdapter.adapterState.first;
-      return adapterState == flutter_blue_plus.BluetoothAdapterState.on;
+      final adapterState = await FlutterBlueAdapter.adapterState.first
+          .timeout(const Duration(seconds: 2));
+      
+      // On Windows, 'unknown' state often means Bluetooth is available but state can't be determined
+      // We should allow it and let the actual scan determine availability
+      if (Platform.isWindows || kIsWeb) {
+        final isAvailable = adapterState == flutter_blue_plus.BluetoothAdapterState.on ||
+                           adapterState == flutter_blue_plus.BluetoothAdapterState.unknown;
+        debugPrint('[BT Init] Windows/Web - Adapter state: $adapterState, treating as available: $isAvailable');
+        return isAvailable;
+      }
+      
+      // On mobile platforms, require explicit 'on' state
+      final isOn = adapterState == flutter_blue_plus.BluetoothAdapterState.on;
+      debugPrint('[BT Init] Mobile - Adapter state: $adapterState, isOn: $isOn');
+      return isOn;
     } catch (e) {
-      debugPrint('Error checking Bluetooth state: $e');
+      debugPrint('[BT Init] Error checking Bluetooth state: $e');
+      // On Windows, if we can't determine state, assume it's available
+      if (Platform.isWindows || kIsWeb) {
+        debugPrint('[BT Init] Windows/Web - Error occurred, assuming Bluetooth available');
+        return true;
+      }
       return false;
     }
   }
@@ -147,68 +166,64 @@ class MedicalBluetoothService extends ChangeNotifier {
     try {
       _isScanning = true;
       _discoveredDevices.clear();
+      
+      // Immediately notify UI with empty list
+      _devicesController.add([]);
+      
       _setStatus('Scanning for devices...');
       notifyListeners();
 
-      // WEB BLUETOOTH: Different behavior than mobile
-      // On Web: startScan() triggers browser's device picker dialog
-      // User MUST manually select device, then it appears in scanResults
-      // We need to collect devices from BOTH scanResults and onScanResults streams
+      debugPrint('📡 [Scan] Starting...');
       
-      debugPrint('🔍 Starting BLE scan...');
-      debugPrint('   Platform: ${kIsWeb ? "WEB" : "MOBILE"}');
-      
-      // Start scanning
+      // Start scanning - do NOT use withServices filter
+      // Many devices (including Raspberry Pi) don't advertise service UUIDs in broadcast packets
+      // We filter by device name instead (see _isTargetDevice method)
       await FlutterBlueAdapter.startScan(
         timeout: timeout,
         androidUsesFineLocation: true,
-        // Note: Uncomment withServices if your Pi advertises this specific service UUID
-        // withServices: [flutter_blue_plus.Guid(_serviceUuid)],
       );
 
-      // Listen to scan results stream (gets devices as they're discovered)
-      // Use scanResults (not onScanResults) for better Web compatibility
+      // Listen to scan results
       _scanSubscription = FlutterBlueAdapter.scanResults.listen(
         (results) {
-          debugPrint('📱 Received ${results.length} scan result(s)');
-          
           for (flutter_blue_plus.ScanResult result in results) {
             final device = result.device;
             
-            // Filter for medical devices (Raspberry Pi with our service)
+            // Filter for MeDUSA devices by name
             if (_isTargetDevice(device, result.advertisementData)) {
               if (!_discoveredDevices.any((d) => d.remoteId == device.remoteId)) {
+                final displayName = device.platformName.isNotEmpty 
+                    ? device.platformName 
+                    : result.advertisementData.advName;
+                
                 _discoveredDevices.add(device);
-                _devicesController.add(_discoveredDevices);
-                debugPrint('✓ Added device to list: ${device.platformName} (${device.remoteId})');
+                debugPrint('✓ [Scan] Found: $displayName');
+                
+                // Send copy to ensure stream triggers
+                _devicesController.add(List.from(_discoveredDevices));
                 _setStatus('Found ${_discoveredDevices.length} device(s)');
               }
+              // Don't log if already in list - reduces spam
             }
           }
           notifyListeners();
         },
         onError: (e) {
-          debugPrint('❌ Scan error: $e');
+          debugPrint('❌ [Scan] Error: $e');
           _setError('Scan error: $e');
         },
       );
 
-      // Also check already discovered devices (for Web Bluetooth)
-      // Web Bluetooth: After user selects device, it may be in connectedDevices
+      // For Web Bluetooth: check already connected devices
       if (kIsWeb) {
-        debugPrint('🌐 Web platform: checking for already selected devices...');
-        
-        // Give browser time to process user selection
         await Future.delayed(const Duration(milliseconds: 500));
-        
-        // Check connected devices (Web Bluetooth adds selected device here)
         final connectedDevices = FlutterBlueAdapter.connectedDevices;
         for (var device in connectedDevices) {
           if (device.platformName.toLowerCase().contains('medusa')) {
             if (!_discoveredDevices.any((d) => d.remoteId == device.remoteId)) {
               _discoveredDevices.add(device);
               _devicesController.add(_discoveredDevices);
-              debugPrint('✓ Found connected device: ${device.platformName}');
+              debugPrint('✓ [Scan] Found: ${device.platformName}');
               _setStatus('Found ${_discoveredDevices.length} device(s)');
               notifyListeners();
             }
@@ -220,11 +235,12 @@ class MedicalBluetoothService extends ChangeNotifier {
       Timer(timeout, () {
         if (_isScanning) {
           stopScan();
+          debugPrint('⏹️ [Scan] Timeout - found ${_discoveredDevices.length} device(s)');
         }
       });
 
     } catch (e) {
-      debugPrint('❌ Scan failed: $e');
+      debugPrint('❌ [Scan] Failed: $e');
       _setError('Failed to start scan: $e');
       _isScanning = false;
       notifyListeners();
@@ -255,19 +271,10 @@ class MedicalBluetoothService extends ChangeNotifier {
     final name = device.platformName.toLowerCase();
     final localName = adData.advName.toLowerCase();
     
-    debugPrint('🔍 Checking device: $name / $localName');
-    debugPrint('   Remote ID: ${device.remoteId}');
-    debugPrint('   Services: ${adData.serviceUuids}');
-    
     // ONLY look for "medusa" - no other devices
-    // This matches your Pi which should be named "medusa_pi" or "medusa_helper"
     final isMedusaDevice = name.contains('medusa') || localName.contains('medusa');
     
-    debugPrint('   Is MeDUSA: $isMedusaDevice');
-    
-    if (isMedusaDevice) {
-      debugPrint('✓ Found MeDUSA device: $name');
-    }
+    // Don't log here - logging happens in scan callback when device is actually added
     
     return isMedusaDevice;
   }

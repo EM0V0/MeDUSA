@@ -33,7 +33,6 @@ class FlutterBlueAdapter {
     List<String> withNames = const [],
     Duration? timeout,
     bool androidUsesFineLocation = false,
-    List<fb.Guid> webOptionalServices = const [],
   }) async {
     if (_useWindows) {
       await fb_win.FlutterBluePlusWindows.startScan(
@@ -49,7 +48,6 @@ class FlutterBlueAdapter {
         withNames: withNames,
         timeout: timeout,
         androidUsesFineLocation: androidUsesFineLocation,
-        webOptionalServices: webOptionalServices,
       );
     }
   }

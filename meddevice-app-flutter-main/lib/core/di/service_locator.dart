@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../features/auth/data/datasources/auth_local_data_source.dart';
 import '../../features/auth/data/datasources/auth_remote_data_source.dart';
+import '../../features/auth/data/datasources/auth_remote_data_source_mock.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
@@ -13,6 +14,10 @@ class ServiceLocator {
   static final ServiceLocator _instance = ServiceLocator._internal();
   factory ServiceLocator() => _instance;
   ServiceLocator._internal();
+
+  /// Set to true to use mock authentication (no backend required)
+  /// Set to false to use real backend authentication
+  static const bool useMockAuth = true; // Change to false when backend is ready
 
   final Map<Type, dynamic> _services = {};
 
@@ -49,13 +54,30 @@ class ServiceLocator {
   }
 
   Future<void> _registerAuthServices() async {
-    // Auth data sources
-    register<AuthRemoteDataSource>(
-      AuthRemoteDataSourceImpl(
-        networkService: get<NetworkService>(),
-        encryptionService: get<EncryptionService>(),
-      ),
-    );
+    // Auth data sources - use mock or real based on configuration
+    if (useMockAuth) {
+      // Use mock authentication (no backend required)
+      register<AuthRemoteDataSource>(
+        AuthRemoteDataSourceMock(),
+      );
+      print('🧪 Using MOCK authentication (no backend required)');
+      print('   Available test accounts:');
+      print('   - demo@medusa.com (Patient)');
+      print('   - doctor@medusa.com (Doctor)');
+      print('   - patient@medusa.com (Patient)');
+      print('   - admin@medusa.com (Admin)');
+      print('   - nurse@medusa.com (Nurse)');
+      print('   Any password will work for testing!');
+    } else {
+      // Use real backend authentication
+      register<AuthRemoteDataSource>(
+        AuthRemoteDataSourceImpl(
+          networkService: get<NetworkService>(),
+          encryptionService: get<EncryptionService>(),
+        ),
+      );
+      print('🌐 Using REAL backend authentication');
+    }
     
     // For now, create a simple local data source without storage service dependency
     register<AuthLocalDataSource>(
