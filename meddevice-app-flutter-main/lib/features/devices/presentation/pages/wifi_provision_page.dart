@@ -59,11 +59,15 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
     _setupStatusListener();
   }
 
-  /// Setup the PIN request callback for PairingManager
-  /// Windows native pairing - no custom dialog needed
+  /// Setup the PIN request callback
+  /// This will be called when C++ plugin requests PIN input
   void _setupPairingCallback() {
-    // No custom PIN dialog - Windows handles pairing natively
-    // The callback is not used when using Windows native pairing
+    debugPrint('[WiFiProvision] Setting up PIN request callback');
+    _wifiService.setOnPinRequested(() {
+      debugPrint('[WiFiProvision] 🔐 PIN requested by C++ - Pi has generated PIN on OLED');
+      debugPrint('[WiFiProvision] 📱 Showing PIN input dialog NOW');
+      _showPinInputDialog();
+    });
   }
 
   /// Setup listener for WiFi service status updates
@@ -268,10 +272,30 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
             ),
           ),
           ElevatedButton.icon(
-            onPressed: () {
+            onPressed: () async {
               if (pinController.text.length == 6) {
                 result = pinController.text;
-                Navigator.of(dialogContext).pop();
+                
+                // Submit PIN to C++ plugin BEFORE closing dialog
+                debugPrint('[WiFiProvision] Submitting PIN to C++ plugin: $result');
+                try {
+                  await _wifiService.submitPinToPlugin(result!);
+                  debugPrint('[WiFiProvision] ✅ PIN submitted successfully');
+                  
+                  // Only close dialog AFTER PIN is submitted
+                  Navigator.of(dialogContext).pop(result);
+                } catch (e) {
+                  debugPrint('[WiFiProvision] ❌ Error submitting PIN: $e');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error submitting PIN: $e'),
+                        backgroundColor: AppColors.error,
+                      ),
+                    );
+                  }
+                  // Don't close dialog on error - let user try again
+                }
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -307,15 +331,20 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
   Future<void> _connectAndPair() async {
     setState(() {
       _isConnecting = true;
-      _statusMessage = 'Connecting to ${widget.device.platformName}...';
+      _statusMessage = 'Connecting to device...';
     });
 
     try {
       debugPrint('[WiFiProvision] Starting connection and pairing...');
       debugPrint('[WiFiProvision] Device address: $_deviceAddress');
       
-      // Connect and pair using WinBle WiFi Helper service
-      // This will trigger Windows native pairing dialog for PIN input
+      setState(() {
+        _statusMessage = 'Initiating pairing...\nPIN dialog will appear when Pi generates PIN.';
+      });
+      
+      // Start the pairing process
+      // The PIN dialog will be shown automatically when C++ requests it
+      // (via the _setupPairingCallback registered in initState)
       final success = await _wifiService.connectAndPair(_deviceAddress);
 
       if (success) {
@@ -347,6 +376,74 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
     }
   }
 
+  /// Unpair the device to allow fresh pairing with new PIN
+  Future<void> _unpairDevice() async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Unpair Device?'),
+        content: const Text(
+          'This will remove the current pairing. You\'ll need to enter the PIN again from the Raspberry Pi OLED display when reconnecting.\n\nThis is useful if:\n• You want to re-enter the PIN\n• Pi is not generating a new PIN code',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.warning),
+            child: const Text('Unpair'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _statusMessage = 'Unpairing device...';
+    });
+
+    try {
+      debugPrint('[WiFiProvision] Requesting unpair for $_deviceAddress');
+      final success = await _wifiService.unpairDevice(_deviceAddress);
+
+      if (success) {
+        setState(() {
+          _isConnected = false;
+          _isPaired = false;
+          _statusMessage = 'Device unpaired successfully. You can now connect again with a fresh PIN.';
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✓ Device unpaired. Connect again to enter new PIN.'),
+              backgroundColor: AppColors.success,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        
+        debugPrint('[WiFiProvision] ✓ Unpair successful');
+      } else {
+        setState(() {
+          _statusMessage = 'Failed to unpair device';
+        });
+        _showErrorDialog('Could not unpair device. Try removing it manually from Windows Bluetooth settings.');
+        debugPrint('[WiFiProvision] ✗ Unpair failed');
+      }
+    } catch (e) {
+      debugPrint('[WiFiProvision] Error during unpair: $e');
+      setState(() {
+        _statusMessage = 'Error: $e';
+      });
+      _showErrorDialog('Error unpairing: $e');
+    }
+  }
+
   /// Provision WiFi credentials to the device
   Future<void> _provisionWiFi() async {
     // Validate inputs
@@ -374,6 +471,8 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
       debugPrint('[WiFiProvision] Starting WiFi provisioning...');
       debugPrint('[WiFiProvision] SSID: ${_ssidController.text}');
       
+      // Provision WiFi credentials (write SSID, PSK, send CONNECT command)
+      // No PIN needed here - pairing was already done in _connectAndPair()
       final success = await _wifiService.provisionWiFiCredentials(
         _ssidController.text.trim(),
         _passwordController.text,
@@ -429,6 +528,7 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
       ),
     );
   }
+
 
   void _showSuccessDialog() {
     showDialog(
@@ -711,6 +811,33 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
               ),
             ),
           ),
+          // Add Unpair button if device shows as already paired
+          if (_isConnected || _isPaired) ...[
+            SizedBox(height: 12.h),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _isProvisioning ? null : _unpairDevice,
+                icon: Icon(
+                  Icons.link_off_rounded,
+                  size: IconUtils.getResponsiveIconSize(IconSizeType.medium, context),
+                  color: AppColors.warning,
+                ),
+                label: Text(
+                  'Unpair Device (to re-enter PIN)',
+                  style: FontUtils.body(
+                    context: context,
+                    color: AppColors.warning,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: AppColors.warning, width: 1.5),
+                  padding: EdgeInsets.symmetric(vertical: 16.h),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

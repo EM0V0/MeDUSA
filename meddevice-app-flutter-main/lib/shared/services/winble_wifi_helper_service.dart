@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'winble_service.dart';
 
 /// WinBle-based WiFi Helper service for Windows
@@ -15,9 +17,50 @@ import 'winble_service.dart';
 class WinBleWiFiHelperService extends ChangeNotifier {
   static final WinBleWiFiHelperService _instance = WinBleWiFiHelperService._internal();
   factory WinBleWiFiHelperService() => _instance;
-  WinBleWiFiHelperService._internal();
+  WinBleWiFiHelperService._internal() {
+    _setupPinChannelListener();
+  }
 
   final WinBleService _winBle = WinBleService();
+  
+  // PIN input method channel
+  static const MethodChannel _pinChannel = MethodChannel('com.medusa/windows_ble_pairing/pin');
+  
+  // PIN request callback - set by UI (no BuildContext needed, UI will handle it)
+  Function()? _onPinRequested;
+  
+  /// Register callback for PIN requests from C++
+  /// The callback should show the PIN input dialog
+  void setOnPinRequested(Function() callback) {
+    _onPinRequested = callback;
+    debugPrint('[WinBleWiFi] 🔐 PIN request callback registered');
+  }
+  
+  /// Setup method channel listener for PIN requests from C++
+  void _setupPinChannelListener() {
+    _pinChannel.setMethodCallHandler((call) async {
+      debugPrint('[WinBleWiFi] 📥 Received method call from C++: ${call.method}');
+      
+      switch (call.method) {
+        case 'onPinRequest':
+          debugPrint('[WinBleWiFi] 🔐 C++ requesting PIN input (Pi has generated PIN on OLED)');
+          // Notify UI to show PIN dialog
+          if (_onPinRequested != null) {
+            debugPrint('[WinBleWiFi] 🔐 Invoking PIN request callback');
+            _onPinRequested!();
+          } else {
+            debugPrint('[WinBleWiFi] ⚠️ No PIN request callback registered!');
+          }
+          return null;
+          
+        default:
+          debugPrint('[WinBleWiFi] ❌ Unknown method: ${call.method}');
+          throw MissingPluginException('Method ${call.method} not implemented');
+      }
+    });
+    
+    debugPrint('[WinBleWiFi] 📡 PIN channel listener setup complete');
+  }
 
   // WiFi Helper GATT Service UUIDs
   static const String SERVICE_UUID = 'c0de0000-7e1a-4f83-bf3a-0c0ffee0c0de';
@@ -60,6 +103,32 @@ class WinBleWiFiHelperService extends ChangeNotifier {
   bool get isPaired => _isPaired;
   String? get lastError => _lastError;
   Stream<String> get statusStream => _statusController.stream;
+  
+  /// Submit PIN to C++ plugin
+  Future<void> submitPinToPlugin(String pin) async {
+    debugPrint('[WinBleWiFi] 🔐 Submitting PIN to C++ plugin: $pin');
+    
+    if (pin.isEmpty) {
+      debugPrint('[WinBleWiFi] ❌ PIN is empty');
+      throw Exception('PIN cannot be empty');
+    }
+    
+    try {
+      await _pinChannel.invokeMethod('submitPin', {'pin': pin});
+      debugPrint('[WinBleWiFi] ✅ PIN submitted to C++ plugin');
+    } catch (e) {
+      debugPrint('[WinBleWiFi] ❌ Error submitting PIN: $e');
+      throw Exception('Failed to submit PIN: $e');
+    }
+  }
+  
+  /// Show PIN input dialog
+  Future<String?> _showPinDialog() async {
+    // This method is now handled by the UI layer (wifi_provision_page.dart)
+    // The PIN input dialog is shown there and the PIN is passed to this service
+    debugPrint('[WinBleWiFi] 🔐 PIN input dialog should be handled by UI layer');
+    return null; // This will be overridden by the actual PIN from UI
+  }
 
   /// Connect and pair with device (without provisioning WiFi yet)
   /// 
@@ -110,20 +179,40 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       final services = await _winBle.discoverServices(deviceAddress);
       debugPrint('[WinBleWiFi] 🔍 Discovered ${services.length} service(s)');
 
+      // Debug: Print all discovered services
+      debugPrint('[WinBleWiFi] 📋 Listing all discovered services:');
+      for (var i = 0; i < services.length; i++) {
+        // WinBle returns services as String UUIDs directly, not objects
+        final uuid = services[i] as String;
+        debugPrint('[WinBleWiFi]   Service $i: $uuid');
+      }
+      
       // Verify WiFi Helper service exists
+      final targetUuid = SERVICE_UUID.toLowerCase().replaceAll('-', '');
+      debugPrint('[WinBleWiFi] 🔍 Looking for service UUID: $SERVICE_UUID');
+      debugPrint('[WinBleWiFi] 🔍 Normalized UUID: $targetUuid');
+      
       final hasWiFiService = services.any((service) {
-        try {
-          final uuid = (service as dynamic).uuid as String?;
-          if (uuid == null) return false;
-          return uuid.toLowerCase().replaceAll('-', '') == 
-                 SERVICE_UUID.toLowerCase().replaceAll('-', '');
-        } catch (e) {
-          return false;
+        // Service is already a String UUID
+        final uuid = service as String;
+        final normalizedUuid = uuid.toLowerCase().replaceAll('-', '');
+        final matches = normalizedUuid == targetUuid;
+        
+        if (matches) {
+          debugPrint('[WinBleWiFi]   ✅ MATCH FOUND: $uuid');
         }
+        
+        return matches;
       });
       
       if (!hasWiFiService) {
         _lastError = 'WiFi Helper service not found';
+        debugPrint('[WinBleWiFi] ❌ WiFi Helper service UUID not in discovered services!');
+        debugPrint('[WinBleWiFi] ❌ Expected: $SERVICE_UUID');
+        debugPrint('[WinBleWiFi] ❌ This likely means:');
+        debugPrint('[WinBleWiFi]    1. Raspberry Pi GATT server is not running');
+        debugPrint('[WinBleWiFi]    2. Service UUID mismatch');
+        debugPrint('[WinBleWiFi]    3. Service requires higher permissions');
         throw Exception(_lastError);
       }
       debugPrint('[WinBleWiFi] ✅ WiFi Helper service found');
@@ -135,6 +224,47 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       debugPrint('[WinBleWiFi] ❌ Error: $e');
       _lastError = e.toString();
       _setStatus('Error: $e');
+      return false;
+    }
+  }
+
+  /// Unpair a device to allow fresh pairing with new PIN
+  /// 
+  /// This is useful when:
+  /// - User wants to re-enter PIN code
+  /// - Raspberry Pi is not generating new PIN (because already paired)
+  /// - Need to clear old pairing state
+  /// 
+  /// [deviceAddress]: BLE device address (MAC) to unpair
+  /// 
+  /// Returns: true if unpair succeeds
+  Future<bool> unpairDevice(String deviceAddress) async {
+    try {
+      debugPrint('[WinBleWiFi] 🔓 Unpairing device $deviceAddress');
+      _lastError = null;
+      
+      // Call WinBle unpair (which uses WindowsPairingService)
+      final success = await _winBle.unpairDevice(deviceAddress);
+      
+      if (success) {
+        // Reset state
+        _connectedDeviceAddress = null;
+        _isPaired = false;
+        
+        debugPrint('[WinBleWiFi] ✅ Device unpaired successfully');
+        _setStatus('Device unpaired - ready for fresh pairing');
+        
+        return true;
+      } else {
+        debugPrint('[WinBleWiFi] ❌ Unpair failed');
+        _lastError = 'Failed to unpair device';
+        _setStatus('Unpair failed');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('[WinBleWiFi] ❌ Unpair error: $e');
+      _lastError = e.toString();
+      _setStatus('Error unpairing: $e');
       return false;
     }
   }
@@ -286,6 +416,9 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       debugPrint('[WinBleWiFi] 🔐 Starting pairing (BEFORE connection)');
       debugPrint('[WinBleWiFi] 🔐 Windows PIN dialog will appear');
       debugPrint('[WinBleWiFi] 📱 Check Raspberry Pi OLED for 6-digit PIN');
+      
+      // PIN input dialog is now handled by the UI layer
+      // No need to call it here as it's handled in wifi_provision_page.dart
       
       final paired = await _winBle.pairDevice(deviceAddress);
       if (!paired) {

@@ -220,6 +220,38 @@ class WinBleService extends ChangeNotifier {
     }
   }
 
+  /// Unpair a device
+  Future<bool> unpairDevice(String deviceAddress) async {
+    try {
+      debugPrint('[WinBle] 🔓 Unpairing device $deviceAddress');
+      
+      _setStatus('Unpairing...');
+      
+      // Use Windows native unpair
+      final success = await WindowsPairingService.unpairDevice(deviceAddress);
+
+      if (success) {
+        debugPrint('[WinBle] ✅ Device unpaired successfully');
+        _setStatus('Unpaired');
+        
+        // Clear connected device if it matches
+        if (_connectedDeviceAddress == deviceAddress) {
+          _connectedDeviceAddress = null;
+        }
+        
+        return true;
+      } else {
+        debugPrint('[WinBle] ❌ Unpair failed');
+        _setStatus('Unpair failed');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('[WinBle] ❌ Unpair error: $e');
+      _setStatus('Unpair error');
+      return false;
+    }
+  }
+
   /// Discover services and characteristics
   Future<List<dynamic>> discoverServices(String deviceAddress) async {
     try {
