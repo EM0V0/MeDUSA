@@ -74,19 +74,12 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       // 1. Initialize
       await _winBle.initialize();
       
-      // 2. Connect
-      _setStatus('Connecting to device...');
-      final connected = await _winBle.connect(deviceAddress);
-      if (!connected) {
-        _lastError = 'Failed to connect to device';
-        throw Exception(_lastError);
-      }
-      _connectedDeviceAddress = deviceAddress;
-      debugPrint('[WinBleWiFi] ✅ Connected');
-
-      // 3. Pair (triggers Windows PIN dialog)
+      // 2. Pair FIRST (before connecting)
+      // CRITICAL: Must pair before connect to avoid "Operation already in progress" error
+      // Connecting first triggers Windows auto-pairing which conflicts with manual pairing
       _setStatus('Pairing...');
-      debugPrint('[WinBleWiFi] 🔐 Starting pairing (Windows PIN dialog will appear)');
+      debugPrint('[WinBleWiFi] 🔐 Starting pairing (BEFORE connection)');
+      debugPrint('[WinBleWiFi] 🔐 Windows PIN dialog will appear');
       debugPrint('[WinBleWiFi] 📱 Check Raspberry Pi OLED for 6-digit PIN');
       
       final paired = await _winBle.pairDevice(deviceAddress);
@@ -96,6 +89,18 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       }
       _isPaired = true;
       debugPrint('[WinBleWiFi] ✅ Pairing successful');
+
+      // 3. Connect (AFTER successful pairing)
+      _setStatus('Connecting to device...');
+      debugPrint('[WinBleWiFi] 🔌 Connecting to paired device...');
+      
+      final connected = await _winBle.connect(deviceAddress);
+      if (!connected) {
+        _lastError = 'Failed to connect to device';
+        throw Exception(_lastError);
+      }
+      _connectedDeviceAddress = deviceAddress;
+      debugPrint('[WinBleWiFi] ✅ Connected');
 
       // Small delay to ensure pairing is complete
       await Future.delayed(const Duration(milliseconds: 1000));
@@ -276,18 +281,10 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       // 1. Initialize
       await _winBle.initialize();
       
-      // 2. Connect
-      _setStatus('Connecting to device...');
-      final connected = await _winBle.connect(deviceAddress);
-      if (!connected) {
-        throw Exception('Failed to connect to device');
-      }
-      _connectedDeviceAddress = deviceAddress;
-      debugPrint('[WinBleWiFi] ✅ Connected');
-
-      // 3. Pair (triggers Windows PIN dialog)
+      // 2. Pair FIRST (before connecting) - CRITICAL for Windows
       _setStatus('Pairing...');
-      debugPrint('[WinBleWiFi] 🔐 Starting pairing (Windows PIN dialog will appear)');
+      debugPrint('[WinBleWiFi] 🔐 Starting pairing (BEFORE connection)');
+      debugPrint('[WinBleWiFi] 🔐 Windows PIN dialog will appear');
       debugPrint('[WinBleWiFi] 📱 Check Raspberry Pi OLED for 6-digit PIN');
       
       final paired = await _winBle.pairDevice(deviceAddress);
@@ -296,6 +293,17 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       }
       _isPaired = true;
       debugPrint('[WinBleWiFi] ✅ Pairing successful');
+
+      // 3. Connect (AFTER successful pairing)
+      _setStatus('Connecting to device...');
+      debugPrint('[WinBleWiFi] 🔌 Connecting to paired device...');
+      
+      final connected = await _winBle.connect(deviceAddress);
+      if (!connected) {
+        throw Exception('Failed to connect to device');
+      }
+      _connectedDeviceAddress = deviceAddress;
+      debugPrint('[WinBleWiFi] ✅ Connected');
 
       // Small delay to ensure pairing is complete
       await Future.delayed(const Duration(milliseconds: 1000));
