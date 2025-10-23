@@ -580,16 +580,19 @@ class WiFiHelperBluetoothService extends ChangeNotifier {
       }
     }
 
-    if (!(_statusChar?.properties.read ?? false)) {
-      _setError('Status characteristic does not support reads.');
-      return false;
-    }
+    // IMPORTANT: Don't check properties before pairing!
+    // Before pairing, all properties show as false even if they're actually readable
+    // We must attempt the read to trigger Windows pairing dialog
+    debugPrint('[Pairing] Attempting to read status characteristic...');
+    debugPrint('[Pairing] This will trigger Windows pairing dialog if not paired');
 
     _setStatus('Verifying secure pairing status...');
 
     try {
+      // Attempt to read - this will trigger pairing if needed
       await _statusChar!.read();
       _isPaired = true;
+      debugPrint('[Pairing] ✅ Read successful - device is paired');
       _setStatus('Pairing verified - encrypted channel ready.');
       return true;
     } catch (e) {
@@ -597,7 +600,10 @@ class WiFiHelperBluetoothService extends ChangeNotifier {
       final lower = errorStr.toLowerCase();
       _isPaired = false;
 
+      debugPrint('[Pairing] ❌ Read failed: $errorStr');
+
       if (_isAuthenticationFailure(lower)) {
+        debugPrint('[Pairing] Authentication failure detected - pairing required');
         _handlePairingRequired('verifying pairing status');
         return false;
       }

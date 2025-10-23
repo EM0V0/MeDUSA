@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -9,17 +10,16 @@ import 'package:responsive_framework/responsive_framework.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
-import '../../../../shared/pairing/pairing_manager.dart';
-import '../../../../shared/services/wifi_helper_bluetooth_service.dart';
+import '../../../../shared/services/winble_wifi_helper_service.dart';
 
 /// WiFi Provisioning Page
 /// 
 /// Provisions WiFi credentials to a pre-scanned MeDUSA Raspberry Pi device
-/// via Bluetooth Low Energy (BLE) with LESC pairing.
+/// via Bluetooth Low Energy (BLE) with LESC pairing using WinRT native APIs.
 /// 
 /// This page:
 /// 1. Accepts a pre-scanned BluetoothDevice (NO redundant scanning)
-/// 2. Shows PIN input dialog for manual pairing
+/// 2. Uses Windows native pairing dialog for PIN input (ProvidePin mode)
 /// 3. Provisions WiFi credentials after successful pairing
 class WiFiProvisionPage extends StatefulWidget {
   final BluetoothDevice device;
@@ -34,8 +34,10 @@ class WiFiProvisionPage extends StatefulWidget {
 }
 
 class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
-  final WiFiHelperBluetoothService _wifiService = WiFiHelperBluetoothService();
-  final PairingManager _pairingManager = PairingManager.instance;
+  final WinBleWiFiHelperService _wifiService = WinBleWiFiHelperService();
+  
+  // Get device address from FlutterBluePlus device
+  String get _deviceAddress => widget.device.remoteId.str;
   
   final TextEditingController _ssidController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -301,7 +303,7 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
     return result;
   }
 
-  /// Connect and pair with the device
+  /// Connect and pair with the device using WinBle + WinRT APIs
   Future<void> _connectAndPair() async {
     setState(() {
       _isConnecting = true;
@@ -310,10 +312,11 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
 
     try {
       debugPrint('[WiFiProvision] Starting connection and pairing...');
+      debugPrint('[WiFiProvision] Device address: $_deviceAddress');
       
-      // Connect and pair using WiFi Helper service
-      // This will trigger the PIN input dialog via PairingManager callback
-      final success = await _wifiService.connectAndPair(widget.device);
+      // Connect and pair using WinBle WiFi Helper service
+      // This will trigger Windows native pairing dialog for PIN input
+      final success = await _wifiService.connectAndPair(_deviceAddress);
 
       if (success) {
         setState(() {
@@ -371,7 +374,7 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
       debugPrint('[WiFiProvision] Starting WiFi provisioning...');
       debugPrint('[WiFiProvision] SSID: ${_ssidController.text}');
       
-      final success = await _wifiService.provisionWiFi(
+      final success = await _wifiService.provisionWiFiCredentials(
         _ssidController.text.trim(),
         _passwordController.text,
       );

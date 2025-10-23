@@ -12,6 +12,7 @@ import '../../features/admin/presentation/pages/user_management_page.dart';
 import '../../features/devices/presentation/pages/device_connection_page.dart';
 import '../../features/devices/presentation/pages/device_scan_page.dart';
 import '../../features/devices/presentation/pages/wifi_provision_page.dart';
+import '../../features/devices/presentation/pages/winble_test_page.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
@@ -230,6 +231,16 @@ class AppRouter {
             pageBuilder: (context, state) => NoTransitionPage(
               key: state.pageKey,
               child: const DeviceScanPage(),
+            ),
+          ),
+
+          // WinBle Test Page (Windows BLE + WinRT Pairing)
+          GoRoute(
+            path: '/winble-test',
+            name: 'winble-test',
+            pageBuilder: (context, state) => NoTransitionPage(
+              key: state.pageKey,
+              child: const WinBleTestPage(),
             ),
           ),
 

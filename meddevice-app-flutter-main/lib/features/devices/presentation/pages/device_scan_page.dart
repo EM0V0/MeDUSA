@@ -428,7 +428,9 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
         columnSpacing: 12.h,
         children: [
           ResponsiveRowColumnItem(
+            rowFlex: 1,
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   padding: EdgeInsets.all(12.w),
@@ -448,9 +450,10 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
                   ),
                 ),
                 SizedBox(width: 12.w),
-                Expanded(
+                Flexible(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         deviceName,
