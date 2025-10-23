@@ -6,6 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as flutter_blue_plus;
 import 'package:permission_handler/permission_handler.dart';
 
+import '../bluetooth/flutter_blue_adapter.dart';
+import 'package:win_ble/win_ble.dart' as win_ble;
+
 /// Medical device Bluetooth connection service for managing Raspberry Pi device connections
 /// Handles device discovery, connection, data transmission, and status monitoring
 class MedicalBluetoothService extends ChangeNotifier {
@@ -42,6 +45,7 @@ class MedicalBluetoothService extends ChangeNotifier {
   StreamSubscription? _scanSubscription;
   StreamSubscription? _connectionSubscription;
   StreamSubscription? _dataSubscription;
+  StreamSubscription<bool>? _winBleConnectionSubscription;
 
   // Getters
   bool get isScanning => _isScanning;
@@ -61,7 +65,7 @@ class MedicalBluetoothService extends ChangeNotifier {
   Future<bool> initialize() async {
     try {
       // Check if Bluetooth is supported
-      if (!await flutter_blue_plus.FlutterBluePlus.isSupported) {
+      if (!await FlutterBlueAdapter.isSupported) {
         _setError('Bluetooth is not supported on this device');
         return false;
       }
@@ -88,23 +92,34 @@ class MedicalBluetoothService extends ChangeNotifier {
 
   /// Request necessary permissions for Bluetooth
   Future<bool> _requestPermissions() async {
-    if (Platform.isAndroid) {
-      // Android permissions
-      final permissions = [
-        Permission.bluetooth,
-        Permission.bluetoothScan,
-        Permission.bluetoothConnect,
-        Permission.bluetoothAdvertise,
-        Permission.location,
-      ];
+    // Web platform doesn't need permission requests - browser handles it
+    if (kIsWeb) {
+      return true;
+    }
+    
+    try {
+      if (Platform.isAndroid) {
+        // Android permissions
+        final permissions = [
+          Permission.bluetooth,
+          Permission.bluetoothScan,
+          Permission.bluetoothConnect,
+          Permission.bluetoothAdvertise,
+          Permission.location,
+        ];
 
-      Map<Permission, PermissionStatus> statuses = await permissions.request();
-      
-      return statuses.values.every((status) => 
-          status == PermissionStatus.granted || 
-          status == PermissionStatus.limited);
-    } else if (Platform.isIOS) {
-      // iOS permissions are handled automatically by flutter_blue_plus
+        Map<Permission, PermissionStatus> statuses = await permissions.request();
+        
+        return statuses.values.every((status) => 
+            status == PermissionStatus.granted || 
+            status == PermissionStatus.limited);
+      } else if (Platform.isIOS) {
+        // iOS permissions are handled automatically by flutter_blue_plus
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Permission request error: $e');
+      // On Web or unsupported platforms, continue anyway
       return true;
     }
     
@@ -114,7 +129,7 @@ class MedicalBluetoothService extends ChangeNotifier {
   /// Check if Bluetooth is enabled
   Future<bool> _isBluetoothEnabled() async {
     try {
-      final adapterState = await flutter_blue_plus.FlutterBluePlus.adapterState.first;
+      final adapterState = await FlutterBlueAdapter.adapterState.first;
       return adapterState == flutter_blue_plus.BluetoothAdapterState.on;
     } catch (e) {
       debugPrint('Error checking Bluetooth state: $e');
@@ -135,15 +150,28 @@ class MedicalBluetoothService extends ChangeNotifier {
       _setStatus('Scanning for devices...');
       notifyListeners();
 
+      // WEB BLUETOOTH: Different behavior than mobile
+      // On Web: startScan() triggers browser's device picker dialog
+      // User MUST manually select device, then it appears in scanResults
+      // We need to collect devices from BOTH scanResults and onScanResults streams
+      
+      debugPrint('🔍 Starting BLE scan...');
+      debugPrint('   Platform: ${kIsWeb ? "WEB" : "MOBILE"}');
+      
       // Start scanning
-      await flutter_blue_plus.FlutterBluePlus.startScan(
+      await FlutterBlueAdapter.startScan(
         timeout: timeout,
         androidUsesFineLocation: true,
+        // Note: Uncomment withServices if your Pi advertises this specific service UUID
+        // withServices: [flutter_blue_plus.Guid(_serviceUuid)],
       );
 
-      // Listen to scan results
-      _scanSubscription = flutter_blue_plus.FlutterBluePlus.scanResults.listen(
+      // Listen to scan results stream (gets devices as they're discovered)
+      // Use scanResults (not onScanResults) for better Web compatibility
+      _scanSubscription = FlutterBlueAdapter.scanResults.listen(
         (results) {
+          debugPrint('📱 Received ${results.length} scan result(s)');
+          
           for (flutter_blue_plus.ScanResult result in results) {
             final device = result.device;
             
@@ -152,16 +180,41 @@ class MedicalBluetoothService extends ChangeNotifier {
               if (!_discoveredDevices.any((d) => d.remoteId == device.remoteId)) {
                 _discoveredDevices.add(device);
                 _devicesController.add(_discoveredDevices);
-                debugPrint('Found target device: ${device.platformName} (${device.remoteId})');
+                debugPrint('✓ Added device to list: ${device.platformName} (${device.remoteId})');
+                _setStatus('Found ${_discoveredDevices.length} device(s)');
               }
             }
           }
           notifyListeners();
         },
         onError: (e) {
+          debugPrint('❌ Scan error: $e');
           _setError('Scan error: $e');
         },
       );
+
+      // Also check already discovered devices (for Web Bluetooth)
+      // Web Bluetooth: After user selects device, it may be in connectedDevices
+      if (kIsWeb) {
+        debugPrint('🌐 Web platform: checking for already selected devices...');
+        
+        // Give browser time to process user selection
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        // Check connected devices (Web Bluetooth adds selected device here)
+        final connectedDevices = FlutterBlueAdapter.connectedDevices;
+        for (var device in connectedDevices) {
+          if (device.platformName.toLowerCase().contains('medusa')) {
+            if (!_discoveredDevices.any((d) => d.remoteId == device.remoteId)) {
+              _discoveredDevices.add(device);
+              _devicesController.add(_discoveredDevices);
+              debugPrint('✓ Found connected device: ${device.platformName}');
+              _setStatus('Found ${_discoveredDevices.length} device(s)');
+              notifyListeners();
+            }
+          }
+        }
+      }
 
       // Auto-stop scanning after timeout
       Timer(timeout, () {
@@ -171,6 +224,7 @@ class MedicalBluetoothService extends ChangeNotifier {
       });
 
     } catch (e) {
+      debugPrint('❌ Scan failed: $e');
       _setError('Failed to start scan: $e');
       _isScanning = false;
       notifyListeners();
@@ -182,7 +236,7 @@ class MedicalBluetoothService extends ChangeNotifier {
     if (!_isScanning) return;
 
     try {
-      await flutter_blue_plus.FlutterBluePlus.stopScan();
+      await FlutterBlueAdapter.stopScan();
       await _scanSubscription?.cancel();
       _scanSubscription = null;
       
@@ -195,17 +249,27 @@ class MedicalBluetoothService extends ChangeNotifier {
   }
 
   /// Check if device is a target medical device
+  /// ONLY MeDUSA Pi devices - filtering out all other BLE devices
   bool _isTargetDevice(flutter_blue_plus.BluetoothDevice device, flutter_blue_plus.AdvertisementData adData) {
     // Check device name patterns
     final name = device.platformName.toLowerCase();
     final localName = adData.advName.toLowerCase();
     
-    // Look for Raspberry Pi or medical device identifiers
-    final targetNames = ['medusa', 'neuromotion', 'parkinson', 'medical', 'raspberry', 'pi'];
+    debugPrint('🔍 Checking device: $name / $localName');
+    debugPrint('   Remote ID: ${device.remoteId}');
+    debugPrint('   Services: ${adData.serviceUuids}');
     
-    return targetNames.any((target) => 
-        name.contains(target) || localName.contains(target)) ||
-        adData.serviceUuids.any((uuid) => uuid.toString() == _serviceUuid);
+    // ONLY look for "medusa" - no other devices
+    // This matches your Pi which should be named "medusa_pi" or "medusa_helper"
+    final isMedusaDevice = name.contains('medusa') || localName.contains('medusa');
+    
+    debugPrint('   Is MeDUSA: $isMedusaDevice');
+    
+    if (isMedusaDevice) {
+      debugPrint('✓ Found MeDUSA device: $name');
+    }
+    
+    return isMedusaDevice;
   }
 
   /// Connect to a specific device
@@ -283,6 +347,20 @@ class MedicalBluetoothService extends ChangeNotifier {
         },
       );
 
+      if (Platform.isWindows) {
+        _winBleConnectionSubscription?.cancel();
+        final address = device.remoteId.str;
+        _winBleConnectionSubscription =
+            win_ble.WinBle.connectionStreamOf(address).listen(
+          (connected) {
+            debugPrint('WinBle connection update for $address: $connected');
+          },
+          onError: (error) {
+            debugPrint('WinBle connection stream error: $error');
+          },
+        );
+      }
+
       _isConnecting = false;
       return true;
 
@@ -304,6 +382,7 @@ class MedicalBluetoothService extends ChangeNotifier {
       // Cancel subscriptions
       await _dataSubscription?.cancel();
       await _connectionSubscription?.cancel();
+      await _winBleConnectionSubscription?.cancel();
       
       // Disconnect device
       await _connectedDevice!.disconnect();
@@ -322,6 +401,7 @@ class MedicalBluetoothService extends ChangeNotifier {
     _notifyCharacteristic = null;
     _dataSubscription?.cancel();
     _connectionSubscription?.cancel();
+    _winBleConnectionSubscription?.cancel();
     
     _setStatus('Disconnected');
     notifyListeners();
@@ -432,6 +512,7 @@ class MedicalBluetoothService extends ChangeNotifier {
     _scanSubscription?.cancel();
     _connectionSubscription?.cancel();
     _dataSubscription?.cancel();
+    _winBleConnectionSubscription?.cancel();
     _devicesController.close();
     _dataController.close();
     _statusController.close();
