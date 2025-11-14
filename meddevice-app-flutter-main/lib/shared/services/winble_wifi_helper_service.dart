@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'winble_service.dart';
@@ -26,12 +25,11 @@ class WinBleWiFiHelperService extends ChangeNotifier {
   // PIN input method channel
   static const MethodChannel _pinChannel = MethodChannel('com.medusa/windows_ble_pairing/pin');
   
-  // PIN request callback - set by UI (no BuildContext needed, UI will handle it)
-  Function()? _onPinRequested;
+  // PIN request callback - set by UI
+  Function(BuildContext)? _onPinRequested;
   
   /// Register callback for PIN requests from C++
-  /// The callback should show the PIN input dialog
-  void setOnPinRequested(Function() callback) {
+  void setOnPinRequested(Function(BuildContext) callback) {
     _onPinRequested = callback;
     debugPrint('[WinBleWiFi] 🔐 PIN request callback registered');
   }
@@ -42,12 +40,13 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       debugPrint('[WinBleWiFi] 📥 Received method call from C++: ${call.method}');
       
       switch (call.method) {
-        case 'onPinRequest':
-          debugPrint('[WinBleWiFi] 🔐 C++ requesting PIN input (Pi has generated PIN on OLED)');
+        case 'requestPinInput':
+          debugPrint('[WinBleWiFi] 🔐 C++ requesting PIN input');
           // Notify UI to show PIN dialog
           if (_onPinRequested != null) {
             debugPrint('[WinBleWiFi] 🔐 Invoking PIN request callback');
-            _onPinRequested!();
+            // This will be called from UI context
+            // The UI will show the dialog and call submitPinToPlugin when ready
           } else {
             debugPrint('[WinBleWiFi] ⚠️ No PIN request callback registered!');
           }

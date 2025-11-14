@@ -63,9 +63,8 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
   /// This will be called when C++ plugin requests PIN input
   void _setupPairingCallback() {
     debugPrint('[WiFiProvision] Setting up PIN request callback');
-    _wifiService.setOnPinRequested(() {
-      debugPrint('[WiFiProvision] 🔐 PIN requested by C++ - Pi has generated PIN on OLED');
-      debugPrint('[WiFiProvision] 📱 Showing PIN input dialog NOW');
+    _wifiService.setOnPinRequested((context) {
+      debugPrint('[WiFiProvision] PIN requested by C++ - showing dialog');
       _showPinInputDialog();
     });
   }
@@ -208,11 +207,11 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
                   prefixIcon: const Icon(Icons.pin_rounded),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12.r),
-                    borderSide: BorderSide(color: AppColors.primary, width: 2),
+                    borderSide: const BorderSide(color: AppColors.primary, width: 2),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12.r),
-                    borderSide: BorderSide(color: AppColors.primary, width: 2),
+                    borderSide: const BorderSide(color: AppColors.primary, width: 2),
                   ),
                   counterText: '',
                   filled: true,
@@ -331,21 +330,49 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
   Future<void> _connectAndPair() async {
     setState(() {
       _isConnecting = true;
-      _statusMessage = 'Connecting to device...';
+      _statusMessage = 'Preparing to pair...';
     });
 
     try {
       debugPrint('[WiFiProvision] Starting connection and pairing...');
       debugPrint('[WiFiProvision] Device address: $_deviceAddress');
       
+      // Show PIN dialog FIRST - it will wait for user input
+      // and submit the PIN to C++ when ready
+      debugPrint('[WiFiProvision] Showing PIN input dialog preemptively');
       setState(() {
-        _statusMessage = 'Initiating pairing...\nPIN dialog will appear when Pi generates PIN.';
+        _statusMessage = 'Please enter PIN from Raspberry Pi OLED screen...';
       });
       
-      // Start the pairing process
-      // The PIN dialog will be shown automatically when C++ requests it
-      // (via the _setupPairingCallback registered in initState)
-      final success = await _wifiService.connectAndPair(_deviceAddress);
+      // Show the dialog and start pairing in parallel
+      final pinFuture = _showPinInputDialog();
+      
+      setState(() {
+        _statusMessage = 'Initiating pairing (waiting for PIN)...';
+      });
+      
+      // Start the pairing process - it will wait for PIN input
+      final pairingFuture = _wifiService.connectAndPair(_deviceAddress);
+      
+      // Wait for PIN dialog to complete (user enters PIN and submits)
+      final pin = await pinFuture;
+      
+      if (pin == null) {
+        debugPrint('[WiFiProvision] ❌ PIN dialog cancelled by user');
+        setState(() {
+          _statusMessage = 'Pairing cancelled';
+          _isConnecting = false;
+        });
+        return;
+      }
+      
+      debugPrint('[WiFiProvision] ✅ User entered PIN, waiting for pairing to complete...');
+      setState(() {
+        _statusMessage = 'Pairing with device...';
+      });
+      
+      // Wait for pairing to complete
+      final success = await pairingFuture;
 
       if (success) {
         setState(() {
@@ -832,7 +859,7 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: AppColors.warning, width: 1.5),
+                  side: const BorderSide(color: AppColors.warning, width: 1.5),
                   padding: EdgeInsets.symmetric(vertical: 16.h),
                 ),
               ),
@@ -1021,7 +1048,7 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
           Container(
             width: 24.w,
             height: 24.w,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.primary,
               shape: BoxShape.circle,
             ),

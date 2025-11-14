@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import 'package:win_ble/win_ble.dart' as winble;
 import 'winble_service.dart';
-import 'windows_pairing_service.dart';
 
 /// Unified Bluetooth adapter that uses WinBle on Windows
 /// and FlutterBluePlus on other platforms
@@ -223,10 +222,18 @@ class UnifiedBleDevice {
   });
 
   factory UnifiedBleDevice.fromWinBle(winble.BleDevice device) {
+    // Convert rssi from String? to int? if needed
+    int? rssiValue;
+    try {
+      rssiValue = int.tryParse(device.rssi.toString());
+    } catch (e) {
+      rssiValue = null;
+    }
+    
     return UnifiedBleDevice(
       name: device.name,
       address: device.address,
-      rssi: device.rssi,
+      rssi: rssiValue,
       winBleDevice: device,
     );
   }

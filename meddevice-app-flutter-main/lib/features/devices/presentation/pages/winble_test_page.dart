@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:win_ble/win_ble.dart';
 import '../../../../shared/services/winble_service.dart';
 import '../../../../shared/services/winble_wifi_helper_service.dart';
 

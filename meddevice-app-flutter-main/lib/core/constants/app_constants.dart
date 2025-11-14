@@ -202,10 +202,8 @@ class AppConstants {
   static const double contentMaxWidth = 1200.0;       // Content area maximum width
   static const double contentPaddingRatio = 0.05;     // 5% of screen width as padding
 
-  // API Configuration
-  // TODO: Update this URL with your deployed API Gateway endpoint
-  // Get this URL from: sam deploy output or AWS Console > API Gateway
-  static const String _productionBaseUrl = 'https://YOUR-API-GATEWAY-ID.execute-api.YOUR-REGION.amazonaws.com/development';
+  // API Configuration - AWS Lambda Production
+  static const String _productionBaseUrl = 'https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod';
   
   // Use environment-based configuration
   static String get baseUrl {
@@ -213,7 +211,7 @@ class AppConstants {
     return _productionBaseUrl;
   }
   
-  // API version
+  // API version (automatically added by network interceptor)
   static const String apiVersion = '';
 
   // Storage Keys

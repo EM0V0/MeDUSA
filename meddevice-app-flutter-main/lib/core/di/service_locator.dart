@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 
 import '../../features/auth/data/datasources/auth_local_data_source.dart';
 import '../../features/auth/data/datasources/auth_remote_data_source.dart';

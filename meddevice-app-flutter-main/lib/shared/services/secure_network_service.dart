@@ -63,7 +63,7 @@ class SecureNetworkService {
 
   /// Configure TLS 1.3 forced security
   void _configureTLS13Security(Dio dio) {
-    (dio.httpClientAdapter as DefaultHttpClientAdapter).onHttpClientCreate = (client) {
+    (dio.httpClientAdapter as IOHttpClientAdapter).onHttpClientCreate = (client) {
       // Force TLS 1.3 minimum version
       client.badCertificateCallback = (cert, host, port) {
         debugPrint('$_tag: Certificate verification for $host:$port');

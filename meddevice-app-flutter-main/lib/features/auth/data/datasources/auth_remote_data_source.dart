@@ -31,23 +31,25 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         data: data,
       );
 
-      // Extract and store tokens from backend response
+      // API v3: Flat response with accessJwt, refreshToken, expiresIn (no data wrapper)
       final responseData = response.data;
-      if (responseData['data'] != null) {
-        final loginData = responseData['data'];
-        
-        // Store access token in network service for future requests
-        if (loginData['access_token'] != null) {
-          networkService.setAuthToken(loginData['access_token']);
-        }
-        
-        // TODO: Store refresh token in secure storage
-        // final refreshToken = loginData['refresh_token'];
-        
-        return User.fromJson(loginData['user']);
-      } else {
-        throw Exception('Invalid response format from server');
+      
+      // Store access JWT in network service for future requests
+      if (responseData['accessJwt'] != null) {
+        networkService.setAuthToken(responseData['accessJwt']);
       }
+      
+      // TODO: Store refresh token in secure storage
+      // final refreshToken = responseData['refreshToken'];
+      
+      // API v3: Login doesn't return user object, need to fetch from /me endpoint
+      // For now, create a minimal User object from email
+      return User(
+        id: '', // Will be populated from /me endpoint if needed
+        email: email,
+        name: email.split('@')[0], // Temporary name from email
+        role: 'patient', // Default role
+      );
     } catch (e) {
       throw Exception('Login failed: $e');
     }
@@ -56,39 +58,11 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   @override
   Future<User> register(String name, String email, String password, String role) async {
     try {
-      // Split name into first_name and last_name
-      final nameParts = name.trim().split(' ');
-      final firstName = nameParts.isNotEmpty ? nameParts.first : name;
-      final lastName = nameParts.length > 1 ? nameParts.skip(1).join(' ') : '';
-      
-      // Convert role to proper format for backend enum
-      String backendRole;
-      switch (role.toLowerCase()) {
-        case 'doctor':
-          backendRole = 'Doctor';
-          break;
-        case 'nurse':
-          backendRole = 'Nurse';
-          break;
-        case 'technician':
-          backendRole = 'Technician';
-          break;
-        case 'admin':
-          backendRole = 'Admin';
-          break;
-        case 'patient':
-          backendRole = 'Patient';
-          break;
-        default:
-          backendRole = 'Patient'; // Default to Patient if unknown
-      }
-      
+      // API v3: Simple format with email, password, role (lowercase)
       final data = {
         'email': email,
         'password': password,
-        'first_name': firstName,
-        'last_name': lastName,
-        'role': backendRole, // Use proper enum format
+        'role': role.toLowerCase(), // API v3 uses lowercase roles
       };
 
       final response = await networkService.post(
@@ -96,20 +70,25 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         data: data,
       );
 
-      // Handle registration response similar to login
+      // API v3: Flat response with userId, accessJwt, refreshToken (no data wrapper)
       final responseData = response.data;
-      if (responseData['data'] != null) {
-        final registrationData = responseData['data'];
-        
-        // Store access token if provided
-        if (registrationData['access_token'] != null) {
-          networkService.setAuthToken(registrationData['access_token']);
-        }
-        
-        return User.fromJson(registrationData['user']);
-      } else {
-        throw Exception('Invalid response format from server');
+      
+      // Store access JWT if provided
+      if (responseData['accessJwt'] != null) {
+        networkService.setAuthToken(responseData['accessJwt']);
       }
+      
+      // TODO: Store refresh token in secure storage
+      // final refreshToken = responseData['refreshToken'];
+      
+      // API v3: Returns userId only, not full user object
+      // Create User object with provided information
+      return User(
+        id: responseData['userId'] ?? '',
+        email: email,
+        name: name,
+        role: role.toLowerCase(),
+      );
     } catch (e) {
       throw Exception('Registration failed: $e');
     }

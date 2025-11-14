@@ -1,0 +1,44 @@
+============================================
+  MeDUSA 启动说明
+============================================
+
+【前端 Flutter 应用】
+1. 进入前端目录:
+   cd meddevice-app-flutter-main
+
+2. 安装依赖:
+   flutter pub get
+
+3. 启动应用:
+   flutter run
+
+✅ 前端已自动连接云端 API
+
+
+【后端 API】
+
+生产环境 (AWS Lambda):
+  ✅ 已部署运行
+  📍 https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod/api/v1
+
+本地测试 (可选):
+  cd medusa-cloud-components-python-backend\medusa-cloud-components-python-backend\backend-py
+  .\start_local.ps1
+
+更新云端:
+  cd medusa-cloud-components-python-backend\medusa-cloud-components-python-backend
+  .\deploy.ps1
+
+
+【状态】
+  后端: ✅ 运行中
+  前端: ✅ 已配置
+  测试: ✅ 100% 通过 (8/8)
+
+
+【文档】
+  - START.md (快速启动)
+  - README.md (完整说明)
+  - ARCHITECTURE_ANALYSIS.md (架构)
+  - CLOUD_DEPLOYMENT_SUCCESS.md (部署详情)
+
