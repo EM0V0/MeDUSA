@@ -11,7 +11,8 @@ import '../../features/devices/presentation/pages/wifi_provision_page.dart';
 import '../../features/devices/presentation/pages/winble_test_page.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
-import '../../features/auth/presentation/pages/register_page.dart';
+import '../../features/auth/presentation/pages/register_page_with_verification.dart';
+import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/role_test_page.dart';
 import '../../features/dashboard/presentation/pages/smart_dashboard_page.dart';
 import '../../features/messages/presentation/pages/messages_page.dart';
@@ -49,7 +50,16 @@ class AppRouter {
         name: 'register',
         pageBuilder: (context, state) => CustomTransitionPage(
           key: state.pageKey,
-          child: const AuthLayout(child: RegisterPage()),
+          child: const AuthLayout(child: RegisterPageWithVerification()),
+          transitionsBuilder: _slideTransition,
+        ),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        name: 'forgot-password',
+        pageBuilder: (context, state) => CustomTransitionPage(
+          key: state.pageKey,
+          child: const AuthLayout(child: ForgotPasswordPage()),
           transitionsBuilder: _slideTransition,
         ),
       ),
@@ -231,7 +241,8 @@ class AppRouter {
       
       final isAuthenticated = authState is AuthAuthenticated;
       final isAuthPage = state.matchedLocation == '/login' || 
-                         state.matchedLocation == '/register';
+                         state.matchedLocation == '/register' ||
+                         state.matchedLocation == '/forgot-password';
 
       // If not authenticated and not on auth page, redirect to login
       if (!isAuthenticated && !isAuthPage) {
@@ -251,7 +262,8 @@ class AppRouter {
       debugPrint('[Router] Error in redirect: $e');
       // If BLoC is not available (app initializing), allow auth pages
       final isAuthPage = state.matchedLocation == '/login' || 
-                         state.matchedLocation == '/register';
+                         state.matchedLocation == '/register' ||
+                         state.matchedLocation == '/forgot-password';
       return isAuthPage ? null : '/login';
     }
   }

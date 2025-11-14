@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../../../../shared/services/encryption_service.dart';
 import '../../../../shared/services/network_service.dart';
 import '../../domain/entities/user.dart';
@@ -7,6 +8,7 @@ abstract class AuthRemoteDataSource {
   Future<User> register(String name, String email, String password, String role);
   Future<void> logout();
   Future<void> refreshToken();
+  Future<void> resetPassword(String email, String newPassword);
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -131,6 +133,33 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       await networkService.post('/auth/refresh');
     } catch (e) {
       throw Exception('Token refresh failed: $e');
+    }
+  }
+  
+  @override
+  Future<void> resetPassword(String email, String newPassword) async {
+    try {
+      final data = {
+        'email': email,
+        'newPassword': newPassword,
+      };
+
+      await networkService.post(
+        '/auth/reset-password',
+        data: data,
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Account not found.');
+      } else if (e.response?.statusCode == 400) {
+        throw Exception('Invalid password format. Password must be at least 8 characters.');
+      } else if (e.response?.statusCode == 500) {
+        throw Exception('Server error. Please try again later.');
+      } else {
+        throw Exception('Password reset failed: ${e.message ?? 'Unknown error'}');
+      }
+    } catch (e) {
+      throw Exception('Password reset failed: $e');
     }
   }
 }

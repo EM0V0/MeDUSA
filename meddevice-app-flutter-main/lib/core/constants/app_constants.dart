@@ -256,6 +256,13 @@ class AppConstants {
   static const int passwordMinLength = 8;
   static const int maxLoginAttempts = 5;
   static const Duration lockoutDuration = Duration(minutes: 15);
+  
+  // Password Strength Requirements (Scheme A: Basic Enhancement)
+  static const bool passwordRequireUppercase = true;
+  static const bool passwordRequireLowercase = true;
+  static const bool passwordRequireDigit = true;
+  static const bool passwordRequireSpecialChar = true;
+  static const String passwordSpecialChars = '!@#\$%^&*()_+-=[]{}|;:,.<>?';
 
   // UI Constants
   static const double cardElevation = 2.0;

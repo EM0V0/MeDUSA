@@ -123,5 +123,21 @@ class AuthRemoteDataSourceMock implements AuthRemoteDataSource {
     // Mock token refresh is always successful
     return;
   }
+
+  @override
+  Future<void> resetPassword(String email, String newPassword) async {
+    // Simulate network delay
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    // Check if user exists
+    if (!_mockUsers.containsKey(email)) {
+      throw Exception('Account not found.');
+    }
+    
+    // In mock mode, password reset is always successful
+    // In real implementation, this would update the password in the database
+    print('[Mock] Password reset successful for: $email');
+    return;
+  }
 }
 

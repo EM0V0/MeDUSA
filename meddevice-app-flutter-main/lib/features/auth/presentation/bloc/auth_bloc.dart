@@ -43,6 +43,44 @@ class AuthStatusChanged extends AuthEvent {
 
 class CheckAuthStatus extends AuthEvent {}
 
+class SendVerificationCodeRequested extends AuthEvent {
+  final String email;
+
+  SendVerificationCodeRequested({required this.email});
+}
+
+class VerifyEmailRequested extends AuthEvent {
+  final String email;
+  final String code;
+
+  VerifyEmailRequested({required this.email, required this.code});
+}
+
+class RequestPasswordResetRequested extends AuthEvent {
+  final String email;
+
+  RequestPasswordResetRequested({required this.email});
+}
+
+class VerifyResetCodeRequested extends AuthEvent {
+  final String email;
+  final String code;
+
+  VerifyResetCodeRequested({required this.email, required this.code});
+}
+
+class ResetPasswordRequested extends AuthEvent {
+  final String email;
+  final String newPassword;
+  final String code;
+
+  ResetPasswordRequested({
+    required this.email,
+    required this.newPassword,
+    required this.code,
+  });
+}
+
 // States
 abstract class AuthState {}
 
@@ -64,6 +102,32 @@ class AuthError extends AuthState {
   AuthError({required this.message});
 }
 
+class VerificationCodeSent extends AuthState {
+  final String email;
+
+  VerificationCodeSent({required this.email});
+}
+
+class EmailVerified extends AuthState {
+  final String email;
+
+  EmailVerified({required this.email});
+}
+
+class PasswordResetCodeSent extends AuthState {
+  final String email;
+
+  PasswordResetCodeSent({required this.email});
+}
+
+class ResetCodeVerified extends AuthState {
+  final String email;
+
+  ResetCodeVerified({required this.email});
+}
+
+class PasswordResetSuccess extends AuthState {}
+
 // BLoC
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
@@ -77,6 +141,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<LogoutRequested>(_onLogoutRequested);
     on<AuthStatusChanged>(_onAuthStatusChanged);
     on<CheckAuthStatus>(_onCheckAuthStatus);
+    on<SendVerificationCodeRequested>(_onSendVerificationCodeRequested);
+    on<VerifyEmailRequested>(_onVerifyEmailRequested);
+    on<RequestPasswordResetRequested>(_onRequestPasswordResetRequested);
+    on<VerifyResetCodeRequested>(_onVerifyResetCodeRequested);
+    on<ResetPasswordRequested>(_onResetPasswordRequested);
   }
 
   Future<void> _onLoginRequested(
@@ -167,6 +236,76 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     } else {
       _roleService.clear();
       emit(AuthUnauthenticated());
+    }
+  }
+  
+  Future<void> _onSendVerificationCodeRequested(
+    SendVerificationCodeRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+
+    try {
+      await _authRepository.sendVerificationCode(event.email);
+      emit(VerificationCodeSent(email: event.email));
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
+    }
+  }
+  
+  Future<void> _onVerifyEmailRequested(
+    VerifyEmailRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+
+    try {
+      await _authRepository.verifyEmail(event.email, event.code);
+      emit(EmailVerified(email: event.email));
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
+    }
+  }
+  
+  Future<void> _onRequestPasswordResetRequested(
+    RequestPasswordResetRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+
+    try {
+      await _authRepository.requestPasswordReset(event.email);
+      emit(PasswordResetCodeSent(email: event.email));
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
+    }
+  }
+  
+  Future<void> _onVerifyResetCodeRequested(
+    VerifyResetCodeRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+
+    try {
+      await _authRepository.verifyResetCode(event.email, event.code);
+      emit(ResetCodeVerified(email: event.email));
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
+    }
+  }
+  
+  Future<void> _onResetPasswordRequested(
+    ResetPasswordRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+
+    try {
+      await _authRepository.resetPassword(event.email, event.newPassword, event.code);
+      emit(PasswordResetSuccess());
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
     }
   }
 }

@@ -7,6 +7,8 @@ import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../shared/services/encryption_service.dart';
 import '../../shared/services/network_service.dart';
+import '../../shared/services/email_service.dart';
+import '../../shared/services/verification_service.dart';
 
 /// Dependency injection container for the app
 class ServiceLocator {
@@ -50,6 +52,12 @@ class ServiceLocator {
     
     // Encryption service
     register<EncryptionService>(EncryptionServiceImpl());
+    
+    // Email service - use real implementation (sends actual emails via backend API)
+    register<EmailService>(EmailServiceImpl(networkService: get<NetworkService>()));
+    
+    // Verification service (singleton)
+    register<VerificationService>(VerificationService());
   }
 
   Future<void> _registerAuthServices() async {
@@ -88,6 +96,8 @@ class ServiceLocator {
       AuthRepositoryImpl(
         remoteDataSource: get<AuthRemoteDataSource>(),
         localDataSource: get<AuthLocalDataSource>(),
+        emailService: get<EmailService>(),
+        verificationService: get<VerificationService>(),
       ),
     );
     

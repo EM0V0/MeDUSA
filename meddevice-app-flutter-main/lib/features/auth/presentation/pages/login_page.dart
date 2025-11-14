@@ -75,7 +75,11 @@ class _LoginPageState extends State<LoginPage> {
 
                     // Password Field
                     _buildPasswordField(),
-                    SizedBox(height: 24.h),
+                    SizedBox(height: 8.h),
+
+                    // Forgot Password Link
+                    _buildForgotPasswordLink(),
+                    SizedBox(height: 16.h),
 
                     // Login Button
                     _buildLoginButton(),
@@ -209,6 +213,21 @@ class _LoginPageState extends State<LoginPage> {
                 ),
         );
       },
+    );
+  }
+
+  Widget _buildForgotPasswordLink() {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton(
+        onPressed: () {
+          GoRouter.of(context).go('/forgot-password');
+        },
+        child: const Text(
+          'Forgot Password?',
+          style: TextStyle(fontWeight: FontWeight.w500),
+        ),
+      ),
     );
   }
 

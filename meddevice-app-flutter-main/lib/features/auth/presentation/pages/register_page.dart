@@ -8,6 +8,8 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
+import '../../../../core/utils/password_validator.dart';
+import '../../../../shared/widgets/password_strength_indicator.dart';
 import '../bloc/auth_bloc.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -201,15 +203,25 @@ class _RegisterPageState extends State<RegisterPage> {
                         },
                       ),
                     ),
+                    onChanged: (value) {
+                      // Trigger rebuild to update password strength indicator
+                      setState(() {});
+                    },
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your password';
                       }
-                      if (value.length < AppConstants.passwordMinLength) {
-                        return 'Password must be at least ${AppConstants.passwordMinLength} characters';
-                      }
-                      return null;
+                      // Use enhanced password validator
+                      return PasswordValidator.validate(value);
                     },
+                  ),
+
+                  SizedBox(height: 12.h),
+
+                  // Password Strength Indicator
+                  PasswordStrengthIndicator(
+                    password: _passwordController.text,
+                    showRequirements: true,
                   ),
 
                   SizedBox(height: 16.h),
