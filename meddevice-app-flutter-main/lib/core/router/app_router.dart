@@ -4,9 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
-import '../../features/admin/presentation/pages/audit_logs_page.dart';
-import '../../features/admin/presentation/pages/device_management_page.dart';
-import '../../features/admin/presentation/pages/system_settings_page.dart';
 import '../../features/admin/presentation/pages/user_management_page.dart';
 import '../../features/devices/presentation/pages/device_connection_page.dart';
 import '../../features/devices/presentation/pages/device_scan_page.dart';
@@ -16,8 +13,6 @@ import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/pages/role_test_page.dart';
-import '../../features/auth/presentation/pages/two_factor_setup_page.dart';
-import '../../features/auth/presentation/pages/two_factor_verify_page.dart';
 import '../../features/dashboard/presentation/pages/smart_dashboard_page.dart';
 import '../../features/messages/presentation/pages/messages_page.dart';
 import '../../features/patients/presentation/pages/patient_detail_page.dart';
@@ -57,52 +52,6 @@ class AppRouter {
           child: const AuthLayout(child: RegisterPage()),
           transitionsBuilder: _slideTransition,
         ),
-      ),
-      
-      // 2FA Routes
-      GoRoute(
-        path: '/2fa-setup',
-        name: '2fa-setup',
-        pageBuilder: (context, state) {
-          final email = state.uri.queryParameters['email'] ?? '';
-          return CustomTransitionPage(
-            key: state.pageKey,
-            child: TwoFactorSetupPage(
-              userEmail: email,
-              onSetupComplete: () {
-                GoRouter.of(context).go('/dashboard');
-              },
-              onCancel: () {
-                GoRouter.of(context).go('/login');
-              },
-            ),
-            transitionsBuilder: _slideTransition,
-          );
-        },
-      ),
-      GoRoute(
-        path: '/2fa-verify',
-        name: '2fa-verify',
-        pageBuilder: (context, state) {
-          final email = state.uri.queryParameters['email'] ?? '';
-          return CustomTransitionPage(
-            key: state.pageKey,
-            child: TwoFactorVerifyPage(
-              userEmail: email,
-              onVerificationComplete: (success) {
-                if (success) {
-                  GoRouter.of(context).go('/dashboard');
-                } else {
-                  GoRouter.of(context).go('/login');
-                }
-              },
-              onCancel: () {
-                GoRouter.of(context).go('/login');
-              },
-            ),
-            transitionsBuilder: _slideTransition,
-          );
-        },
       ),
 
       // Main App Routes (with shell navigation)
@@ -196,33 +145,6 @@ class AppRouter {
             ),
           ),
 
-          GoRoute(
-            path: '/device-management',
-            name: 'device-management',
-            pageBuilder: (context, state) => NoTransitionPage(
-              key: state.pageKey,
-              child: const DeviceManagementPage(),
-            ),
-          ),
-
-          GoRoute(
-            path: '/system-settings',
-            name: 'system-settings',
-            pageBuilder: (context, state) => NoTransitionPage(
-              key: state.pageKey,
-              child: const SystemSettingsPage(),
-            ),
-          ),
-
-          GoRoute(
-            path: '/audit-logs',
-            name: 'audit-logs',
-            pageBuilder: (context, state) => NoTransitionPage(
-              key: state.pageKey,
-              child: const AuditLogsPage(),
-            ),
-          ),
-
           // Device Connection Routes (for patients)
           GoRoute(
             path: '/device-scan',
@@ -309,13 +231,7 @@ class AppRouter {
       
       final isAuthenticated = authState is AuthAuthenticated;
       final isAuthPage = state.matchedLocation == '/login' || 
-                         state.matchedLocation == '/register' ||
-                         state.matchedLocation.startsWith('/2fa');
-
-      // Allow access to 2FA pages without full authentication
-      if (state.matchedLocation.startsWith('/2fa')) {
-        return null;
-      }
+                         state.matchedLocation == '/register';
 
       // If not authenticated and not on auth page, redirect to login
       if (!isAuthenticated && !isAuthPage) {
@@ -335,8 +251,7 @@ class AppRouter {
       debugPrint('[Router] Error in redirect: $e');
       // If BLoC is not available (app initializing), allow auth pages
       final isAuthPage = state.matchedLocation == '/login' || 
-                         state.matchedLocation == '/register' ||
-                         state.matchedLocation.startsWith('/2fa');
+                         state.matchedLocation == '/register';
       return isAuthPage ? null : '/login';
     }
   }

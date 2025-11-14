@@ -16,7 +16,7 @@ class ServiceLocator {
 
   /// Set to true to use mock authentication (no backend required)
   /// Set to false to use real backend authentication
-  static const bool useMockAuth = true; // Change to false when backend is ready
+  static const bool useMockAuth = false; // Using real backend API
 
   final Map<Type, dynamic> _services = {};
 

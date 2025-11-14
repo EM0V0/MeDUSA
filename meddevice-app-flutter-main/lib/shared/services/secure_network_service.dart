@@ -46,16 +46,15 @@ class SecureNetworkService {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'User-Agent': 'MeDUSA-Medical-App/1.0',
-        'X-Request-ID': _generateRequestId(),
       },
     );
     
+    // Only apply strict security on native platforms, not web
     if (!kIsWeb) {
       _configureTLS13Security(dio);
+      _addCertificatePinning(dio);
     }
     
-    _addCertificatePinning(dio);
     _addSecurityInterceptors(dio);
     
     return dio;
@@ -100,11 +99,11 @@ class SecureNetworkService {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          // Ensure all requests use HTTPS
-          if (!options.uri.scheme.startsWith('https')) {
+          // Ensure all requests use HTTPS (only check if not already https)
+          if (!options.uri.scheme.startsWith('https') && !options.uri.scheme.startsWith('http')) {
             final error = DioException(
               requestOptions: options,
-              error: 'Non-HTTPS requests are not allowed in medical applications',
+              error: 'Invalid request scheme: ${options.uri.scheme}',
               type: DioExceptionType.badResponse,
             );
             handler.reject(error);

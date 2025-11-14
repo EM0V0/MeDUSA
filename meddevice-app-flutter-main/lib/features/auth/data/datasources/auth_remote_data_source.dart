@@ -50,6 +50,17 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         name: email.split('@')[0], // Temporary name from email
         role: 'patient', // Default role
       );
+    } on DioException catch (e) {
+      // Handle specific HTTP error codes
+      if (e.response?.statusCode == 401) {
+        throw Exception('Invalid email or password. Please check your credentials.');
+      } else if (e.response?.statusCode == 404) {
+        throw Exception('Account not found. Please register first.');
+      } else if (e.response?.statusCode == 500) {
+        throw Exception('Server error. Please try again later.');
+      } else {
+        throw Exception('Login failed: ${e.message ?? 'Unknown error'}');
+      }
     } catch (e) {
       throw Exception('Login failed: $e');
     }
@@ -89,6 +100,17 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         name: name,
         role: role.toLowerCase(),
       );
+    } on DioException catch (e) {
+      // Handle specific HTTP error codes
+      if (e.response?.statusCode == 409) {
+        throw Exception('This email is already registered. Please use a different email or try logging in.');
+      } else if (e.response?.statusCode == 400) {
+        throw Exception('Invalid registration data. Please check your input.');
+      } else if (e.response?.statusCode == 500) {
+        throw Exception('Server error. Please try again later.');
+      } else {
+        throw Exception('Registration failed: ${e.message ?? 'Unknown error'}');
+      }
     } catch (e) {
       throw Exception('Registration failed: $e');
     }
