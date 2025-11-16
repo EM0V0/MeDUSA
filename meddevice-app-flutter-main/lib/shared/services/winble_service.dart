@@ -51,8 +51,10 @@ class WinBleService extends ChangeNotifier {
       debugPrint('[WinBle] 🔧 Initializing...');
       
       // Initialize WinBle
+      // According to win_ble package: serverPath should be empty string for default
+      // or path to win_ble_server.exe if custom location needed
       await WinBle.initialize(
-        serverPath: '',  // Use default
+        serverPath: '',  // Empty string = use bundled server executable
         enableLog: true,
       );
 
