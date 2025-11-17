@@ -85,8 +85,10 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
     _passwordController.dispose();
     _pinController.dispose();
     _statusSubscription?.cancel();
-    // Note: _wifiService is a singleton, but MTA branch also calls dispose()
-    _wifiService.dispose();
+    // DO NOT dispose _wifiService - it's a singleton and should maintain connection
+    // The BLE connection should persist after leaving this page so the device
+    // remains available in the device list
+    // _wifiService.dispose(); // <- REMOVED to keep connection alive
     super.dispose();
   }
 
@@ -477,6 +479,8 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
         _passwordController.text,
       );
 
+      if (!mounted) return; // Check if widget is still mounted
+
       if (success) {
         setState(() {
           _statusMessage = 'WiFi provisioning successful!';
@@ -484,25 +488,36 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
         debugPrint('[WiFiProvision] ✓ WiFi provisioning completed');
         
         // Show success dialog
-        _showSuccessDialog();
+        if (mounted) {
+          _showSuccessDialog();
+        }
       } else {
         setState(() {
           _statusMessage = _wifiService.lastError ?? 'Provisioning failed';
         });
         debugPrint('[WiFiProvision] ✗ WiFi provisioning failed');
         
-        _showErrorDialog(_wifiService.lastError ?? 'Failed to provision WiFi credentials');
+        if (mounted) {
+          _showErrorDialog(_wifiService.lastError ?? 'Failed to provision WiFi credentials');
+        }
       }
     } catch (e) {
       debugPrint('[WiFiProvision] Error during provisioning: $e');
+      if (!mounted) return; // Check before setState
+      
       setState(() {
         _statusMessage = 'Error: $e';
       });
-      _showErrorDialog(e.toString());
+      
+      if (mounted) {
+        _showErrorDialog(e.toString());
+      }
     } finally {
-      setState(() {
-        _isProvisioning = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isProvisioning = false;
+        });
+      }
     }
   }
 
