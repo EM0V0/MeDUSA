@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'winble_service.dart';
@@ -25,30 +26,40 @@ class WinBleWiFiHelperService extends ChangeNotifier {
   // PIN input method channel
   static const MethodChannel _pinChannel = MethodChannel('com.medusa/windows_ble_pairing/pin');
   
-  // PIN request callback - set by UI
-  Function(BuildContext)? _onPinRequested;
+  // PIN request callback - set by UI (no BuildContext needed, UI will handle it)
+  Function()? _onPinRequested;
   
   /// Register callback for PIN requests from C++
-  void setOnPinRequested(Function(BuildContext) callback) {
+  /// The callback should show the PIN input dialog
+  void setOnPinRequested(Function() callback) {
     _onPinRequested = callback;
     debugPrint('[WinBleWiFi] 🔐 PIN request callback registered');
   }
   
   /// Setup method channel listener for PIN requests from C++
   void _setupPinChannelListener() {
+    debugPrint('[WinBleWiFi] 📡 Setting up PIN channel listener...');
     _pinChannel.setMethodCallHandler((call) async {
       debugPrint('[WinBleWiFi] 📥 Received method call from C++: ${call.method}');
+      debugPrint('[WinBleWiFi] 📥 Call arguments: ${call.arguments}');
       
       switch (call.method) {
-        case 'requestPinInput':
-          debugPrint('[WinBleWiFi] 🔐 C++ requesting PIN input');
+        case 'onPinRequest':
+          debugPrint('[WinBleWiFi] 🔐 C++ requesting PIN input (Pi has generated PIN on OLED)');
+          debugPrint('[WinBleWiFi] 🔐 Checking if callback is registered: ${_onPinRequested != null}');
           // Notify UI to show PIN dialog
           if (_onPinRequested != null) {
-            debugPrint('[WinBleWiFi] 🔐 Invoking PIN request callback');
-            // This will be called from UI context
-            // The UI will show the dialog and call submitPinToPlugin when ready
+            debugPrint('[WinBleWiFi] 🔐 Invoking PIN request callback NOW');
+            try {
+              _onPinRequested!();
+              debugPrint('[WinBleWiFi] 🔐 PIN request callback invoked successfully');
+            } catch (e, stackTrace) {
+              debugPrint('[WinBleWiFi] ❌ Error invoking PIN request callback: $e');
+              debugPrint('[WinBleWiFi] ❌ Stack trace: $stackTrace');
+            }
           } else {
             debugPrint('[WinBleWiFi] ⚠️ No PIN request callback registered!');
+            debugPrint('[WinBleWiFi] ⚠️ This means UI has not called setOnPinRequested()');
           }
           return null;
           
@@ -634,4 +645,3 @@ class WinBleWiFiHelperService extends ChangeNotifier {
     super.dispose();
   }
 }
-

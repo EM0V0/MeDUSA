@@ -7,7 +7,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart' as flutter_blue_plus;
 import 'package:permission_handler/permission_handler.dart';
 
 import '../bluetooth/flutter_blue_adapter.dart';
-import 'winble_service.dart';
+import 'package:win_ble/win_ble.dart' as win_ble;
 
 /// Medical device Bluetooth connection service for managing Raspberry Pi device connections
 /// Handles device discovery, connection, data transmission, and status monitoring
@@ -46,10 +46,6 @@ class MedicalBluetoothService extends ChangeNotifier {
   StreamSubscription? _connectionSubscription;
   StreamSubscription? _dataSubscription;
   StreamSubscription<bool>? _winBleConnectionSubscription;
-  StreamSubscription<List<BleDevice>>? _winBleDevicesSubscription;
-  
-  // Windows-specific: WinBleService
-  final WinBleService _winBleService = WinBleService();
 
   // Getters
   bool get isScanning => _isScanning;
@@ -68,32 +64,6 @@ class MedicalBluetoothService extends ChangeNotifier {
   /// Initialize Bluetooth service and request permissions
   Future<bool> initialize() async {
     try {
-      // On Windows, use WinBleService
-      if (Platform.isWindows) {
-        try {
-          // Initialize WinBleService
-          final success = await _winBleService.initialize();
-          if (success) {
-            // Listen to WinBle device stream and convert to flutter_blue_plus format
-            _winBleDevicesSubscription = _winBleService.devicesStream.listen((winBleDevices) {
-              // Convert WinBle devices to flutter_blue_plus format
-              // Note: This is a simplified conversion - actual device objects need proper mapping
-              _discoveredDevices.clear();
-              // For now, we'll handle this in startScan
-              _setStatus('Bluetooth service initialized (WinBle)');
-            });
-            return true;
-          } else {
-            _setError('Failed to initialize WinBle service');
-            return false;
-          }
-        } catch (e) {
-          _setError('Failed to initialize Bluetooth on Windows: $e');
-          return false;
-        }
-      }
-
-      // For other platforms, use FlutterBlueAdapter
       // Check if Bluetooth is supported
       if (!await FlutterBlueAdapter.isSupported) {
         _setError('Bluetooth is not supported on this device');
@@ -205,34 +175,6 @@ class MedicalBluetoothService extends ChangeNotifier {
 
       debugPrint('📡 [Scan] Starting...');
       
-      // On Windows, use WinBleService
-      if (Platform.isWindows) {
-        // Listen to WinBle device stream
-        _winBleDevicesSubscription?.cancel();
-        _winBleDevicesSubscription = _winBleService.devicesStream.listen((winBleDevices) {
-          // Convert WinBle devices to flutter_blue_plus format
-          // Note: We can't directly convert, so we'll create a wrapper or use a different approach
-          // For now, we'll store the WinBle devices and handle them separately
-          debugPrint('[Scan] WinBle found ${winBleDevices.length} device(s)');
-          _setStatus('Found ${winBleDevices.length} device(s)');
-          notifyListeners();
-        });
-        
-        // Start WinBle scan
-        await _winBleService.startScan(timeout: timeout);
-        
-        // Auto-stop scanning after timeout
-        Timer(timeout, () {
-          if (_isScanning) {
-            stopScan();
-            debugPrint('⏹️ [Scan] Timeout - found ${_discoveredDevices.length} device(s)');
-          }
-        });
-        
-        return;
-      }
-      
-      // For other platforms, use FlutterBlueAdapter
       // Start scanning - do NOT use withServices filter
       // Many devices (including Raspberry Pi) don't advertise service UUIDs in broadcast packets
       // We filter by device name instead (see _isTargetDevice method)
@@ -310,13 +252,9 @@ class MedicalBluetoothService extends ChangeNotifier {
     if (!_isScanning) return;
 
     try {
-      if (Platform.isWindows) {
-        await _winBleService.stopScan();
-      } else {
-        await FlutterBlueAdapter.stopScan();
-        await _scanSubscription?.cancel();
-        _scanSubscription = null;
-      }
+      await FlutterBlueAdapter.stopScan();
+      await _scanSubscription?.cancel();
+      _scanSubscription = null;
       
       _isScanning = false;
       _setStatus('Scan stopped');
@@ -417,12 +355,17 @@ class MedicalBluetoothService extends ChangeNotifier {
       );
 
       if (Platform.isWindows) {
-        // On Windows, connection is handled by WinBleService
-        // The connection state is managed internally by WinBle
         _winBleConnectionSubscription?.cancel();
-        // Note: WinBleService manages connection state internally
-        // We can listen to WinBle connection stream if needed
-        debugPrint('[BT] Windows: Connection managed by WinBleService');
+        final address = device.remoteId.str;
+        _winBleConnectionSubscription =
+            win_ble.WinBle.connectionStreamOf(address).listen(
+          (connected) {
+            debugPrint('WinBle connection update for $address: $connected');
+          },
+          onError: (error) {
+            debugPrint('WinBle connection stream error: $error');
+          },
+        );
       }
 
       _isConnecting = false;
@@ -577,7 +520,6 @@ class MedicalBluetoothService extends ChangeNotifier {
     _connectionSubscription?.cancel();
     _dataSubscription?.cancel();
     _winBleConnectionSubscription?.cancel();
-    _winBleDevicesSubscription?.cancel();
     _devicesController.close();
     _dataController.close();
     _statusController.close();

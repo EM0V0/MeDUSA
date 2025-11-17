@@ -222,13 +222,9 @@ class UnifiedBleDevice {
   });
 
   factory UnifiedBleDevice.fromWinBle(winble.BleDevice device) {
-    // Convert rssi from String? to int? if needed
-    int? rssiValue;
-    try {
-      rssiValue = int.tryParse(device.rssi.toString());
-    } catch (e) {
-      rssiValue = null;
-    }
+    // Convert rssi from String to int?
+    // win_ble package returns rssi as String, convert to int?
+    final rssiValue = int.tryParse(device.rssi);
     
     return UnifiedBleDevice(
       name: device.name,
@@ -249,4 +245,3 @@ class UnifiedBleDevice {
   @override
   String toString() => 'UnifiedBleDevice($name, $address)';
 }
-

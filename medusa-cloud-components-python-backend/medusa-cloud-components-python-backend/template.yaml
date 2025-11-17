@@ -23,9 +23,17 @@ Globals:
         DDB_TABLE_USERS: !Ref UsersTable
         DDB_TABLE_REFRESH: !Ref RefreshTokensTable
         DDB_TABLE_POSES: !Ref PosesTable
+        DDB_TABLE_DEVICES: !Ref DevicesTable
+        DDB_TABLE_PATIENT_PROFILES: !Ref PatientProfilesTable
+        DDB_TABLE_SESSIONS: !Ref SessionsTable
         
         # Storage Configuration
         S3_BUCKET: !Ref DataBucket
+        
+        # Email Configuration (AWS SES)
+        USE_SES: 'true'  # Enable real email sending via AWS SES
+        SENDER_EMAIL: 'medusa000012@gmail.com'  # Verified email address
+        SES_REGION: 'us-east-1'  # SES region (AWS_REGION is auto-provided by Lambda)
         
         # Environment
         ENVIRONMENT: 'production'
@@ -50,9 +58,22 @@ Resources:
             TableName: !Ref PosesTable
         - DynamoDBCrudPolicy:
             TableName: !Ref RefreshTokensTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DevicesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PatientProfilesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionsTable
         # S3 访问权限
         - S3CrudPolicy:
             BucketName: !Ref DataBucket
+        # AWS SES 邮件发送权限
+        - Statement:
+          - Effect: Allow
+            Action:
+              - ses:SendEmail
+              - ses:SendRawEmail
+            Resource: '*'
       Events:
         # API Gateway 事件
         ApiEvent:
@@ -73,9 +94,11 @@ Resources:
       Name: medusa-api-v3
       StageName: Prod
       Cors:
-        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
-        AllowHeaders: "'Content-Type,Authorization'"
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS,PATCH'"
+        AllowHeaders: "'Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers'"
         AllowOrigin: "'*'"  # 生产环境改为具体域名
+        MaxAge: "'600'"
+        AllowCredentials: false
       Auth:
         DefaultAuthorizer: NONE  # 使用应用层中间件认证
       TracingEnabled: true
@@ -168,6 +191,121 @@ Resources:
           Value: v3
         - Key: DataType
           Value: RefreshTokens
+
+  # DynamoDB 表 - Devices
+  DevicesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: medusa-devices-prod
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: macAddress
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: macAddress-index
+          KeySchema:
+            - AttributeName: macAddress
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: MeDUSA
+        - Key: Version
+          Value: v3
+        - Key: DataType
+          Value: Devices
+
+  # DynamoDB 表 - Patient Profiles
+  PatientProfilesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: medusa-patient-profiles-prod
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: doctorId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: doctorId-index
+          KeySchema:
+            - AttributeName: doctorId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: MeDUSA
+        - Key: Version
+          Value: v3
+        - Key: DataType
+          Value: PatientProfiles
+
+  # DynamoDB 表 - Device Sessions (动态绑定)
+  SessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: medusa-sessions-prod
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sessionId
+          AttributeType: S
+        - AttributeName: deviceId
+          AttributeType: S
+        - AttributeName: patientId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sessionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: deviceId-index
+          KeySchema:
+            - AttributeName: deviceId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: patientId-index
+          KeySchema:
+            - AttributeName: patientId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: status-index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: MeDUSA
+        - Key: Version
+          Value: v3
+        - Key: DataType
+          Value: Sessions
 
   # S3 存储桶
   DataBucket:

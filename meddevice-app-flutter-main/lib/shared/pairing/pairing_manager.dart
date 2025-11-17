@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:win_ble/win_ble.dart' as win_ble;
 
 /// Custom exception for pairing-related errors
 class PairingException implements Exception {
@@ -165,4 +166,3 @@ class PairingManager {
     return await ensurePaired(device, requireMitm: true);
   }
 }
-

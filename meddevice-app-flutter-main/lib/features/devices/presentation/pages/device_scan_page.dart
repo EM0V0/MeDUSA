@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -746,37 +747,74 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
   Future<void> _connectToDevice(BluetoothDevice device) async {
     _scanAnimationController.stop();
     
+    if (!mounted) return;
+    
+    // Show dialog and capture its context
+    BuildContext? dialogContext;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            SizedBox(height: 16.h),
-            Text(
-              'Connecting to ${device.platformName}...',
-              style: FontUtils.body(context: context),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    final success = await _bluetoothService.connectToDevice(device);
-    
-    if (mounted) {
-      Navigator.of(context).pop(); // Close loading dialog
-      
-      if (!success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_bluetoothService.lastError ?? 'Connection failed'),
-            backgroundColor: AppColors.error,
+      builder: (dialogCtx) {
+        dialogContext = dialogCtx;
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              SizedBox(height: 16.h),
+              Text(
+                'Connecting to ${device.platformName}...',
+                style: FontUtils.body(context: dialogCtx),
+              ),
+            ],
           ),
         );
+      },
+    );
+
+    try {
+      final success = await _bluetoothService.connectToDevice(device);
+      
+      if (mounted) {
+        // Close dialog using root navigator to avoid GoRouter issues
+        if (dialogContext != null) {
+          try {
+            Navigator.of(dialogContext!, rootNavigator: true).pop();
+          } catch (e) {
+            // Fallback: try with page context
+            try {
+              Navigator.of(context, rootNavigator: true).pop();
+            } catch (e2) {
+              debugPrint('Error closing dialog: $e2');
+            }
+          }
+        }
+        
+        if (!success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_bluetoothService.lastError ?? 'Connection failed'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
       }
+    } catch (e) {
+      // Ensure dialog is closed even on exception
+      if (mounted) {
+        if (dialogContext != null) {
+          try {
+            Navigator.of(dialogContext!, rootNavigator: true).pop();
+          } catch (popError) {
+            try {
+              Navigator.of(context, rootNavigator: true).pop();
+            } catch (e2) {
+              debugPrint('Error closing dialog after exception: $e2');
+            }
+          }
+        }
+      }
+      // Don't rethrow - bluetooth_service already handled the error
     }
   }
 

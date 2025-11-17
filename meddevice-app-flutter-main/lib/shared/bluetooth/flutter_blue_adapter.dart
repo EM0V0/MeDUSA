@@ -1,7 +1,9 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fb;
+import 'package:flutter_blue_plus_windows/flutter_blue_plus_windows.dart'
+    as fb_win;
 
 /// Facade that forwards FlutterBluePlus calls to the Windows implementation
 /// powered by win_ble when the app is running on desktop. Other platforms use
@@ -9,42 +11,21 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fb;
 class FlutterBlueAdapter {
   static bool get _useWindows => !kIsWeb && Platform.isWindows;
 
-  static Future<bool> get isSupported async {
-    if (_useWindows) {
-      // On Windows, use win_ble to check support
-      // win_ble doesn't have a direct isSupported check, so we assume it's supported
-      // if we can initialize (which is checked during actual initialization)
-      return true;
-    }
-    return fb.FlutterBluePlus.isSupported;
-  }
+  static Future<bool> get isSupported async => _useWindows
+      ? fb_win.FlutterBluePlusWindows.isSupported
+      : fb.FlutterBluePlus.isSupported;
 
-  static Stream<fb.BluetoothAdapterState> get adapterState {
-    if (_useWindows) {
-      // On Windows, return a stream that emits 'unknown' state
-      // This is acceptable for Windows as win_ble handles state internally
-      return Stream.value(fb.BluetoothAdapterState.unknown).asBroadcastStream();
-    }
-    return fb.FlutterBluePlus.adapterState;
-  }
+  static Stream<fb.BluetoothAdapterState> get adapterState => _useWindows
+      ? fb_win.FlutterBluePlusWindows.adapterState
+      : fb.FlutterBluePlus.adapterState;
 
-  static Stream<List<fb.ScanResult>> get scanResults {
-    if (_useWindows) {
-      // On Windows, win_ble is used directly in bluetooth_service.dart
-      // Return an empty stream as a placeholder
-      // The actual scanning is handled by win_ble in bluetooth_service.dart
-      return Stream.value(<fb.ScanResult>[]).asBroadcastStream();
-    }
-    return fb.FlutterBluePlus.scanResults;
-  }
+  static Stream<List<fb.ScanResult>> get scanResults => _useWindows
+      ? fb_win.FlutterBluePlusWindows.scanResults
+      : fb.FlutterBluePlus.scanResults;
 
-  static List<fb.BluetoothDevice> get connectedDevices {
-    if (_useWindows) {
-      // On Windows, return empty list as win_ble handles connections differently
-      return [];
-    }
-    return fb.FlutterBluePlus.connectedDevices;
-  }
+  static List<fb.BluetoothDevice> get connectedDevices => _useWindows
+      ? fb_win.FlutterBluePlusWindows.connectedDevices
+      : fb.FlutterBluePlus.connectedDevices;
 
   static Future<void> startScan({
     List<fb.Guid> withServices = const [],
@@ -54,27 +35,28 @@ class FlutterBlueAdapter {
     bool androidUsesFineLocation = false,
   }) async {
     if (_useWindows) {
-      // On Windows, scanning is handled by win_ble directly in bluetooth_service.dart
-      // This is a no-op here to maintain API compatibility
-      debugPrint('[FlutterBlueAdapter] Windows: startScan is handled by win_ble');
-      return;
+      await fb_win.FlutterBluePlusWindows.startScan(
+        withServices: withServices,
+        withRemoteIds: withRemoteIds,
+        withNames: withNames,
+        timeout: timeout,
+      );
+    } else {
+      await fb.FlutterBluePlus.startScan(
+        withServices: withServices,
+        withRemoteIds: withRemoteIds,
+        withNames: withNames,
+        timeout: timeout,
+        androidUsesFineLocation: androidUsesFineLocation,
+      );
     }
-    await fb.FlutterBluePlus.startScan(
-      withServices: withServices,
-      withRemoteIds: withRemoteIds,
-      withNames: withNames,
-      timeout: timeout,
-      androidUsesFineLocation: androidUsesFineLocation,
-    );
   }
 
   static Future<void> stopScan() async {
     if (_useWindows) {
-      // On Windows, scanning is handled by win_ble directly in bluetooth_service.dart
-      // This is a no-op here to maintain API compatibility
-      debugPrint('[FlutterBlueAdapter] Windows: stopScan is handled by win_ble');
-      return;
+      await fb_win.FlutterBluePlusWindows.stopScan();
+    } else {
+      await fb.FlutterBluePlus.stopScan();
     }
-    await fb.FlutterBluePlus.stopScan();
   }
 }

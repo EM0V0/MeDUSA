@@ -61,8 +61,9 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
   /// This will be called when C++ plugin requests PIN input
   void _setupPairingCallback() {
     debugPrint('[WiFiProvision] Setting up PIN request callback');
-    _wifiService.setOnPinRequested((context) {
-      debugPrint('[WiFiProvision] PIN requested by C++ - showing dialog');
+    _wifiService.setOnPinRequested(() {
+      debugPrint('[WiFiProvision] 🔐 PIN requested by C++ - Pi has generated PIN on OLED');
+      debugPrint('[WiFiProvision] 📱 Showing PIN input dialog NOW');
       _showPinInputDialog();
     });
   }
@@ -84,6 +85,7 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
     _passwordController.dispose();
     _pinController.dispose();
     _statusSubscription?.cancel();
+    // Note: _wifiService is a singleton, but MTA branch also calls dispose()
     _wifiService.dispose();
     super.dispose();
   }
@@ -328,49 +330,21 @@ class _WiFiProvisionPageState extends State<WiFiProvisionPage> {
   Future<void> _connectAndPair() async {
     setState(() {
       _isConnecting = true;
-      _statusMessage = 'Preparing to pair...';
+      _statusMessage = 'Connecting to device...';
     });
 
     try {
       debugPrint('[WiFiProvision] Starting connection and pairing...');
       debugPrint('[WiFiProvision] Device address: $_deviceAddress');
       
-      // Show PIN dialog FIRST - it will wait for user input
-      // and submit the PIN to C++ when ready
-      debugPrint('[WiFiProvision] Showing PIN input dialog preemptively');
       setState(() {
-        _statusMessage = 'Please enter PIN from Raspberry Pi OLED screen...';
+        _statusMessage = 'Initiating pairing...\nPIN dialog will appear when Pi generates PIN.';
       });
       
-      // Show the dialog and start pairing in parallel
-      final pinFuture = _showPinInputDialog();
-      
-      setState(() {
-        _statusMessage = 'Initiating pairing (waiting for PIN)...';
-      });
-      
-      // Start the pairing process - it will wait for PIN input
-      final pairingFuture = _wifiService.connectAndPair(_deviceAddress);
-      
-      // Wait for PIN dialog to complete (user enters PIN and submits)
-      final pin = await pinFuture;
-      
-      if (pin == null) {
-        debugPrint('[WiFiProvision] ❌ PIN dialog cancelled by user');
-        setState(() {
-          _statusMessage = 'Pairing cancelled';
-          _isConnecting = false;
-        });
-        return;
-      }
-      
-      debugPrint('[WiFiProvision] ✅ User entered PIN, waiting for pairing to complete...');
-      setState(() {
-        _statusMessage = 'Pairing with device...';
-      });
-      
-      // Wait for pairing to complete
-      final success = await pairingFuture;
+      // Start the pairing process
+      // The PIN dialog will be shown automatically when C++ requests it
+      // (via the _setupPairingCallback registered in initState)
+      final success = await _wifiService.connectAndPair(_deviceAddress);
 
       if (success) {
         setState(() {

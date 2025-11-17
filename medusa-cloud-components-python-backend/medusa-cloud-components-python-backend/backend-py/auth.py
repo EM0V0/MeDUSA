@@ -45,9 +45,23 @@ def verify_jwt(token: str) -> Dict[str, Any]:
     except Exception:
         raise HTTPException(status_code=401, detail={"code":"AUTH_INVALID","message":"invalid token"})
 
-OPEN_PATH_SUFFIXES = ["/admin/health", "/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"]
+OPEN_PATH_SUFFIXES = [
+    "/admin/health", 
+    "/auth/login", 
+    "/auth/register", 
+    "/auth/refresh", 
+    "/auth/logout", 
+    "/auth/reset-password",
+    "/auth/send-verification-code",
+    "/auth/send-password-reset-code",
+    "/current-session"  # Allow Pi devices to poll for current session
+]
 
 async def auth_middleware(request: Request, call_next):
+    # Allow all OPTIONS requests for CORS preflight
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    
     path = request.url.path
     if any(path.endswith(suf) for suf in OPEN_PATH_SUFFIXES):
         return await call_next(request)
