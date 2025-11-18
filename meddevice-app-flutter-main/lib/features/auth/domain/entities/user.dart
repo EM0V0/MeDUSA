@@ -5,6 +5,7 @@ class User {
   final String role;
   final DateTime? lastLogin;
   final bool isActive;
+  final String? patientId;  // For patients - their patient ID (e.g., PAT-001)
 
   const User({
     required this.id,
@@ -13,6 +14,7 @@ class User {
     required this.role,
     this.lastLogin,
     this.isActive = true,
+    this.patientId,
   });
 
   Map<String, dynamic> toJson() {
@@ -23,6 +25,7 @@ class User {
       'role': role,
       'lastLogin': lastLogin?.toIso8601String(),
       'isActive': isActive,
+      'patient_id': patientId,
     };
   }
 
@@ -44,6 +47,7 @@ class User {
       role: json['role'] ?? 'user',
       lastLogin: json['last_login'] != null ? DateTime.parse(json['last_login']) : null,
       isActive: json['is_active'] ?? true,
+      patientId: json['patient_id'],  // Parse patient_id from backend
     );
   }
 
@@ -54,6 +58,7 @@ class User {
     String? role,
     DateTime? lastLogin,
     bool? isActive,
+    String? patientId,
   }) {
     return User(
       id: id ?? this.id,
@@ -62,6 +67,7 @@ class User {
       role: role ?? this.role,
       lastLogin: lastLogin ?? this.lastLogin,
       isActive: isActive ?? this.isActive,
+      patientId: patientId ?? this.patientId,
     );
   }
 }

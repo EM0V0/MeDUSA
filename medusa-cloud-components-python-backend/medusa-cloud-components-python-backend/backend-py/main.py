@@ -123,7 +123,7 @@ def register(req: RegisterReq):
 def login(req: LoginReq):
     """
     Login user - API v3 compliant
-    Returns flat response with accessJwt, refreshToken, expiresIn
+    Returns flat response with accessJwt, refreshToken, expiresIn, and user info
     """
     u = db.get_user_by_email(req.email)
     if not u or not verify_pw(req.password, u["password"]):
@@ -140,11 +140,17 @@ def login(req: LoginReq):
         }
     )
     
-    # API v3: Return flat response with accessJwt, refreshToken, expiresIn
+    # API v3: Return flat response with accessJwt, refreshToken, expiresIn, and user info
     return LoginRes(
         accessJwt=tokens["accessJwt"],
         refreshToken=tokens["refreshToken"],
-        expiresIn=tokens["expiresIn"]
+        expiresIn=tokens["expiresIn"],
+        user={
+            "id": u["id"],
+            "email": u["email"],
+            "role": u["role"],
+            "name": u.get("name", u["email"].split("@")[0])
+        }
     )
 
 @app.post("/api/v1/auth/refresh", response_model=RefreshRes)

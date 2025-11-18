@@ -28,8 +28,9 @@ class SecureNetworkService {
   ];
 
   late Dio _dio;
+  final String? _customBaseUrl;
   
-  SecureNetworkService() {
+  SecureNetworkService({String? baseUrl}) : _customBaseUrl = baseUrl {
     _dio = _createSecureDio();
   }
 
@@ -39,7 +40,7 @@ class SecureNetworkService {
     
     // Base security configuration
     dio.options = BaseOptions(
-      baseUrl: AppConstants.baseUrl, // Use environment-aware baseURL
+      baseUrl: _customBaseUrl ?? AppConstants.baseUrl, // Use custom or default baseURL
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 30),
       sendTimeout: const Duration(seconds: 30),
@@ -203,6 +204,106 @@ class SecureNetworkService {
 
   /// 公共API方法
   Dio get dio => _dio;
+
+  /// HTTP GET request
+  Future<dynamic> get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    CancelToken? cancelToken,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    try {
+      final response = await _dio.get(
+        path,
+        queryParameters: queryParameters,
+        options: options,
+        cancelToken: cancelToken,
+        onReceiveProgress: onReceiveProgress,
+      );
+      return response.data;
+    } catch (e) {
+      debugPrint('$_tag: GET request failed: $e');
+      rethrow;
+    }
+  }
+
+  /// HTTP POST request
+  Future<dynamic> post(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    CancelToken? cancelToken,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    try {
+      final response = await _dio.post(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+        cancelToken: cancelToken,
+        onSendProgress: onSendProgress,
+        onReceiveProgress: onReceiveProgress,
+      );
+      return response.data;
+    } catch (e) {
+      debugPrint('$_tag: POST request failed: $e');
+      rethrow;
+    }
+  }
+
+  /// HTTP PUT request
+  Future<dynamic> put(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    CancelToken? cancelToken,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    try {
+      final response = await _dio.put(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+        cancelToken: cancelToken,
+        onSendProgress: onSendProgress,
+        onReceiveProgress: onReceiveProgress,
+      );
+      return response.data;
+    } catch (e) {
+      debugPrint('$_tag: PUT request failed: $e');
+      rethrow;
+    }
+  }
+
+  /// HTTP DELETE request
+  Future<dynamic> delete(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      final response = await _dio.delete(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+        cancelToken: cancelToken,
+      );
+      return response.data;
+    } catch (e) {
+      debugPrint('$_tag: DELETE request failed: $e');
+      rethrow;
+    }
+  }
 
   /// 验证TLS连接
   Future<bool> verifyTLSConnection(String url) async {

@@ -1,44 +1,18 @@
 # MeDUSA - Medical Data Unified System & Analytics
 
-专业的医疗数据融合与分析系统
+A professional Parkinson's disease tremor monitoring system with real-time data analysis, patient management, and device integration.
 
 ---
 
-## 🎉 前端优化完成 ✅
+## 📚 Documentation
 
-**已删除无用功能**：
-- ❌ 两步验证（2FA）
-- ❌ SSO登录（Google, Apple, Microsoft）
-- ❌ Demo Login和测试按钮
-- ❌ 审计日志
-- ❌ 系统设置管理
-- ❌ 云端设备管理
-
-**已简化页面**：
-- 🔧 用户管理页面（1052行 → 453行，减少57%）
-- 🔧 登录页面（519行 → 241行，减少53.6%）
-
-**已修复功能**：
-- ✅ 登录/注册连接真实后端API
-- ✅ AuthBloc状态管理完善
-- ✅ 自动跳转和错误处理
-
-**完整保留功能**：
-- ✅ 所有蓝牙相关功能
-- ✅ 用户认证（登录、注册、登出）
-- ✅ 患者数据管理
-- ✅ 症状记录
-- ✅ 报告功能
-
-**前后端功能**：100% 对应 ✅
-
-详见：`登录注册修复完成.md` | `测试指南.txt`
+- **[API Documentation](API_DOCUMENTATION.md)** - Complete backend API reference with all endpoints
 
 ---
 
-## 🚀 快速启动
+## 🚀 Quick Start
 
-### 前端应用（Flutter）
+### Frontend (Flutter App)
 
 ```powershell
 cd meddevice-app-flutter-main
@@ -46,7 +20,7 @@ flutter pub get
 flutter run
 ```
 
-**前端已自动配置连接到云端 API** ✅
+**Automatically configured to connect to production APIs** ✅
 
 ### 后端 API
 
@@ -71,176 +45,182 @@ cd medusa-cloud-components-python-backend\medusa-cloud-components-python-backend
 
 ## 📋 系统架构
 
-### 前端（Flutter）
-- **框架**: Flutter 3.x
-- **平台**: Web, Windows, Android, iOS
+### Backend APIs
+
+Production APIs are deployed on AWS:
+- **General API**: `https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod`
+- **Tremor API**: `https://buektgcf8l.execute-api.us-east-1.amazonaws.com/Prod`
+
+See **[API_DOCUMENTATION.md](API_DOCUMENTATION.md)** for complete endpoint reference.
+
+---
+
+## 🏗️ System Architecture
+
+### Frontend (Flutter)
+- **Framework**: Flutter 3.x
+- **Platforms**: Web, Windows, Android, iOS
 - **UI**: Material Design 3
-- **状态管理**: Riverpod
-- **网络**: Dio + TLS 1.3 安全通信
-- **蓝牙**: flutter_blue_plus (完整保留)
+- **State Management**: Riverpod + BLoC
+- **Network**: Dio with TLS 1.3
+- **Bluetooth**: flutter_blue_plus, win_ble
 
-### 后端（Python FastAPI）
-- **框架**: FastAPI + Uvicorn
-- **部署**: AWS Lambda + API Gateway
-- **数据库**: DynamoDB (Users, Poses, RefreshTokens)
-- **存储**: S3
-- **认证**: JWT (bcrypt + PyJWT)
-- **API**: RESTful, OpenAPI 3.0, camelCase
+### Backend (Python)
+- **Runtime**: AWS Lambda (Python 3.10, 3.11)
+- **API Gateway**: REST API with JWT authentication
+- **Database**: DynamoDB (on-demand billing)
+- **Email**: AWS SES
+- **Storage**: S3
+- **Authentication**: JWT (bcrypt + PyJWT)
 
-### 云服务（AWS）
-- **Lambda**: Python 3.10 运行时
-- **API Gateway**: REST API
-- **DynamoDB**: NoSQL 数据库（按需计费）
-- **S3**: 文件存储
-- **Secrets Manager**: JWT 密钥管理
-
----
-
-## 📝 API 端点
-
-所有端点使用 `/api/v1` 前缀：
-
-| 方法 | 端点 | 说明 |
-|------|------|------|
-| GET | `/admin/health` | 健康检查 |
-| POST | `/auth/register` | 用户注册 |
-| POST | `/auth/login` | 用户登录 |
-| POST | `/auth/refresh` | 刷新令牌 |
-| POST | `/auth/logout` | 用户登出 |
-| GET | `/me` | 获取当前用户 |
-| POST | `/poses` | 创建姿态数据 |
-| GET | `/poses?patientId={id}` | 列出姿态数据 |
+### Key Features
+- ✅ Role-based access control (Admin, Doctor, Patient)
+- ✅ Real-time tremor data processing
+- ✅ Device-patient dynamic binding
+- ✅ Statistical analysis and aggregation
+- ✅ Secure password reset via email
+- ✅ Bluetooth device integration
 
 ---
 
-## 🔐 RBAC 角色权限
+## 🔵 Bluetooth Capabilities
 
-| 角色 | 代码 | 权限 |
-|------|------|------|
-| **患者** | `patient` | 查看自己数据、连接蓝牙设备、记录症状 |
-| **医生** | `doctor` | 查看所有患者数据、生成报告、管理患者 |
-| **管理员** | `admin` | 所有权限 + 用户管理 |
+### Pages
+- Device scanning (`device_scan_page.dart`)
+- Device connection (`device_connection_page.dart`)
+- WiFi provisioning (`wifi_provision_page.dart`)
+- Windows BLE testing (`winble_test_page.dart`)
 
-**JWT Token 包含角色信息**：
-```json
-{
-  "sub": "usr_xxx",
-  "role": "patient",
-  "exp": 1234567890
-}
+### Services
+- Bluetooth adapter (`bluetooth_adapter.dart`)
+- Bluetooth service (`bluetooth_service.dart`)
+- WiFi helper service (`wifi_helper_bluetooth_service.dart`)
+
+---
+
+## 📊 Deployment Status
+
+### Production Environment (AWS)
+- **Status**: ✅ Operational
+- **Region**: us-east-1
+- **API Gateways**: 2 active
+  - General API: `https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod`
+  - Tremor API: `https://buektgcf8l.execute-api.us-east-1.amazonaws.com/Prod`
+- **Lambda Functions**: 7 deployed
+  - medusa-api-v3 (Auth, User Management)
+  - QueryTremorData (GET /api/v1/tremor/analysis)
+  - GetTremorStatistics (GET /api/v1/tremor/statistics)
+  - AssignPatientToDoctor (POST /api/v1/doctor/assign-patient)
+  - GetDoctorPatients (GET /api/v1/doctor/patients)
+  - ProcessSensorData (Real-time tremor processing)
+  - + 1 more
+- **DynamoDB Tables**: 7 active
+  - medusa-users-prod
+  - medusa-patient-profiles-prod
+  - medusa-tremor-analysis
+  - medusa-sensor-data
+  - + 3 more
+
+### Test Accounts
+- **Patient**: kdu9@jh.edu / Testhnp123!
+  - User ID: usr_8537f43b
+  - Has 1H of recent tremor data (12 points)
+  - Has 24H of historical data (100 points)
+- **Doctor**: zhichengsun0508@outlook.com / Testhnp123!
+  - User ID: usr_10b28691
+  - Assigned patient: kdu9@jh.edu
+
+### Infrastructure
+```
+API Gateway v3 → Lambda (medusa-api-v3) → DynamoDB (users-prod)
+                                        → AWS SES (email)
+
+Tremor API → Lambda (QueryTremorData) → DynamoDB (tremor-analysis)
+          → Lambda (GetTremorStatistics)
+          → Lambda (ProcessSensorData) → DynamoDB (sensor-data)
+          
+Doctor API → Lambda (GetDoctorPatients) → DynamoDB (patient-profiles-prod)
+          → Lambda (AssignPatientToDoctor)
 ```
 
-**RBAC 实现**：
-- ✅ `lib/core/auth/role_permissions.dart` - 权限配置
-- ✅ `lib/shared/widgets/permission_widget.dart` - 权限组件
-
 ---
 
-## 🔵 蓝牙功能（完整保留）
+## 🛠️ Development
 
-### 页面
-- ✅ 设备扫描页面 (`device_scan_page.dart`)
-- ✅ 设备连接页面 (`device_connection_page.dart`)
-- ✅ WiFi配置页面 (`wifi_provision_page.dart`)
-- ✅ Windows BLE测试 (`winble_test_page.dart`)
-
-### 服务
-- ✅ 蓝牙适配器 (`bluetooth_adapter.dart`)
-- ✅ 蓝牙服务 (`bluetooth_service.dart`)
-- ✅ WiFi辅助服务 (`wifi_helper_bluetooth_service.dart`)
-
----
-
-## 📊 部署状态
-
-### 生产环境（AWS Lambda）
-- **状态**: ✅ 运行中
-- **区域**: us-east-1
-- **测试**: 100% 通过 (8/8)
-- **API 网关**: `zcrqexrdw1.execute-api.us-east-1.amazonaws.com`
-
-### 成本预估
-- **月费用**: ~$0.40 - $12
-- **大部分在 AWS 免费套餐内**
-
-详见: `CLOUD_DEPLOYMENT_SUCCESS.md`
-
----
-
-## 📚 文档
-
-- **快速启动**: `启动说明.txt` / `START.md`
-- **架构分析**: `ARCHITECTURE_ANALYSIS.md`
-- **部署报告**: `CLOUD_DEPLOYMENT_SUCCESS.md`
-
----
-
-## 🛠️ 开发环境
-
-### 必需软件
-- Flutter SDK 3.x
-- Python 3.10+
-- AWS CLI (部署用)
-- AWS SAM CLI (部署用)
-- PowerShell 5.0+
-
-### 前端配置
-```yaml
-# pubspec.yaml (主要依赖)
-dependencies:
-  flutter_riverpod: ^2.4.0
-  dio: ^5.4.0
-  go_router: ^13.0.0
-  flutter_blue_plus: ^1.32.0
+### Frontend Setup
+```powershell
+cd meddevice-app-flutter-main
+flutter pub get
+flutter run -d windows  # or web, android, ios
 ```
 
-### 后端配置
+**Login Credentials:**
+- Patient: kdu9@jh.edu / Testhnp123!
+- Doctor: zhichengsun0508@outlook.com / Testhnp123!
+
+### Backend Dependencies
 ```txt
-# requirements.txt
+# lambda_functions/requirements.txt
 fastapi==0.115.2
 mangum==0.17.0
 boto3==1.35.36
 bcrypt==4.2.0
 PyJWT==2.9.0
 uvicorn==0.32.0
+numpy>=1.24.0
+scipy>=1.10.0
 ```
 
 ---
 
-## 🎯 项目状态
+## 📝 Change Log
 
-- ✅ 后端 API 开发完成
-- ✅ API v3 规范完全遵循
-- ✅ AWS Lambda 部署完成
-- ✅ 100% 测试通过
-- ✅ 前端 Flutter 应用开发完成
-- ✅ 前后端集成配置完成
-- ✅ 前端功能清理完成
-- ✅ RBAC 权限框架部署
-- ✅ 蓝牙功能完整保留
+### 2025-11-18 (Latest)
+- ✅ **Patient Dashboard Fixed**
+  - Fixed timestamp type mismatch (ISO 8601 ↔ Unix timestamps)
+  - Fixed data model field mapping (tremor_score → tremorIndex)
+  - Fixed tremor score display range (0-100 instead of 0-1)
+  - Added actual time range calculation for charts
+  - Eliminated chart overflow issues (290.h container)
+  - Default time range set to 1H with fresh test data
+
+- ✅ **Doctor-Patient Management**
+  - Created AssignPatientToDoctor Lambda function
+  - Created GetDoctorPatients Lambda function
+  - Added doctor_patient_service.dart for API integration
+  - Fixed DynamoDB schema issues (userId vs patient_id)
+  - Doctor can now view and manage assigned patients
+
+- ✅ **API Deployment & Testing**
+  - Deployed GET /api/v1/doctor/patients endpoint
+  - Deployed POST /api/v1/doctor/assign-patient endpoint
+  - Deployed QueryTremorData Lambda
+  - Deployed GetTremorStatistics Lambda
+  - All endpoints returning 200 with real data
+
+- ✅ **Data Generation**
+  - Generated fresh test data for recent 1 hour
+  - Created generate_recent_data.py script
+  - 12 data points with realistic Parkinsonian episodes
+  - Fixed timestamp format for DynamoDB compatibility
+
+### 2025-11-14
+- ✅ **Backend Migration**
+  - CORS configuration fixed (API Gateway)
+  - Login/registration connected to production APIs
+  - Frontend cleanup (removed SSO, demo features)
+  - RBAC framework deployed
+  - Bluetooth functionality preserved
 
 ---
 
-## 📝 变更日志
+## 📞 Support
 
-### 2025-11-14（最新）
-- ✅ **修复CORS跨域问题**（API Gateway配置完善）
-- ✅ **修复登录注册功能**（连接真实后端API）
-- ✅ API Gateway CORS headers从2个增加到7个
-- ✅ 添加预检请求缓存（MaxAge: 600秒）
-- ✅ 后端重新部署，测试通过
-- ✅ 删除SSO登录代码（Google, Apple, Microsoft）
-- ✅ 删除Demo Login和测试按钮
-- ✅ 简化登录页面（519行 → 241行，减少53.6%）
-- ✅ 实现BlocListener自动导航
-- ✅ 完善错误处理和加载状态
-- ✅ 清理前端无用功能（删除6个文件）
-- ✅ 简化用户管理页面（1052行 → 453行）
-- ✅ 更新路由配置（移除已删除页面路由）
-- ✅ 保持蓝牙功能完整
-- ✅ 确保前后端功能100%对应
-- ✅ 部署 RBAC 权限控制框架
+- **Repository**: https://github.com/EM0V0/MeDUSA
+- **API Documentation**: [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
+- **AWS Region**: us-east-1
+- **Lambda Functions**: See `lambda_functions/README.md`
 
 ---
 
-**MeDUSA © 2025 - 专业医疗数据系统**
+**MeDUSA © 2025 - Professional Medical Data System**

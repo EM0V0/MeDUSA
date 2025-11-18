@@ -155,6 +155,17 @@ class AppColors {
     end: Alignment.bottomCenter,
   );
 
+  // Text colors
+  static const Color textPrimary = Color(0xFF2D3748);
+  static const Color textSecondary = Color(0xFF718096);
+  static const Color textDisabled = Color(0xFFA0AEC0);
+  
+  // Divider colors
+  static const Color divider = Color(0xFFE2E8F0);
+  
+  // Primary variant
+  static const Color darkPrimary = Color(0xFF1565C0);
+
   // Opacity variants
   static Color get primaryWithOpacity => primary.withValues(alpha: 0.12);
   static Color get secondaryWithOpacity => secondary.withValues(alpha: 0.12);

@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:responsive_framework/responsive_framework.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
+import '../../../patients/data/datasources/tremor_api_service.dart';
+import '../../../patients/data/models/tremor_analysis.dart';
+import '../../../patients/presentation/widgets/tremor_chart.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -15,33 +20,174 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
+  final TremorApiService _tremorApi = TremorApiService();
+  
+  String? _patientId;  // Will be set from authenticated user
+  String _patientName = 'Patient';  // Will be updated from authenticated user
+  String _selectedTimeRange = '1h';
+  
+  bool _isLoading = false;
+  String? _error;
+  List<TremorAnalysis> _tremorData = [];
+  Map<String, dynamic>? _statistics;
+
+  final List<String> _timeRanges = ['1h', '24h', '7d'];
+
+  @override
+  void initState() {
+    super.initState();
+    // Patient ID will be loaded from AuthBloc in build method
+    // We'll call _loadData() after getting patient ID
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Load patient data when patient_id is available
+    if (_patientId != null && _tremorData.isEmpty && !_isLoading) {
+      _loadData();
+    }
+  }
+
+  Future<void> _loadData() async {
+    if (_patientId == null) {
+      setState(() {
+        _error = 'Patient ID not found. Please ensure you are logged in as a patient.';
+        _isLoading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      print('Loading data for patient_id: $_patientId');
+      final now = DateTime.now();
+      DateTime startTime;
+      switch (_selectedTimeRange) {
+        case '1h':
+          startTime = now.subtract(const Duration(hours: 1));
+          break;
+        case '24h':
+          startTime = now.subtract(const Duration(hours: 24));
+          break;
+        case '7d':
+          startTime = now.subtract(const Duration(days: 7));
+          break;
+        default:
+          startTime = now.subtract(const Duration(hours: 24));
+      }
+
+      final data = await _tremorApi.getPatientTremorData(
+        patientId: _patientId!,  // Safe because we checked in the beginning
+        startTime: startTime,
+        endTime: now,
+        limit: 100,
+      );
+
+      final stats = await _tremorApi.getTremorStatistics(
+        patientId: _patientId!,  // Safe because we checked in the beginning
+        startTime: startTime,
+        endTime: now,
+      );
+
+      setState(() {
+        _tremorData = data;
+        _statistics = stats;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading data for patient $_patientId: $e');
+      setState(() {
+        if (e.toString().contains('400')) {
+          _error = 'No tremor data found for this patient.\n\nThis could mean:\n• No device is paired with your account\n• The device hasn\'t collected data yet\n• Data collection is not active\n\nPlease pair a device and ensure it\'s collecting data.';
+        } else {
+          _error = 'Failed to load data: ${e.toString()}';
+        }
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _onTimeRangeChanged(String range) {
+    setState(() {
+      _selectedTimeRange = range;
+    });
+    _loadData();
+  }
+
+  String _getActualTimeRangeTitle() {
+    if (_tremorData.isEmpty) return 'Tremor Activity';
+    
+    final timestamps = _tremorData.map((d) => d.analysisTimestamp).toList();
+    timestamps.sort();
+    final oldest = timestamps.first;
+    final newest = timestamps.last;
+    final duration = newest.difference(oldest);
+    
+    String timeRange;
+    if (duration.inMinutes < 60) {
+      timeRange = '${duration.inMinutes}m';
+    } else if (duration.inHours < 24) {
+      final hours = duration.inHours;
+      final minutes = duration.inMinutes % 60;
+      timeRange = minutes > 0 ? '${hours}h ${minutes}m' : '${hours}h';
+    } else {
+      timeRange = '${duration.inDays}d';
+    }
+    
+    return 'Tremor Activity - $timeRange (${_tremorData.length} points)';
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.lightBackground,
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(AppConstants.defaultPadding.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            _buildHeader(),
-            SizedBox(height: 28.h),
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, authState) {
+        // Get patient_id from authenticated user
+        if (authState is AuthAuthenticated) {
+          if (_patientId == null) {
+            // First time getting user data
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              setState(() {
+                _patientId = authState.user.patientId ?? authState.user.id;
+                _patientName = authState.user.name;
+              });
+              print('Patient Dashboard - User: ${authState.user.email}, Patient ID: $_patientId, Has patientId field: ${authState.user.patientId != null}');
+              _loadData();
+            });
+          }
+        }
 
-            // Stats Grid
-            _buildStatsGrid(),
-            SizedBox(height: 28.h),
+        return Scaffold(
+          backgroundColor: AppColors.lightBackground,
+          body: SingleChildScrollView(
+            padding: EdgeInsets.all(AppConstants.defaultPadding.w),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                _buildHeader(),
+                SizedBox(height: 28.h),
 
-            // Chart Section
-            _buildChartSection(),
-            SizedBox(height: 28.h),
+                // Stats Grid
+                _buildStatsGrid(),
+                SizedBox(height: 28.h),
 
-            // Recent Activity
-            _buildRecentActivity(),
-            SizedBox(height: 20.h),
-          ],
-        ),
-      ),
+                // Chart Section
+                _buildChartSection(),
+                SizedBox(height: 28.h),
+
+                // Recent Activity
+                _buildRecentActivity(),
+                SizedBox(height: 20.h),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -50,14 +196,7 @@ class _DashboardPageState extends State<DashboardPage> {
       padding: EdgeInsets.all(24.w),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12.r),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -67,7 +206,7 @@ class _DashboardPageState extends State<DashboardPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Patient Monitoring Dashboard',
+                  'My Health Dashboard',
                   style: FontUtils.title(
                     context: context,
                     fontWeight: FontWeight.w700,
@@ -76,7 +215,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
                 SizedBox(height: 8.h),
                 Text(
-                  'Welcome back, Dr. Smith. You have 3 critical patients today.',
+                  'Welcome back, $_patientName',
                   style: FontUtils.body(
                     context: context,
                     color: AppColors.lightOnSurfaceVariant,
@@ -86,131 +225,222 @@ class _DashboardPageState extends State<DashboardPage> {
               ],
             ),
           ),
-          if (ResponsiveBreakpoints.of(context).largerThan(MOBILE)) ...[
-            SizedBox(width: 20.w),
-            ElevatedButton.icon(
-              onPressed: () {
-                _showAddPatientDialog();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8.r),
-                ),
-              ),
-              icon: Icon(
-                Icons.add,
-                size: IconUtils.getResponsiveIconSize(IconSizeType.medium, context),
-              ),
-              label: Text(
-                'Add Patient',
-                style: FontUtils.body(
-                  context: context,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+          if (ResponsiveBreakpoints.of(context).largerThan(MOBILE))
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadData,
+              tooltip: 'Refresh data',
             ),
-          ],
         ],
       ),
     );
   }
 
   Widget _buildStatsGrid() {
+    if (_isLoading) {
+      return Container(
+        padding: EdgeInsets.all(40.w),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16.r),
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null) {
+      return Container(
+        padding: EdgeInsets.all(20.w),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16.r),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.error_outline, size: 48.sp, color: AppColors.error),
+            SizedBox(height: 16.h),
+            Text(
+              'Error loading data',
+              style: FontUtils.body(context: context, fontWeight: FontWeight.w600),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              _error!,
+              style: FontUtils.caption(context: context),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 16.h),
+            ElevatedButton(
+              onPressed: _loadData,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_statistics == null || _statistics!['statistics'] == null) {
+      return Container(
+        padding: EdgeInsets.all(20.w),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16.r),
+        ),
+        child: Center(
+          child: Text(
+            'No statistics available',
+            style: FontUtils.body(context: context),
+          ),
+        ),
+      );
+    }
+
+    final stats = _statistics!['statistics'];
+    final tremorScores = stats['tremor_scores'] ?? {};
+    final avgScore = tremorScores['average']?.toDouble() ?? 0.0;
+    final totalReadings = stats['total_readings'] ?? 0;
+    final parkinsonianEpisodes = stats['parkinsonian_episodes'] ?? 0;
+    final freqAnalysis = stats['frequency_analysis'] ?? {};
+    final avgFreq = freqAnalysis['avg_dominant_freq']?.toDouble() ?? 0.0;
+
     return ResponsiveBreakpoints.of(context).smallerThan(TABLET)
         ? Column(
             children: [
-              _buildStatCard('Total Patients', '24', '+2', Icons.people),
+              _buildStatCard(
+                'Average Score', 
+                avgScore.toStringAsFixed(1), 
+                Icons.show_chart, 
+                AppColors.primary,
+                subtitle: 'Tremor Index',
+              ),
               SizedBox(height: 16.h),
-              _buildStatCard('Critical Alerts', '3', 'Needs attention', Icons.warning),
+              _buildStatCard(
+                'Parkinsonian Episodes', 
+                parkinsonianEpisodes.toString(), 
+                Icons.warning_amber, 
+                AppColors.error,
+                subtitle: 'Total occurrences',
+              ),
               SizedBox(height: 16.h),
-              _buildStatCard('Active Sensors', '18', 'Online', Icons.sensors),
+              _buildStatCard(
+                'Total Readings', 
+                totalReadings.toString(), 
+                Icons.analytics, 
+                AppColors.info,
+                subtitle: 'Data points',
+              ),
               SizedBox(height: 16.h),
-              _buildStatCard('Data Quality', '94%', '+2%', Icons.analytics),
+              _buildStatCard(
+                'Avg Frequency', 
+                '${avgFreq.toStringAsFixed(1)} Hz', 
+                Icons.graphic_eq, 
+                AppColors.success,
+                subtitle: 'Dominant frequency',
+              ),
             ],
           )
         : Row(
             children: [
-              Expanded(child: _buildStatCard('Total Patients', '24', '+2', Icons.people)),
+              Expanded(child: _buildStatCard(
+                'Average Score', 
+                avgScore.toStringAsFixed(1), 
+                Icons.show_chart, 
+                AppColors.primary,
+                subtitle: 'Tremor Index',
+              )),
               SizedBox(width: 16.w),
-              Expanded(child: _buildStatCard('Critical Alerts', '3', 'Needs attention', Icons.warning)),
+              Expanded(child: _buildStatCard(
+                'Parkinsonian Episodes', 
+                parkinsonianEpisodes.toString(), 
+                Icons.warning_amber, 
+                AppColors.error,
+                subtitle: 'Total occurrences',
+              )),
               SizedBox(width: 16.w),
-              Expanded(child: _buildStatCard('Active Sensors', '18', 'Online', Icons.sensors)),
+              Expanded(child: _buildStatCard(
+                'Total Readings', 
+                totalReadings.toString(), 
+                Icons.analytics, 
+                AppColors.info,
+                subtitle: 'Data points',
+              )),
               SizedBox(width: 16.w),
-              Expanded(child: _buildStatCard('Data Quality', '94%', '+2%', Icons.analytics)),
+              Expanded(child: _buildStatCard(
+                'Avg Frequency', 
+                '${avgFreq.toStringAsFixed(1)} Hz', 
+                Icons.graphic_eq, 
+                AppColors.success,
+                subtitle: 'Dominant frequency',
+              )),
             ],
           );
   }
 
-  Widget _buildStatCard(String title, String value, String subtitle, IconData icon) {
-    return GestureDetector(
-      onTap: () => _showStatDetails(title, value, subtitle),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: EdgeInsets.all(20.w),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: FontUtils.body(
-                        context: context,
-                        color: AppColors.lightOnSurfaceVariant,
-                        fontWeight: FontWeight.w500,
-                      ),
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, {String? subtitle}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12.r),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(20.w),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: FontUtils.body(
+                      context: context,
+                      color: AppColors.lightOnSurfaceVariant,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  Container(
-                    padding: EdgeInsets.all(8.w),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      icon,
-                      color: AppColors.primary,
-                      size: IconUtils.getResponsiveIconSize(IconSizeType.medium, context),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 12.h),
-              Text(
-                value,
-                style: FontUtils.title(
-                  context: context,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
                 ),
+                Container(
+                  padding: EdgeInsets.all(8.w),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: color,
+                    size: 20.sp,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 12.h),
+            Text(
+              value,
+              style: FontUtils.headline(
+                context: context,
+                fontWeight: FontWeight.w700,
+                color: AppColors.lightOnSurface,
               ),
-              SizedBox(height: 6.h),
+            ),
+            if (subtitle != null) ...[
+              SizedBox(height: 4.h),
               Text(
                 subtitle,
-                style: FontUtils.body(
+                style: FontUtils.caption(
                   context: context,
-                  color: AppColors.success,
-                  fontWeight: FontWeight.w500,
+                  color: AppColors.lightOnSurfaceVariant,
                 ),
               ),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -220,170 +450,86 @@ class _DashboardPageState extends State<DashboardPage> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12.r),
       ),
       child: Padding(
         padding: EdgeInsets.all(20.w),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Responsive title layout
-            ResponsiveBreakpoints.of(context).smallerThan(TABLET)
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Tremor Activity Overview',
-                        style: FontUtils.title(
-                          context: context,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.lightOnSurface,
-                        ),
-                      ),
-                      SizedBox(height: 12.h),
-                      SizedBox(
-                        width: double.infinity,
-                        child: _buildTimeRangeSelector(),
-                      ),
-                    ],
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Tremor Activity Overview',
-                          style: FontUtils.title(
-                            context: context,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.lightOnSurface,
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 16.w),
-                      _buildTimeRangeSelector(),
-                    ],
-                  ),
-            SizedBox(height: 20.h),
-
-            // Enhanced chart area
-            Container(
-              height: 320.h,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppColors.lightBackground,
-                borderRadius: BorderRadius.circular(12.r),
-                border: Border.all(color: AppColors.lightDivider, width: 1),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(16.w),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.show_chart,
-                      size: IconUtils.getProtectedSize(
-                        context,
-                        targetSize: 48.0,
-                        minSize: 36.0, // Never smaller than 36px
-                      ),
-                      color: AppColors.primary,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Tremor Activity - $_selectedTimeRange',
+                    style: FontUtils.title(
+                      context: context,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.lightOnSurface,
                     ),
                   ),
-                  SizedBox(height: 16.h),
-                  Text(
-                    'Chart will be displayed here',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: AppColors.lightOnSurface,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  SizedBox(height: 8.h),
-                  Text(
-                    'Real-time tremor data visualization',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.lightOnSurfaceVariant,
-                        ),
-                  ),
-                ],
-              ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: _timeRanges.map((range) {
+                    final isSelected = _selectedTimeRange == range;
+                    return Padding(
+                      padding: EdgeInsets.only(left: 8.w),
+                      child: ChoiceChip(
+                        label: Text(range.toUpperCase()),
+                        selected: isSelected,
+                        onSelected: (_) => _onTimeRangeChanged(range),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
             ),
+            SizedBox(height: 20.h),
+            if (_isLoading)
+              SizedBox(
+                height: 250.h,
+                child: const Center(child: CircularProgressIndicator()),
+              )
+            else if (_error != null)
+              SizedBox(
+                height: 250.h,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 48.sp, color: AppColors.error),
+                      SizedBox(height: 16.h),
+                      Text('Error loading chart data', style: FontUtils.body(context: context)),
+                    ],
+                  ),
+                ),
+              )
+            else if (_tremorData.isEmpty)
+              SizedBox(
+                height: 250.h,
+                child: Center(
+                  child: Text(
+                    'No data available for selected time range',
+                    style: FontUtils.body(context: context, color: AppColors.textSecondary),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 290.h,
+                child: TremorChart(
+                  dataPoints: _tremorData.map((t) => TremorDataPoint(
+                    timestamp: t.analysisTimestamp,
+                    tremorScore: t.tremorIndex,
+                    isParkinsonian: t.isParkinsonian,
+                  )).toList(),
+                  title: _getActualTimeRangeTitle(),
+                ),
+              ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildTimeRangeSelector() {
-    final isMobile = ResponsiveBreakpoints.of(context).smallerThan(TABLET);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.lightBackground,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: SegmentedButton<String>(
-        style: SegmentedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          selectedBackgroundColor: AppColors.primary,
-          selectedForegroundColor: Colors.white,
-          foregroundColor: AppColors.lightOnSurface,
-          // Mobile optimization: increase button padding
-          padding: EdgeInsets.symmetric(
-            horizontal: isMobile ? 16.w : 12.w,
-            vertical: isMobile ? 12.h : 8.h,
-          ),
-        ),
-        segments: [
-          ButtonSegment(
-            value: 'realtime',
-            label: Text(
-              isMobile ? 'Real-time' : 'Real-time',
-              // Mobile optimization: ensure minimum readability
-              style: FontUtils.body(
-                context: context,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ButtonSegment(
-            value: 'hourly',
-            label: Text(
-              'Hourly',
-              // Mobile optimization: ensure minimum readability
-              style: FontUtils.body(
-                context: context,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ButtonSegment(
-            value: 'daily',
-            label: Text(
-              'Daily',
-              // Mobile optimization: ensure minimum readability
-              style: FontUtils.body(
-                context: context,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-        selected: const {'realtime'},
-        onSelectionChanged: (selection) {
-          // TODO: Handle time range change
-        },
       ),
     );
   }
@@ -392,14 +538,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12.r),
       ),
       child: Padding(
         padding: EdgeInsets.all(20.w),
@@ -407,176 +546,75 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Recent Patient Activity',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.lightOnSurface,
-                  ),
-            ),
-            SizedBox(height: 20.h),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: 5,
-              separatorBuilder: (context, index) => Divider(
-                height: 24.h,
-                color: AppColors.lightDivider,
+              'Recent Tremor Readings',
+              style: FontUtils.title(
+                context: context,
+                fontWeight: FontWeight.w600,
+                color: AppColors.lightOnSurface,
               ),
-              itemBuilder: (context, index) {
-                return _buildActivityItem(index);
-              },
             ),
+            SizedBox(height: 16.h),
+            if (_tremorData.isNotEmpty) ...[
+              ...(_tremorData.take(5).map((data) => Padding(
+                padding: EdgeInsets.only(bottom: 12.h),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(8.w),
+                      decoration: BoxDecoration(
+                        color: data.isParkinsonian 
+                            ? AppColors.warning.withValues(alpha: 0.1)
+                            : AppColors.success.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8.r),
+                      ),
+                      child: Icon(
+                        data.isParkinsonian ? Icons.warning_amber : Icons.check_circle,
+                        color: data.isParkinsonian ? AppColors.warning : AppColors.success,
+                        size: 20.sp,
+                      ),
+                    ),
+                    SizedBox(width: 12.w),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Tremor Index: ${data.tremorIndex.toStringAsFixed(2)}',
+                            style: FontUtils.body(
+                              context: context,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            data.analysisTimestamp.toString().substring(0, 19),
+                            style: FontUtils.caption(
+                              context: context,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ))),
+            ] else ...[
+              Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20.h),
+                  child: Text(
+                    'No recent activity',
+                    style: FontUtils.body(
+                      context: context,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildActivityItem(int index) {
-    final activities = [
-      {'name': 'John Doe', 'status': 'High tremor detected', 'time': '2 min ago', 'severity': 'high'},
-      {'name': 'Jane Smith', 'status': 'Normal activity', 'time': '15 min ago', 'severity': 'normal'},
-      {'name': 'Bob Johnson', 'status': 'Medication reminder', 'time': '30 min ago', 'severity': 'info'},
-      {'name': 'Alice Brown', 'status': 'Data sync completed', 'time': '1 hour ago', 'severity': 'normal'},
-      {'name': 'Charlie Wilson', 'status': 'Sensor offline', 'time': '2 hours ago', 'severity': 'warning'},
-    ];
-
-    final activity = activities[index];
-    final severity = activity['severity']!;
-
-    Color statusColor;
-    IconData statusIcon;
-
-    switch (severity) {
-      case 'high':
-        statusColor = AppColors.error;
-        statusIcon = Icons.warning;
-        break;
-      case 'warning':
-        statusColor = AppColors.warning;
-        statusIcon = Icons.info;
-        break;
-      case 'info':
-        statusColor = AppColors.info;
-        statusIcon = Icons.notification_important;
-        break;
-      default:
-        statusColor = AppColors.success;
-        statusIcon = Icons.check_circle;
-    }
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 8.h),
-      child: Row(
-        children: [
-          Container(
-            width: 40.w,
-            height: 40.w,
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              statusIcon,
-              color: statusColor,
-              size: 20.w,
-            ),
-          ),
-          SizedBox(width: 16.w),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  activity['name']!,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.lightOnSurface,
-                      ),
-                ),
-                SizedBox(height: 4.h),
-                Text(
-                  activity['status']!,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.lightOnSurfaceVariant,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: 8.w),
-          Text(
-            activity['time']!,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.lightOnSurfaceVariant,
-                  fontWeight: FontWeight.w500,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddPatientDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: FontUtils.titleText('Add New Patient', context),
-          content: FontUtils.bodyText('This feature will be implemented in the next update.', context),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: FontUtils.bodyText('Cancel', context),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: FontUtils.bodyText(
-                      'Patient added successfully!',
-                      context
-                    ),
-                  ),
-                );
-              },
-              child: Text(
-                'Add',
-                style: FontUtils.body(
-                  context: context,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showStatDetails(String title, String value, String subtitle) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(title),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Value: $value'),
-              SizedBox(height: 10.h),
-              Text('Subtitle: $subtitle'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: FontUtils.bodyText('Close', context),
-            ),
-          ],
-        );
-      },
     );
   }
 }

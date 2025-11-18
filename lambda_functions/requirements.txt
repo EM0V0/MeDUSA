@@ -1,0 +1,6 @@
+# Lambda dependencies for process_sensor_data.py
+# Package these with your Lambda deployment package
+
+boto3>=1.26.0
+numpy>=1.24.0
+scipy>=1.10.0

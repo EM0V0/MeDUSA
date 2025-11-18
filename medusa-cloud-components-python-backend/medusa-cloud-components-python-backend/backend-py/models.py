@@ -51,6 +51,7 @@ class LoginRes(BaseModel):
     accessJwt: str  # API v3 uses accessJwt
     refreshToken: str
     expiresIn: int  # API v3 uses camelCase
+    user: dict  # User information
     
     class Config:
         populate_by_name = True

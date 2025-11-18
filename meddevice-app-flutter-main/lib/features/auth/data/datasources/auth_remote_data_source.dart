@@ -33,8 +33,10 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         data: data,
       );
 
-      // API v3: Flat response with accessJwt, refreshToken, expiresIn (no data wrapper)
+      // API v3: Flat response with accessJwt, refreshToken, expiresIn, user
       final responseData = response.data;
+      
+      print('Login full response: $responseData');
       
       // Store access JWT in network service for future requests
       if (responseData['accessJwt'] != null) {
@@ -44,14 +46,15 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       // TODO: Store refresh token in secure storage
       // final refreshToken = responseData['refreshToken'];
       
-      // API v3: Login doesn't return user object, need to fetch from /me endpoint
-      // For now, create a minimal User object from email
-      return User(
-        id: '', // Will be populated from /me endpoint if needed
-        email: email,
-        name: email.split('@')[0], // Temporary name from email
-        role: 'patient', // Default role
-      );
+      // Extract user data from login response
+      if (responseData['user'] == null) {
+        throw Exception('Login response missing user data');
+      }
+      
+      final userData = responseData['user'] as Map<String, dynamic>;
+      print('Extracted user data: $userData');
+      
+      return User.fromJson(userData);
     } on DioException catch (e) {
       // Handle specific HTTP error codes
       if (e.response?.statusCode == 401) {
