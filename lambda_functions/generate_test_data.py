@@ -160,6 +160,7 @@ def write_analysis_data(patient_id, device_id, timestamp, features):
         'timestamp': timestamp_str,
         'device_id': device_id,
         'tremor_index': Decimal(str(round(features['tremor_index'], 4))),
+        'tremor_score': Decimal(str(round(features['tremor_index'] * 100, 2))),
         'rms_value': Decimal(str(round(features['rms_value'], 4))),
         'dominant_frequency': Decimal(str(round(features['dominant_frequency'], 2))),
         'tremor_power': Decimal(str(round(features['tremor_power'], 4))),

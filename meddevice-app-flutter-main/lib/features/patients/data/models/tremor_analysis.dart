@@ -46,8 +46,17 @@ class TremorAnalysis {
     final rmsValue = features != null ? _parseDouble(features['rms']) : _parseDouble(json['rms']);
     
     // tremor_score is 0-100, keep it in this range for display
-    final tremorScore = _parseDouble(json['tremor_score'] ?? json['tremor_index']);
-    final tremorIndex = tremorScore;  // Keep original 0-100 range
+    // Handle both legacy tremor_index (0-1) and new tremor_score (0-100)
+    double tremorScoreVal = 0.0;
+    if (json['tremor_score'] != null) {
+      tremorScoreVal = _parseDouble(json['tremor_score']);
+    } else if (json['tremor_index'] != null) {
+      final val = _parseDouble(json['tremor_index']);
+      // If value is small (<= 1.0), assume it's a ratio and convert to percentage
+      tremorScoreVal = val <= 1.0 ? val * 100 : val;
+    }
+    
+    final tremorIndex = tremorScoreVal;
     
     return TremorAnalysis(
       deviceId: json['device_id'] ?? json['deviceId'] ?? '',

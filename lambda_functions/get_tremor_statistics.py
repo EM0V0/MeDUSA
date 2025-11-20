@@ -64,21 +64,21 @@ class DecimalEncoder(json.JSONEncoder):
 
 def classify_severity(tremor_score):
     """
-    Classify tremor severity based on score (0-10 scale).
+    Classify tremor severity based on score (0-100 scale).
     
     Args:
-        tremor_score: Tremor score (tremor_index * 10)
+        tremor_score: Tremor score (0-100)
         
     Returns:
         Severity category string
     """
-    if tremor_score < 2:
+    if tremor_score < 20:
         return 'minimal'
-    elif tremor_score < 4:
+    elif tremor_score < 40:
         return 'mild'
-    elif tremor_score < 6:
+    elif tremor_score < 60:
         return 'moderate'
-    elif tremor_score < 8:
+    elif tremor_score < 80:
         return 'severe'
     else:
         return 'very_severe'
@@ -156,8 +156,14 @@ def lambda_handler(event, context):
             })
         
         # Calculate statistics
-        tremor_indices = [float(item.get('tremor_index', 0)) for item in items]
-        tremor_scores = [idx * 10 for idx in tremor_indices]  # Convert to 0-10 scale
+        tremor_scores = []
+        for item in items:
+            if 'tremor_score' in item:
+                tremor_scores.append(float(item['tremor_score']))
+            else:
+                # Fallback to tremor_index * 100 (convert 0-1 ratio to percentage)
+                tremor_scores.append(float(item.get('tremor_index', 0)) * 100)
+                
         dominant_freqs = [float(item.get('dominant_frequency', 0)) for item in items]
         parkinsonian_count = sum(1 for item in items if item.get('is_parkinsonian', False))
         

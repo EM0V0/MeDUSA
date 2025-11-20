@@ -220,6 +220,7 @@ def lambda_handler(event, context):
             'dominant_freq': Decimal(str(features['dominant_freq'])),
             'tremor_power': Decimal(str(features['tremor_power'])),
             'tremor_index': Decimal(str(features['tremor_index'])),
+            'tremor_score': Decimal(str(features['tremor_index'] * 100)),
             'is_parkinsonian': features['is_parkinsonian'],
             
             # Metadata

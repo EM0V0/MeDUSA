@@ -219,7 +219,14 @@ def get_statistics(patient_id, start_time=None, end_time=None):
         }
     
     # Calculate statistics
-    tremor_scores = [float(item.get('tremor_index', 0)) * 10 for item in items]
+    tremor_scores = []
+    for item in items:
+        if 'tremor_score' in item:
+            tremor_scores.append(float(item['tremor_score']))
+        else:
+            # Fallback to tremor_index * 100 (convert 0-1 ratio to percentage)
+            tremor_scores.append(float(item.get('tremor_index', 0)) * 100)
+            
     parkinsonian_count = sum(1 for item in items if item.get('is_parkinsonian', False))
     
     return {
