@@ -85,7 +85,7 @@ class _DashboardPageState extends State<DashboardPage> {
         patientId: _patientId!,  // Safe because we checked in the beginning
         startTime: startTime,
         endTime: now,
-        limit: 100,
+        limit: 1000, // Increased limit for longer time ranges
       );
 
       final stats = await _tremorApi.getTremorStatistics(
@@ -122,24 +122,8 @@ class _DashboardPageState extends State<DashboardPage> {
   String _getActualTimeRangeTitle() {
     if (_tremorData.isEmpty) return 'Tremor Activity';
     
-    final timestamps = _tremorData.map((d) => d.analysisTimestamp).toList();
-    timestamps.sort();
-    final oldest = timestamps.first;
-    final newest = timestamps.last;
-    final duration = newest.difference(oldest);
-    
-    String timeRange;
-    if (duration.inMinutes < 60) {
-      timeRange = '${duration.inMinutes}m';
-    } else if (duration.inHours < 24) {
-      final hours = duration.inHours;
-      final minutes = duration.inMinutes % 60;
-      timeRange = minutes > 0 ? '${hours}h ${minutes}m' : '${hours}h';
-    } else {
-      timeRange = '${duration.inDays}d';
-    }
-    
-    return 'Tremor Activity - $timeRange (${_tremorData.length} points)';
+    // Just show the selected time range
+    return 'Tremor Activity - $_selectedTimeRange';
   }
 
   @override

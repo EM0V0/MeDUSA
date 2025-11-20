@@ -104,7 +104,62 @@ class _TremorChartState extends State<TremorChart> {
     );
   }
 
+  /// Downsample data to target count using Max Pooling to preserve peaks
+  List<TremorDataPoint> _processDataPoints() {
+    if (widget.dataPoints.isEmpty) return [];
+
+    // 1. Sort by timestamp
+    final sorted = List<TremorDataPoint>.from(widget.dataPoints)
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    // 2. If count is small enough, return as is
+    if (sorted.length <= 80) return sorted;
+
+    // 3. Downsample to ~80 points
+    final result = <TremorDataPoint>[];
+    final bucketSize = sorted.length / 80;
+
+    for (int i = 0; i < 80; i++) {
+      final start = (i * bucketSize).floor();
+      final end = ((i + 1) * bucketSize).floor();
+      
+      if (start >= sorted.length) break;
+      
+      final sliceEnd = end < sorted.length ? end : sorted.length;
+      if (start >= sliceEnd) continue;
+      
+      final slice = sorted.sublist(start, sliceEnd);
+      
+      // Find the point with the highest tremor score in this bucket
+      // This ensures we don't miss any high tremor episodes (Max Pooling)
+      final maxPoint = slice.reduce((curr, next) => 
+        curr.tremorScore > next.tremorScore ? curr : next
+      );
+      
+      result.add(maxPoint);
+    }
+
+    return result;
+  }
+
   Widget _buildChart() {
+    final processedPoints = _processDataPoints();
+    
+    // Calculate min and max X based on timestamps
+    double minX = 0;
+    double maxX = 0;
+    
+    if (processedPoints.isNotEmpty) {
+      minX = processedPoints.first.timestamp.millisecondsSinceEpoch.toDouble();
+      maxX = processedPoints.last.timestamp.millisecondsSinceEpoch.toDouble();
+      
+      // Add padding if single point or very small range
+      if (maxX - minX < 1000) {
+        minX -= 300000; // 5 mins
+        maxX += 300000;
+      }
+    }
+
     return SizedBox(
       height: 180.h,
       child: LineChart(
@@ -113,7 +168,7 @@ class _TremorChartState extends State<TremorChart> {
             show: true,
             drawVerticalLine: true,
             horizontalInterval: 20,
-            verticalInterval: 1,
+            verticalInterval: (maxX - minX) / 5, // Dynamic vertical grid
             getDrawingHorizontalLine: (value) {
               return FlLine(
                 color: AppColors.divider,
@@ -139,8 +194,8 @@ class _TremorChartState extends State<TremorChart> {
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 30,
-                interval: 1,
-                getTitlesWidget: _buildBottomTitle,
+                interval: (maxX - minX) / 5, // Dynamic interval
+                getTitlesWidget: (value, meta) => _buildBottomTitle(value, meta, processedPoints),
               ),
             ),
             leftTitles: AxisTitles(
@@ -158,18 +213,18 @@ class _TremorChartState extends State<TremorChart> {
               color: AppColors.divider,
             ),
           ),
-          minX: _minX,
-          maxX: _maxX,
+          minX: minX,
+          maxX: maxX,
           minY: _minY,
           maxY: _maxY,
           lineBarsData: [
-            _buildTremorScoreLine(),
+            _buildTremorScoreLine(processedPoints),
           ],
           lineTouchData: LineTouchData(
             enabled: true,
             touchTooltipData: LineTouchTooltipData(
               getTooltipColor: (touchedSpot) => AppColors.darkPrimary,
-              getTooltipItems: _buildTooltipItems,
+              getTooltipItems: (spots) => _buildTooltipItems(spots, processedPoints),
             ),
           ),
         ),
@@ -177,12 +232,14 @@ class _TremorChartState extends State<TremorChart> {
     );
   }
 
-  LineChartBarData _buildTremorScoreLine() {
+  LineChartBarData _buildTremorScoreLine(List<TremorDataPoint> points) {
     final spots = <FlSpot>[];
     
-    for (int i = 0; i < widget.dataPoints.length; i++) {
-      final point = widget.dataPoints[i];
-      spots.add(FlSpot(i.toDouble(), point.tremorScore));
+    for (final point in points) {
+      spots.add(FlSpot(
+        point.timestamp.millisecondsSinceEpoch.toDouble(), 
+        point.tremorScore
+      ));
     }
 
     return LineChartBarData(
@@ -194,7 +251,13 @@ class _TremorChartState extends State<TremorChart> {
       dotData: FlDotData(
         show: true,
         getDotPainter: (spot, percent, barData, index) {
-          final point = widget.dataPoints[index];
+          // Find point by timestamp (x value)
+          final timestamp = spot.x.toInt();
+          final point = points.firstWhere(
+            (p) => p.timestamp.millisecondsSinceEpoch == timestamp,
+            orElse: () => points[index],
+          );
+          
           final color = point.isParkinsonian && widget.showParkinsonianMarkers
               ? AppColors.error
               : AppColors.primary;
@@ -214,19 +277,19 @@ class _TremorChartState extends State<TremorChart> {
     );
   }
 
-  Widget _buildBottomTitle(double value, TitleMeta meta) {
-    final index = value.toInt();
-    if (index < 0 || index >= widget.dataPoints.length) {
-      return const SizedBox.shrink();
-    }
-
-    final point = widget.dataPoints[index];
+  Widget _buildBottomTitle(double value, TitleMeta meta, List<TremorDataPoint> points) {
+    final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
     final timeFormat = DateFormat('HH:mm');
+    
+    // If range > 24h, show date too
+    final range = meta.max - meta.min;
+    final isLongRange = range > 86400000; // 24h in ms
 
     return SideTitleWidget(
       axisSide: meta.axisSide,
+      fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
       child: Text(
-        timeFormat.format(point.timestamp),
+        isLongRange ? DateFormat('MM/dd').format(date) : timeFormat.format(date),
         style: TextStyle(
           color: AppColors.textSecondary,
           fontSize: 10.sp,
@@ -245,14 +308,15 @@ class _TremorChartState extends State<TremorChart> {
     );
   }
 
-  List<LineTooltipItem> _buildTooltipItems(List<LineBarSpot> touchedSpots) {
+  List<LineTooltipItem> _buildTooltipItems(List<LineBarSpot> touchedSpots, List<TremorDataPoint> points) {
     return touchedSpots.map((spot) {
-      final index = spot.x.toInt();
-      if (index < 0 || index >= widget.dataPoints.length) {
-        return LineTooltipItem('', const TextStyle());
-      }
+      final timestamp = spot.x.toInt();
+      // Find closest point
+      final point = points.firstWhere(
+        (p) => p.timestamp.millisecondsSinceEpoch == timestamp,
+        orElse: () => points.first,
+      );
 
-      final point = widget.dataPoints[index];
       final timeFormat = DateFormat('MMM dd, HH:mm');
 
       return LineTooltipItem(

@@ -37,56 +37,59 @@ def generate_tremor_features(is_parkinsonian=False):
         'is_parkinsonian': is_parkinsonian
     }
 
-def generate_recent_hour_data():
-    """Generate data for the last hour with 5-minute intervals."""
+def generate_recent_data():
+    """Generate data for the last 24 hours."""
     now = datetime.utcnow()
     print(f"Current UTC time: {now.isoformat()}")
     
-    # Generate 12 data points (every 5 minutes for 1 hour)
-    num_points = 12
-    interval_minutes = 5
-    
-    print(f"\nGenerating {num_points} data points for patient {PATIENT_ID}")
-    print(f"Time range: {(now - timedelta(hours=1)).isoformat()} to {now.isoformat()}")
-    
     items_written = 0
     
-    for i in range(num_points):
-        # Calculate timestamp (going backwards from now)
-        minutes_ago = (num_points - 1 - i) * interval_minutes
+    # 1. Generate high density data for last 1 hour (every 2 minutes = 30 points)
+    print(f"\nGenerating high density data for last 1 hour...")
+    for i in range(30):
+        minutes_ago = 60 - (i * 2)
         timestamp = now - timedelta(minutes=minutes_ago)
-        
-        # 20% chance of Parkinsonian episode
-        is_parkinsonian = np.random.random() < 0.2
-        
-        features = generate_tremor_features(is_parkinsonian)
-        
-        item = {
-            'patient_id': PATIENT_ID,
-            'timestamp': timestamp.isoformat() + 'Z',  # Primary sort key
-            'tremor_score': features['tremor_score'],
-            'tremor_frequency': features['tremor_frequency'],
-            'tremor_amplitude': features['tremor_amplitude'],
-            'is_parkinsonian': features['is_parkinsonian'],
-            'features': {
-                'rms': features['rms'],
-                'frequency': features['tremor_frequency'],
-                'amplitude': features['tremor_amplitude']
-            }
-        }
-        
-        # Write to DynamoDB
-        analysis_table.put_item(Item=item)
+        _generate_and_write_point(timestamp)
+        items_written += 1
+
+    # 2. Generate lower density data for 1h-24h ago (every 15 minutes = ~92 points)
+    print(f"\nGenerating standard data for last 24 hours...")
+    for i in range(92):
+        minutes_ago = 60 + (i * 15)
+        timestamp = now - timedelta(minutes=minutes_ago)
+        _generate_and_write_point(timestamp)
         items_written += 1
         
-        status = "⚠️ Parkinsonian" if is_parkinsonian else "✓ Normal"
-        print(f"  [{i+1:2d}] {timestamp.strftime('%H:%M:%S')} - Score: {float(features['tremor_score']):5.1f} - {status}")
-    
     print(f"\n✅ Successfully wrote {items_written} records to medusa-tremor-analysis")
-    print(f"\nTo verify, run:")
-    print(f"  flutter run -d windows")
-    print(f"  Login as: kdu9@jh.edu")
-    print(f"  Select: 1H time range")
+
+def _generate_and_write_point(timestamp):
+    # 20% chance of Parkinsonian episode
+    is_parkinsonian = np.random.random() < 0.2
+    features = generate_tremor_features(is_parkinsonian)
+    
+    # Calculate tremor_index (0-1) from score (0-100)
+    tremor_index = float(features['tremor_score']) / 100.0
+    
+    item = {
+        'patient_id': PATIENT_ID,
+        'timestamp': timestamp.isoformat() + 'Z',
+        'analysis_timestamp': int(timestamp.timestamp()), # Add Unix timestamp
+        'tremor_score': features['tremor_score'],
+        'tremor_index': Decimal(str(round(tremor_index, 4))), # Add legacy field
+        'tremor_frequency': features['tremor_frequency'],
+        'tremor_amplitude': features['tremor_amplitude'],
+        'is_parkinsonian': features['is_parkinsonian'],
+        'features': {
+            'rms': features['rms'],
+            'frequency': features['tremor_frequency'],
+            'amplitude': features['tremor_amplitude']
+        }
+    }
+    
+    analysis_table.put_item(Item=item)
+    
+    status = "⚠️" if is_parkinsonian else "✓"
+    print(f"  {timestamp.strftime('%H:%M')} - Score: {float(features['tremor_score']):4.1f} {status}", end='\r')
 
 if __name__ == '__main__':
-    generate_recent_hour_data()
+    generate_recent_data()

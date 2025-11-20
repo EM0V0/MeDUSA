@@ -205,11 +205,15 @@ def lambda_handler(event, context):
         features = processor.process(magnitude_data)
         
         # Prepare analysis result for storage
+        # Use end_timestamp as the analysis timestamp so historical processing is accurate
+        analysis_ts = end_timestamp
+        
         analysis_result = {
             'device_id': device_id,
             'patient_id': items[0].get('patient_id', 'UNASSIGNED'),
             'patient_name': items[0].get('patient_name'),
-            'analysis_timestamp': int(datetime.utcnow().timestamp()),
+            'analysis_timestamp': int(analysis_ts),
+            'timestamp': datetime.utcfromtimestamp(int(analysis_ts)).isoformat() + 'Z', # Add ISO timestamp for querying
             'window_start': start_timestamp,
             'window_end': end_timestamp,
             'sample_count': len(items),
