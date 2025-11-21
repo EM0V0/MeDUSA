@@ -1,5 +1,6 @@
 import os
 from typing import Optional, Dict, Any, List, Tuple
+from decimal import Decimal
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
 
@@ -37,6 +38,7 @@ if not USE_MEMORY:
     T_DEVICES, DEVICES_PK_ATTR, DEVICES_SK_ATTR = _table_with_schema("DDB_TABLE_DEVICES")
     T_PATIENT_PROFILES, PROFILES_PK_ATTR, PROFILES_SK_ATTR = _table_with_schema("DDB_TABLE_PATIENT_PROFILES")
     T_SESSIONS, SESSIONS_PK_ATTR, SESSIONS_SK_ATTR = _table_with_schema("DDB_TABLE_SESSIONS")
+    T_TREMOR_ANALYSIS, TREMOR_PK_ATTR, TREMOR_SK_ATTR = _table_with_schema("DDB_TABLE_TREMOR_ANALYSIS")
 
     USERS_SINGLE_TABLE = _is_pk_sk(USERS_PK_ATTR, USERS_SK_ATTR)
     REFRESH_SINGLE_TABLE = _is_pk_sk(REFRESH_PK_ATTR, REFRESH_SK_ATTR)
@@ -44,6 +46,7 @@ if not USE_MEMORY:
     DEVICES_SINGLE_TABLE = _is_pk_sk(DEVICES_PK_ATTR, DEVICES_SK_ATTR)
     PROFILES_SINGLE_TABLE = _is_pk_sk(PROFILES_PK_ATTR, PROFILES_SK_ATTR)
     SESSIONS_SINGLE_TABLE = _is_pk_sk(SESSIONS_PK_ATTR, SESSIONS_SK_ATTR)
+    TREMOR_SINGLE_TABLE = _is_pk_sk(TREMOR_PK_ATTR, TREMOR_SK_ATTR)
 
     def _user_key(user_id: str) -> Dict[str, str]:
         if USERS_SINGLE_TABLE:
@@ -68,15 +71,18 @@ else:
     _devices: List[Dict[str,Any]] = []
     _patient_profiles: Dict[str, Dict[str,Any]] = {}
     _sessions: Dict[str, Dict[str,Any]] = {}
+    _tremor_analysis: List[Dict[str,Any]] = []
     USERS_SINGLE_TABLE = False
     REFRESH_SINGLE_TABLE = False
     POSES_SINGLE_TABLE = False
     DEVICES_SINGLE_TABLE = False
     PROFILES_SINGLE_TABLE = False
     SESSIONS_SINGLE_TABLE = False
+    TREMOR_SINGLE_TABLE = False
     USERS_PK_ATTR, USERS_SK_ATTR = "id", None
     REFRESH_PK_ATTR, REFRESH_SK_ATTR = "token", None
     POSES_PK_ATTR, POSES_SK_ATTR = "patientId", None
+    TREMOR_PK_ATTR, TREMOR_SK_ATTR = "patient_id", "timestamp"
 
     def _user_key(user_id: str) -> Dict[str,str]:
         return {"id": user_id}
@@ -267,14 +273,19 @@ def get_patient_profile(user_id: str) -> Optional[Dict[str, Any]]:
     return resp.get("Item")
 
 def get_patients_by_doctor(doctor_id: str) -> List[Dict[str, Any]]:
-    """Get all patients for a doctor"""
+    """Get all patients assigned to a doctor"""
     if USE_MEMORY:
         return [p for p in _patient_profiles.values() if p.get("doctorId") == doctor_id]
-    resp = T_PATIENT_PROFILES.query(
-        IndexName="doctorId-index",
-        KeyConditionExpression=Key("doctorId").eq(doctor_id)
-    )
-    return resp.get("Items", [])
+    
+    try:
+        resp = T_PATIENT_PROFILES.query(
+            IndexName="doctorId-index",
+            KeyConditionExpression=Key("doctorId").eq(doctor_id)
+        )
+        return resp.get("Items", [])
+    except Exception as e:
+        print(f"Error querying patients by doctor: {e}")
+        return []
 
 def get_all_patient_profiles() -> List[Dict[str, Any]]:
     """Get all patient profiles (admin only)"""
@@ -334,87 +345,76 @@ def get_session(session_id: str) -> Optional[Dict[str, Any]]:
     """Get session by ID"""
     if USE_MEMORY:
         return _sessions.get(session_id)
-    resp = T_SESSIONS.get_item(Key={"sessionId": session_id})
+    resp = T_SESSIONS.get_item(Key={SESSIONS_PK_ATTR: session_id})
     return resp.get("Item")
 
-def get_active_session_by_device(device_id: str) -> Optional[Dict[str, Any]]:
-    """Get active session for a device"""
+def get_session_by_id(session_id: str) -> Optional[Dict[str,Any]]:
     if USE_MEMORY:
-        for session in _sessions.values():
-            if session.get("deviceId") == device_id and session.get("status") == "active":
-                return session
-        return None
+        return _sessions.get(session_id)
+    resp = T_SESSIONS.get_item(Key={SESSIONS_PK_ATTR: session_id})
+    return resp.get("Item")
+
+from datetime import datetime, timezone
+
+def get_tremor_analysis(patient_id: str, start_time: Optional[int] = None, end_time: Optional[int] = None, limit: int = 100) -> Tuple[List[Dict[str,Any]], int]:
+    """
+    Query tremor analysis data for a patient.
+    Returns (items, count)
+    """
+    if USE_MEMORY:
+        # Simple memory implementation
+        items = [t for t in _tremor_analysis if t.get("patient_id") == patient_id]
+        if start_time:
+            items = [t for t in items if t.get("timestamp", 0) >= start_time]
+        if end_time:
+            items = [t for t in items if t.get("timestamp", 0) <= end_time]
+        items.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+        return items[:limit], len(items)
+
+    key_condition = Key(TREMOR_PK_ATTR).eq(patient_id)
     
-    resp = T_SESSIONS.query(
-        IndexName="deviceId-index",
-        KeyConditionExpression=Key("deviceId").eq(device_id),
-        FilterExpression=Attr("status").eq("active")
-    )
-    items = resp.get("Items", [])
-    return items[0] if items else None
+    # Convert int timestamps to ISO strings for DynamoDB query if needed
+    # The DB stores timestamps as ISO strings (e.g. "2025-11-15T22:17:06.160809Z")
+    if start_time:
+        start_iso = datetime.fromtimestamp(start_time, timezone.utc).isoformat().replace("+00:00", "Z")
+    if end_time:
+        end_iso = datetime.fromtimestamp(end_time, timezone.utc).isoformat().replace("+00:00", "Z")
 
-def get_sessions_by_patient(patient_id: str) -> List[Dict[str, Any]]:
-    """Get all sessions for a patient"""
-    if USE_MEMORY:
-        return [s for s in _sessions.values() if s.get("patientId") == patient_id]
-    resp = T_SESSIONS.query(
-        IndexName="patientId-index",
-        KeyConditionExpression=Key("patientId").eq(patient_id)
-    )
-    return resp.get("Items", [])
-
-def get_sessions_by_device(device_id: str) -> List[Dict[str, Any]]:
-    """Get all sessions for a device"""
-    if USE_MEMORY:
-        return [s for s in _sessions.values() if s.get("deviceId") == device_id]
-    resp = T_SESSIONS.query(
-        IndexName="deviceId-index",
-        KeyConditionExpression=Key("deviceId").eq(device_id)
-    )
-    return resp.get("Items", [])
-
-def get_active_sessions() -> List[Dict[str, Any]]:
-    """Get all active sessions"""
-    if USE_MEMORY:
-        return [s for s in _sessions.values() if s.get("status") == "active"]
-    resp = T_SESSIONS.query(
-        IndexName="status-index",
-        KeyConditionExpression=Key("status").eq("active")
-    )
-    return resp.get("Items", [])
-
-def update_session(session_id: str, updates: Dict[str, Any]) -> None:
-    """Update session fields"""
-    if USE_MEMORY:
-        if session_id in _sessions:
-            _sessions[session_id].update(updates)
-        return
+    if start_time and end_time:
+        key_condition = key_condition & Key(TREMOR_SK_ATTR).between(start_iso, end_iso)
+    elif start_time:
+        key_condition = key_condition & Key(TREMOR_SK_ATTR).gte(start_iso)
     
-    # Build update expression
-    update_expr = "SET "
-    expr_attr_values = {}
-    expr_attr_names = {}
-    
-    for i, (key, value) in enumerate(updates.items()):
-        if i > 0:
-            update_expr += ", "
-        attr_name = f"#attr{i}"
-        attr_value = f":val{i}"
-        update_expr += f"{attr_name} = {attr_value}"
-        expr_attr_names[attr_name] = key
-        expr_attr_values[attr_value] = value
-    
-    T_SESSIONS.update_item(
-        Key={"sessionId": session_id},
-        UpdateExpression=update_expr,
-        ExpressionAttributeNames=expr_attr_names,
-        ExpressionAttributeValues=expr_attr_values
-    )
-
-def delete_session(session_id: str) -> None:
-    """Delete a session"""
-    if USE_MEMORY:
-        if session_id in _sessions:
-            del _sessions[session_id]
-        return
-    T_SESSIONS.delete_item(Key={"sessionId": session_id})
+    # We want latest first, so ScanIndexForward=False
+    try:
+        resp = T_TREMOR_ANALYSIS.query(
+            KeyConditionExpression=key_condition,
+            ScanIndexForward=False,
+            Limit=limit
+        )
+        items = resp.get("Items", [])
+        count = resp.get("Count", 0)
+        
+        # Post-processing
+        for item in items:
+            # Convert Decimals to float/int
+            for k, v in item.items():
+                if isinstance(v, Decimal):
+                    if v % 1 == 0:
+                        item[k] = int(v)
+                    else:
+                        item[k] = float(v)
+            
+            # Convert timestamp string back to int for API response model
+            if "timestamp" in item and isinstance(item["timestamp"], str):
+                try:
+                    # Parse ISO string to timestamp
+                    dt = datetime.fromisoformat(item["timestamp"].replace("Z", "+00:00"))
+                    item["timestamp"] = int(dt.timestamp())
+                except Exception:
+                    pass # Keep as is if parsing fails
+                        
+        return items, count
+    except Exception as e:
+        print(f"Error querying tremor analysis: {e}")
+        return [], 0

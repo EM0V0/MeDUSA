@@ -78,6 +78,7 @@ class AppColors {
 
   // Universal system colors
   static const Color outline = Color(0xFF79747E);
+  static const Color outlineVariant = Color(0xFFCAC4D0);
   static const Color shadow = Color(0xFF000000);
   static const Color surfaceTint = primary;
   static const Color inverseSurface = Color(0xFF313033);

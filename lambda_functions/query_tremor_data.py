@@ -52,6 +52,43 @@ class DecimalEncoder(json.JSONEncoder):
         return super(DecimalEncoder, self).default(obj)
 
 
+def check_authorization(event, target_patient_id):
+    """
+    Verify if the caller is authorized to access the data.
+    """
+    request_context = event.get('requestContext', {})
+    # API Gateway Lambda Authorizer context is usually in 'authorizer'
+    # For custom authorizers, claims are in 'authorizer'
+    authorizer = request_context.get('authorizer', {})
+    
+    if not authorizer:
+        # If no authorizer context is present, it might be a direct invocation or test
+        # In production with API Gateway, this should be populated
+        print("Warning: No authorizer context found.")
+        return True # Or False if you want to be strict
+
+    caller_id = authorizer.get('sub')
+    caller_role = authorizer.get('role')
+    
+    print(f"Authorization check: Caller={caller_id}, Role={caller_role}, Target={target_patient_id}")
+    
+    # 1. Admins and Doctors can access any patient data
+    if caller_role in ['admin', 'doctor', 'nurse']:
+        return True
+        
+    # 2. Patients can only access their own data
+    # Note: We assume patient_id in token matches patient_id in query
+    # You might need to map user_id to patient_id if they differ
+    if caller_role == 'patient':
+        if caller_id == target_patient_id:
+            return True
+        # Also check if caller_id is an email and target is a PAT-ID
+        # This mapping logic depends on your user system
+        
+    print(f"Access denied for user {caller_id} with role {caller_role}")
+    return False
+
+
 def lambda_handler(event, context):
     """
     Query tremor analysis data from DynamoDB.
@@ -84,6 +121,13 @@ def lambda_handler(event, context):
             return create_response(400, {
                 'success': False,
                 'error': 'patient_id is required'
+            })
+            
+        # Authorization Check
+        if not check_authorization(event, patient_id):
+            return create_response(403, {
+                'success': False,
+                'error': 'Access denied: You do not have permission to view this data'
             })
         
         # Build DynamoDB query
@@ -129,11 +173,39 @@ def lambda_handler(event, context):
         if items:
             print(f"Sample item: {json.dumps(items[0], cls=DecimalEncoder)}")
         
+        # Normalize field names to match frontend expectations
+        normalized_items = []
+        for item in items:
+            normalized_item = {
+                'patient_id': item.get('patient_id'),
+                'timestamp': item.get('timestamp'),
+                'device_id': item.get('device_id'),
+                
+                # Normalize field names
+                'rms': item.get('rms_value', item.get('rms', 0)),  # Map rms_value to rms
+                'dominant_frequency': item.get('dominant_frequency', item.get('dominant_freq', 0)),
+                'tremor_power': item.get('tremor_power', 0),
+                'total_power': item.get('total_power', 0),
+                
+                # Handle both tremor_score (0-100) and tremor_index (0-1)
+                'tremor_index': item.get('tremor_index', 0),
+                'tremor_score': item.get('tremor_score', float(item.get('tremor_index', 0)) * 100),
+                
+                'is_parkinsonian': item.get('is_parkinsonian', False),
+                'signal_quality': item.get('signal_quality', 0),
+                
+                # Optional fields
+                'patient_name': item.get('patient_name'),
+                'sample_count': item.get('sample_count'),
+                'sampling_rate': item.get('sampling_rate'),
+            }
+            normalized_items.append(normalized_item)
+        
         # Return success response
         return create_response(200, {
             'success': True,
-            'data': items,
-            'count': len(items),
+            'data': normalized_items,
+            'count': len(normalized_items),
             'has_more': 'LastEvaluatedKey' in response
         })
         

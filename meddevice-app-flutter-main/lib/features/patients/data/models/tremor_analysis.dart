@@ -41,22 +41,30 @@ class TremorAnalysis {
     // tremor_amplitude, features.rms, is_parkinsonian, signal_quality
     final timestamp = _parseTimestamp(json['timestamp']);
     
-    // Extract RMS from features object if it exists
+    // Extract RMS from features object if it exists, or directly from json
     final features = json['features'] as Map<String, dynamic>?;
-    final rmsValue = features != null ? _parseDouble(features['rms']) : _parseDouble(json['rms']);
+    final rmsValue = features != null 
+        ? _parseDouble(features['rms']) 
+        : _parseDouble(json['rms_value'] ?? json['rms']);
     
-    // tremor_score is 0-100, keep it in this range for display
-    // Handle both legacy tremor_index (0-1) and new tremor_score (0-100)
-    double tremorScoreVal = 0.0;
-    if (json['tremor_score'] != null) {
-      tremorScoreVal = _parseDouble(json['tremor_score']);
-    } else if (json['tremor_index'] != null) {
-      final val = _parseDouble(json['tremor_index']);
-      // If value is small (<= 1.0), assume it's a ratio and convert to percentage
-      tremorScoreVal = val <= 1.0 ? val * 100 : val;
+    // Handle both tremor_index (0-1) and tremor_score (0-100)
+    double tremorIndexVal = 0.0;  // This should be 0-1 range
+    double tremorScoreVal = 0.0;  // This should be 0-100 range
+    
+    if (json['tremor_index'] != null) {
+      tremorIndexVal = _parseDouble(json['tremor_index']);
+      // Ensure it's in 0-1 range
+      if (tremorIndexVal > 1.0) {
+        tremorIndexVal = tremorIndexVal / 100.0;
+      }
     }
     
-    final tremorIndex = tremorScoreVal;
+    if (json['tremor_score'] != null) {
+      tremorScoreVal = _parseDouble(json['tremor_score']);
+    } else {
+      // Calculate from tremor_index
+      tremorScoreVal = tremorIndexVal * 100;
+    }
     
     return TremorAnalysis(
       deviceId: json['device_id'] ?? json['deviceId'] ?? '',
@@ -70,7 +78,7 @@ class TremorAnalysis {
       rms: rmsValue,
       dominantFreq: _parseDouble(json['tremor_frequency'] ?? json['dominant_frequency'] ?? json['dominantFreq']),
       tremorPower: _parseDouble(json['tremor_amplitude'] ?? json['tremor_power'] ?? json['tremorPower']),
-      tremorIndex: tremorIndex,
+      tremorIndex: tremorScoreVal,  // Store as 0-100 for backward compatibility with tremorScore getter
       isParkinsonian: json['is_parkinsonian'] ?? json['isParkinsonian'] ?? false,
       processedAt: DateTime.now(),
     );

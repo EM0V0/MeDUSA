@@ -49,8 +49,36 @@ from datetime import datetime
 from boto3.dynamodb.conditions import Key
 import statistics
 
+# Initialize DynamoDB resource
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table('medusa-tremor-analysis')
+
+
+def check_authorization(event, target_patient_id):
+    """
+    Verify if the caller is authorized to access the data.
+    """
+    request_context = event.get('requestContext', {})
+    authorizer = request_context.get('authorizer', {})
+    
+    if not authorizer:
+        print("Warning: No authorizer context found.")
+        return True
+
+    caller_id = authorizer.get('sub')
+    caller_role = authorizer.get('role')
+    
+    print(f"Authorization check: Caller={caller_id}, Role={caller_role}, Target={target_patient_id}")
+    
+    if caller_role in ['admin', 'doctor', 'nurse']:
+        return True
+        
+    if caller_role == 'patient':
+        if caller_id == target_patient_id:
+            return True
+        
+    print(f"Access denied for user {caller_id} with role {caller_role}")
+    return False
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -86,16 +114,8 @@ def classify_severity(tremor_score):
 
 def lambda_handler(event, context):
     """
-    Calculate tremor statistics for a patient over a time period.
-    
-    Args:
-        event: API Gateway event object
-        context: Lambda context object
-        
-    Returns:
-        API Gateway response with statistics
+    Get tremor statistics from DynamoDB.
     """
-    
     print(f"Received event: {json.dumps(event)}")
     
     try:
@@ -108,13 +128,19 @@ def lambda_handler(event, context):
         
         print(f"Query params: patient_id={patient_id}, start_time={start_time}, end_time={end_time}")
         
-        # Validate required parameters
         if not patient_id:
             return create_response(400, {
                 'success': False,
                 'error': 'patient_id is required'
             })
-        
+
+        # Authorization Check
+        if not check_authorization(event, patient_id):
+            return create_response(403, {
+                'success': False,
+                'error': 'Access denied: You do not have permission to view this data'
+            })
+            
         # Build DynamoDB query
         key_condition = Key('patient_id').eq(patient_id)
         

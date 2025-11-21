@@ -6,6 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 import '../../core/constants/app_constants.dart';
 
+/// Function to retrieve the current auth token
+typedef TokenProvider = Future<String?> Function();
+
 /// Medical-grade secure network service - TLS 1.3 enforced
 /// Compliant with FDA medical device network security guidelines and HIPAA requirements
 class SecureNetworkService {
@@ -29,8 +32,11 @@ class SecureNetworkService {
 
   late Dio _dio;
   final String? _customBaseUrl;
+  final TokenProvider? _tokenProvider;
   
-  SecureNetworkService({String? baseUrl}) : _customBaseUrl = baseUrl {
+  SecureNetworkService({String? baseUrl, TokenProvider? tokenProvider}) 
+      : _customBaseUrl = baseUrl,
+        _tokenProvider = tokenProvider {
     _dio = _createSecureDio();
   }
 
@@ -99,7 +105,19 @@ class SecureNetworkService {
   void _addSecurityInterceptors(Dio dio) {
     dio.interceptors.add(
       InterceptorsWrapper(
-        onRequest: (options, handler) {
+        onRequest: (options, handler) async {
+          // Inject Auth Token if provider is available
+          if (_tokenProvider != null) {
+            try {
+              final token = await _tokenProvider!();
+              if (token != null && token.isNotEmpty) {
+                options.headers['Authorization'] = 'Bearer $token';
+              }
+            } catch (e) {
+              debugPrint('$_tag: Failed to get token: $e');
+            }
+          }
+
           // Ensure all requests use HTTPS (only check if not already https)
           if (!options.uri.scheme.startsWith('https') && !options.uri.scheme.startsWith('http')) {
             final error = DioException(

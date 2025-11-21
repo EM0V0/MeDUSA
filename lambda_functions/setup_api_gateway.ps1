@@ -6,6 +6,7 @@ param(
     [string]$ApiName = "MeDUSA-Tremor-API",
     [string]$QueryLambdaName = "QueryTremorData",
     [string]$StatsLambdaName = "GetTremorStatistics",
+    [string]$AuthorizerLambdaName = "MedusaAuthorizer",
     [string]$StageName = "Prod",
     [string]$Region = "us-east-1",
     [switch]$Help
@@ -21,6 +22,7 @@ Options:
     -ApiName <name>           API name (default: MeDUSA-Tremor-API)
     -QueryLambdaName <name>   Query Lambda function (default: QueryTremorData)
     -StatsLambdaName <name>   Statistics Lambda function (default: GetTremorStatistics)
+    -AuthorizerLambdaName <name> Authorizer Lambda function (default: MedusaAuthorizer)
     -StageName <stage>        Deployment stage (default: Prod)
     -Region <region>          AWS region (default: us-east-1)
     -Help                     Show this help message
@@ -67,6 +69,16 @@ try {
     exit 1
 }
 
+try {
+    $authLambdaInfo = aws lambda get-function --function-name $AuthorizerLambdaName --region $Region --output json | ConvertFrom-Json
+    $AuthorizerLambdaArn = $authLambdaInfo.Configuration.FunctionArn
+    Write-Host "✓ Authorizer Lambda found: $AuthorizerLambdaArn" -ForegroundColor Green
+} catch {
+    Write-Host "✗ Authorizer Lambda not found: $AuthorizerLambdaName" -ForegroundColor Red
+    Write-Host "  Please deploy Lambda first: .\deploy_authorizer.ps1" -ForegroundColor Yellow
+    exit 1
+}
+
 # Check if API already exists
 Write-Host "[3/12] Checking for existing API..." -ForegroundColor Yellow
 $existingApis = aws apigateway get-rest-apis --region $Region --output json | ConvertFrom-Json
@@ -98,6 +110,22 @@ $apiResult = aws apigateway create-rest-api `
 
 $ApiId = $apiResult.id
 Write-Host "✓ API created: $ApiId" -ForegroundColor Green
+
+# Create Authorizer
+Write-Host "[4.5/12] Creating API Gateway Authorizer..." -ForegroundColor Yellow
+$authorizerUri = "arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${AuthorizerLambdaArn}/invocations"
+
+$authorizer = aws apigateway create-authorizer `
+    --rest-api-id $ApiId `
+    --name "MedusaJWTAuthorizer" `
+    --type TOKEN `
+    --authorizer-uri $authorizerUri `
+    --identity-source "method.request.header.Authorization" `
+    --region $Region `
+    --output json | ConvertFrom-Json
+
+$AuthorizerId = $authorizer.id
+Write-Host "✓ Authorizer created: $AuthorizerId" -ForegroundColor Green
 
 # Get root resource ID
 Write-Host "[5/12] Getting root resource..." -ForegroundColor Yellow
@@ -160,7 +188,8 @@ aws apigateway put-method `
     --rest-api-id $ApiId `
     --resource-id $AnalysisResourceId `
     --http-method GET `
-    --authorization-type NONE `
+    --authorization-type CUSTOM `
+    --authorizer-id $AuthorizerId `
     --request-parameters "method.request.querystring.patient_id=true,method.request.querystring.device_id=false,method.request.querystring.start_time=false,method.request.querystring.end_time=false,method.request.querystring.limit=false" `
     --region $Region | Out-Null
 
@@ -172,7 +201,8 @@ aws apigateway put-method `
     --rest-api-id $ApiId `
     --resource-id $StatisticsResourceId `
     --http-method GET `
-    --authorization-type NONE `
+    --authorization-type CUSTOM `
+    --authorizer-id $AuthorizerId `
     --request-parameters "method.request.querystring.patient_id=true,method.request.querystring.start_time=false,method.request.querystring.end_time=false" `
     --region $Region | Out-Null
 
@@ -212,6 +242,22 @@ Write-Host "✓ Statistics Lambda integration configured" -ForegroundColor Green
 
 # Grant API Gateway permission to invoke Lambda functions
 Write-Host "[11/12] Granting API Gateway permissions..." -ForegroundColor Yellow
+
+$authorizerSourceArn = "arn:aws:execute-api:${Region}:${AccountId}:${ApiId}/authorizers/${AuthorizerId}"
+
+try {
+    aws lambda add-permission `
+        --function-name $AuthorizerLambdaName `
+        --statement-id "apigateway-authorizer-$ApiId" `
+        --action lambda:InvokeFunction `
+        --principal apigateway.amazonaws.com `
+        --source-arn $authorizerSourceArn `
+        --region $Region 2>&1 | Out-Null
+    
+    Write-Host "✓ Permission granted for Authorizer Lambda" -ForegroundColor Green
+} catch {
+    Write-Host "⚠ Permission may already exist for Authorizer Lambda" -ForegroundColor Yellow
+}
 
 $analysisSourceArn = "arn:aws:execute-api:${Region}:${AccountId}:${ApiId}/*/GET/api/v1/tremor/analysis"
 $statisticsSourceArn = "arn:aws:execute-api:${Region}:${AccountId}:${ApiId}/*/GET/api/v1/tremor/statistics"

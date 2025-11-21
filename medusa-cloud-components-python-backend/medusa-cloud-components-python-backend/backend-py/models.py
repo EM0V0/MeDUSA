@@ -135,6 +135,11 @@ class DeviceUpdateReq(BaseModel):
     status: Optional[str] = None
     firmwareVersion: Optional[str] = None
 
+class DeviceBindReq(BaseModel):
+    """Bind device request"""
+    deviceId: str
+    patientId: str
+
 class Device(BaseModel):
     """Device model"""
     id: str
@@ -271,3 +276,44 @@ class SessionPage(BaseModel):
     """Session list response"""
     items: List[SessionWithDetails]
     nextToken: Optional[str] = None
+
+# ========================================
+# Tremor Analysis Models
+# ========================================
+
+class TremorDataPoint(BaseModel):
+    patient_id: str
+    timestamp: int
+    device_id: Optional[str] = None
+    tremor_index: Optional[float] = None
+    dominant_frequency: Optional[float] = None
+    is_parkinsonian: Optional[bool] = None
+    rms_value: Optional[float] = None
+    signal_quality: Optional[float] = None
+    tremor_power: Optional[float] = None
+    total_power: Optional[float] = None
+
+class TremorResponse(BaseModel):
+    success: bool
+    data: List[TremorDataPoint]
+    count: int
+
+# ========================================
+# Doctor Models
+# ========================================
+
+class AssignPatientReq(BaseModel):
+    doctor_id: str
+    patient_email: str
+
+class DoctorPatientItem(BaseModel):
+    patient_id: str
+    email: str
+    name: Optional[str] = None
+    assigned_at: Optional[str] = None
+    status: Optional[str] = None
+
+class DoctorPatientsRes(BaseModel):
+    success: bool
+    patients: List[DoctorPatientItem]
+    count: int

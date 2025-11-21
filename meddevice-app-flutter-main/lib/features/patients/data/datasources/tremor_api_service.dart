@@ -2,7 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/di/service_locator.dart';
 import '../../../../shared/services/secure_network_service.dart';
+import '../../../auth/data/datasources/auth_local_data_source.dart';
 import '../models/tremor_analysis.dart';
 
 /// API service for fetching tremor analysis data from AWS
@@ -11,7 +13,17 @@ class TremorApiService {
   final SecureNetworkService _networkService;
 
   TremorApiService({SecureNetworkService? networkService})
-      : _networkService = networkService ?? SecureNetworkService(baseUrl: AppConstants.tremorApiUrl);
+      : _networkService = networkService ?? SecureNetworkService(
+          baseUrl: AppConstants.tremorApiUrl,
+          tokenProvider: () async {
+            try {
+              return await serviceLocator.get<AuthLocalDataSource>().getToken();
+            } catch (e) {
+              debugPrint('$_tag: Error getting token: $e');
+              return null;
+            }
+          },
+        );
 
   /// Get tremor analysis data for a specific patient
   /// 

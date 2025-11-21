@@ -26,6 +26,7 @@ Globals:
         DDB_TABLE_DEVICES: !Ref DevicesTable
         DDB_TABLE_PATIENT_PROFILES: !Ref PatientProfilesTable
         DDB_TABLE_SESSIONS: !Ref SessionsTable
+        DDB_TABLE_TREMOR_ANALYSIS: medusa-tremor-analysis
         
         # Storage Configuration
         S3_BUCKET: !Ref DataBucket
@@ -64,6 +65,15 @@ Resources:
             TableName: !Ref PatientProfilesTable
         - DynamoDBCrudPolicy:
             TableName: !Ref SessionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/medusa-tremor-analysis"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/medusa-tremor-analysis/index/*"
         # S3 访问权限
         - S3CrudPolicy:
             BucketName: !Ref DataBucket
@@ -344,6 +354,42 @@ Resources:
           Value: MeDUSA
         - Key: Version
           Value: v3
+
+  # Process Sensor Data Function
+  ProcessSensorDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: medusa-process-sensor-data
+      CodeUri: process-data-lambda/
+      Handler: process_sensor_data.lambda_handler
+      Description: Process sensor data to extract tremor features
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/medusa-sensor-data"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/medusa-sensor-data/index/*"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/medusa-tremor-analysis"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/medusa-tremor-analysis/index/*"
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DevicesTable
+      Events:
+        SensorDataStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/medusa-sensor-data/stream/2025-11-20T22:20:04.644"
+            StartingPosition: LATEST
+            BatchSize: 100
+            MaximumBatchingWindowInSeconds: 10
+            Enabled: True
+
 
 Outputs:
   # API Gateway URL

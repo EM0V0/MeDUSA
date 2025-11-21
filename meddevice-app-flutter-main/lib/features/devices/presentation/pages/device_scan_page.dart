@@ -4,15 +4,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as flutter_blue_plus;
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
+import '../../../../core/di/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
 import '../../../../shared/services/bluetooth_service.dart' show MedicalBluetoothService;
+import '../../../../shared/services/network_service.dart';
 import '../../../../shared/services/winble_wifi_helper_service.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class DeviceScanPage extends StatefulWidget {
   const DeviceScanPage({super.key});
@@ -950,6 +954,29 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
 
     try {
       final success = await _bluetoothService.connectToDevice(device);
+      
+      if (success) {
+        // Bind device to patient in backend
+        try {
+          final authState = context.read<AuthBloc>().state;
+          if (authState is AuthAuthenticated) {
+            final userId = authState.user.id;
+            final networkService = ServiceLocator().get<NetworkService>();
+            
+            await networkService.post(
+              '/devices/bind',
+              data: {
+                'deviceId': device.remoteId.toString(),
+                'patientId': userId,
+              },
+            );
+            debugPrint('Device bound to patient successfully');
+          }
+        } catch (e) {
+          debugPrint('Failed to bind device: $e');
+          // We don't stop the flow here, as bluetooth connection is successful
+        }
+      }
       
       if (mounted) {
         // Close dialog using root navigator to avoid GoRouter issues

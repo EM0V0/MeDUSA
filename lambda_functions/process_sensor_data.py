@@ -10,6 +10,7 @@ from scipy.fft import rfft, rfftfreq
 dynamodb = boto3.resource('dynamodb')
 sensor_table = dynamodb.Table('medusa-sensor-data')
 results_table = dynamodb.Table('medusa-tremor-analysis')  # Store analysis results
+devices_table = dynamodb.Table('medusa-devices-prod')     # Device registry for ownership lookup
 
 
 class ButterworthLowPass:
@@ -137,13 +138,24 @@ def lambda_handler(event, context):
     if not device_id:
         return {'statusCode': 400, 'body': 'Missing device_id'}
     
+    # Lookup patient_id from device registry if not provided
+    # This ensures data is correctly attributed to the current owner
+    if not patient_id or patient_id == "UNASSIGNED":
+        try:
+            device_record = devices_table.get_item(Key={'id': device_id})
+            if 'Item' in device_record:
+                patient_id = device_record['Item'].get('patientId')
+                print(f"Resolved patient_id {patient_id} for device {device_id}")
+        except Exception as e:
+            print(f"Error looking up device owner: {e}")
+
     # Time range (default: last 5 minutes)
     now = int(datetime.utcnow().timestamp())
     end_timestamp = event.get('end_timestamp', now)
     start_timestamp = event.get('start_timestamp', now - 300)  # 5 min window
     
     try:
-        # Query sensor data from DynamoDB
+        # Prepare query parameters
         query_params = {
             'KeyConditionExpression': 'device_id = :did AND #ts BETWEEN :start AND :end',
             'ExpressionAttributeNames': {
@@ -157,10 +169,9 @@ def lambda_handler(event, context):
             'ScanIndexForward': True  # Oldest first for time series
         }
         
-        # Add patient filter if specified
-        if patient_id and patient_id != "UNASSIGNED":
-            query_params['FilterExpression'] = 'patient_id = :pid'
-            query_params['ExpressionAttributeValues'][':pid'] = patient_id
+        # DON'T filter by patient_id in sensor data since it may be outdated
+        # We use the patient_id from device registry (resolved above) for the analysis result
+        # This allows us to process old sensor data with incorrect patient_ids
         
         response = sensor_table.query(**query_params)
         items = response['Items']
@@ -185,14 +196,31 @@ def lambda_handler(event, context):
         items = decimal_to_float(items)
         
         # Extract accelerometer magnitude time series
-        # Use pre-calculated magnitude if available, otherwise calculate from x,y,z
-        if 'magnitude' in items[0]:
-            magnitude_data = np.array([item['magnitude'] for item in items])
-        else:
-            accel_x = np.array([item['accel_x'] for item in items])
-            accel_y = np.array([item['accel_y'] for item in items])
-            accel_z = np.array([item['accel_z'] for item in items])
-            magnitude_data = np.sqrt(accel_x**2 + accel_y**2 + accel_z**2)
+        # Data format: accelerometer_x/y/z are Lists of values
+        magnitude_data = []
+        
+        for item in items:
+            x_vals = item.get('accelerometer_x', [])
+            y_vals = item.get('accelerometer_y', [])
+            z_vals = item.get('accelerometer_z', [])
+            
+            # Calculate magnitude for each sample in this record
+            if x_vals and y_vals and z_vals:
+                for x, y, z in zip(x_vals, y_vals, z_vals):
+                    mag = np.sqrt(x**2 + y**2 + z**2)
+                    magnitude_data.append(mag)
+        
+        magnitude_data = np.array(magnitude_data)
+        
+        if len(magnitude_data) < window_size:
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'status': 'insufficient_data',
+                    'message': f'Only {len(magnitude_data)} samples found, need {window_size}',
+                    'device_id': device_id
+                })
+            }
         
         # Initialize tremor processor
         processor = TremorProcessor(
@@ -208,9 +236,12 @@ def lambda_handler(event, context):
         # Use end_timestamp as the analysis timestamp so historical processing is accurate
         analysis_ts = end_timestamp
         
+        # Use the resolved patient_id, fallback to item's patient_id, then UNASSIGNED
+        final_patient_id = patient_id if patient_id else items[0].get('patient_id', 'UNASSIGNED')
+        
         analysis_result = {
             'device_id': device_id,
-            'patient_id': items[0].get('patient_id', 'UNASSIGNED'),
+            'patient_id': final_patient_id,
             'patient_name': items[0].get('patient_name'),
             'analysis_timestamp': int(analysis_ts),
             'timestamp': datetime.utcfromtimestamp(int(analysis_ts)).isoformat() + 'Z', # Add ISO timestamp for querying

@@ -207,7 +207,7 @@ class AppConstants {
   static const String _generalApiBaseUrl = 'https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod';
   
   // Tremor API - Tremor Analysis and Statistics (specialized endpoint)
-  static const String _tremorApiBaseUrl = 'https://buektgcf8l.execute-api.us-east-1.amazonaws.com/Prod';
+  static const String _tremorApiBaseUrl = 'https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod';
   
   // Use General API as default base URL for authentication and general endpoints
   static String get baseUrl {

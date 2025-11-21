@@ -6,6 +6,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/datasources/tremor_api_service.dart';
 import '../../data/models/tremor_analysis.dart';
+import '../widgets/realtime_tremor_chart.dart';
 import '../widgets/tremor_chart.dart';
 
 class PatientDetailPage extends StatefulWidget {
@@ -38,7 +39,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadTremorData();
   }
 
@@ -84,7 +85,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> with SingleTicker
         patientId: widget.patientId,
         startTime: startTime,
         endTime: now,
-        limit: 500,
+        limit: 1000, // Increased limit for better resampling
       );
 
       if (mounted) {
@@ -166,6 +167,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> with SingleTicker
           controller: _tabController,
           tabs: const [
             Tab(text: 'Overview', icon: Icon(Icons.dashboard)),
+            Tab(text: 'Realtime', icon: Icon(Icons.monitor_heart)),
             Tab(text: 'Chart', icon: Icon(Icons.show_chart)),
             Tab(text: 'Statistics', icon: Icon(Icons.analytics)),
           ],
@@ -179,10 +181,25 @@ class _PatientDetailPageState extends State<PatientDetailPage> with SingleTicker
                   controller: _tabController,
                   children: [
                     _buildOverviewTab(),
+                    _buildRealtimeTab(),
                     _buildChartTab(),
                     _buildStatisticsTab(),
                   ],
                 ),
+    );
+  }
+
+  Widget _buildRealtimeTab() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(AppConstants.defaultPadding.w),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RealtimeTremorChart(
+            patientId: widget.patientId,
+          ),
+        ],
+      ),
     );
   }
 
@@ -213,7 +230,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> with SingleTicker
           _buildTimeRangeSelector(),
           SizedBox(height: 16.h),
           TremorChart(
-            dataPoints: _tremorData
+            dataPoints: _resampleData(_tremorData, 80)
                 .map((analysis) => TremorDataPoint.fromAnalysis(analysis))
                 .toList(),
             showParkinsonianMarkers: true,
@@ -223,6 +240,22 @@ class _PatientDetailPageState extends State<PatientDetailPage> with SingleTicker
         ],
       ),
     );
+  }
+
+  // Helper to resample data to a target number of points
+  List<TremorAnalysis> _resampleData(List<TremorAnalysis> data, int targetPoints) {
+    if (data.length <= targetPoints) return data;
+
+    final step = data.length / targetPoints;
+    final resampled = <TremorAnalysis>[];
+
+    for (var i = 0; i < targetPoints; i++) {
+      final index = (i * step).round();
+      if (index < data.length) {
+        resampled.add(data[index]);
+      }
+    }
+    return resampled;
   }
 
   Widget _buildStatisticsTab() {

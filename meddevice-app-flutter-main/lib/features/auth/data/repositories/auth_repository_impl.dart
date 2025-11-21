@@ -24,6 +24,11 @@ class AuthRepositoryImpl implements AuthRepository {
       // Attempt remote login
       final user = await remoteDataSource.login(email, password);
       
+      // Save token if present
+      if (user.token != null) {
+        await localDataSource.saveToken(user.token!);
+      }
+      
       // Cache user data locally
       await localDataSource.cacheUser(user);
       
@@ -38,6 +43,11 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       // Attempt remote registration
       final user = await remoteDataSource.register(name, email, password, role);
+      
+      // Save token if present
+      if (user.token != null) {
+        await localDataSource.saveToken(user.token!);
+      }
       
       // Cache user data locally
       await localDataSource.cacheUser(user);

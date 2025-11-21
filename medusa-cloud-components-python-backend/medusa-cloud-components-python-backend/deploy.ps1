@@ -25,8 +25,11 @@ try {
 }
 
 Write-Host ""
+Write-Host "🧹 Cleaning previous build..." -ForegroundColor Cyan
+if (Test-Path ".aws-sam") { Remove-Item -Recurse -Force ".aws-sam" }
+
 Write-Host "📦 Building SAM application..." -ForegroundColor Cyan
-sam build
+sam build --use-container
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Build failed" -ForegroundColor Red
@@ -35,7 +38,12 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host "🚀 Deploying to AWS..." -ForegroundColor Cyan
-sam deploy --guided
+# Use non-interactive deploy if config exists
+if (Test-Path "samconfig.toml") {
+    sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+} else {
+    sam deploy --guided
+}
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host ""

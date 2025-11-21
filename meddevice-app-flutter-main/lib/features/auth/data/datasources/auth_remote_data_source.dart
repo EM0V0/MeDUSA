@@ -54,7 +54,9 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       final userData = responseData['user'] as Map<String, dynamic>;
       print('Extracted user data: $userData');
       
-      return User.fromJson(userData);
+      // Create user object and attach token
+      final user = User.fromJson(userData);
+      return user.copyWith(token: responseData['accessJwt']);
     } on DioException catch (e) {
       // Handle specific HTTP error codes
       if (e.response?.statusCode == 401) {
@@ -98,13 +100,18 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       // final refreshToken = responseData['refreshToken'];
       
       // API v3: Returns userId only, not full user object
-      // Create User object with provided information
-      return User(
-        id: responseData['userId'] ?? '',
+      // We need to construct the user object manually or fetch it
+      final userId = responseData['userId'];
+      
+      final user = User(
+        id: userId,
         email: email,
-        name: name,
-        role: role.toLowerCase(),
+        name: name, // We don't have name in response, use input
+        role: role,
+        token: responseData['accessJwt'],
       );
+      
+      return user;
     } on DioException catch (e) {
       // Handle specific HTTP error codes
       if (e.response?.statusCode == 409) {
