@@ -831,7 +831,7 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
             child: TremorChart(
               dataPoints: _tremorData.map((t) => TremorDataPoint(
                 timestamp: t.analysisTimestamp,
-                tremorScore: t.tremorIndex,
+                tremorScore: t.tremorScore,
                 isParkinsonian: t.isParkinsonian,
               )).toList(),
               title: 'Tremor Activity - $_selectedPatientName',
@@ -885,7 +885,7 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Tremor Index: ${data.tremorIndex.toStringAsFixed(2)}',
+                          'Tremor Score: ${data.tremorScore.toStringAsFixed(1)}',
                           style: FontUtils.body(
                             context: context,
                             fontWeight: FontWeight.w600,

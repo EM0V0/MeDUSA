@@ -7,6 +7,14 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/datasources/tremor_api_service.dart';
 import '../../data/models/tremor_analysis.dart';
+import 'tremor_chart.dart';
+
+enum TimeRange {
+  oneMinute,
+  oneHour,
+  twentyFourHours,
+  sevenDays,
+}
 
 class RealtimeTremorChart extends StatefulWidget {
   final String patientId;
@@ -24,10 +32,11 @@ class RealtimeTremorChart extends StatefulWidget {
 
 class _RealtimeTremorChartState extends State<RealtimeTremorChart> {
   final TremorApiService _apiService = TremorApiService();
-  final List<TremorDataPoint> _dataPoints = [];
+  List<TremorDataPoint> _dataPoints = [];
   Timer? _timer;
   bool _isPaused = false;
-  static const int _maxDataPoints = 60; // Show last 60 seconds
+  TimeRange _selectedRange = TimeRange.oneMinute;
+  static const int _maxDataPoints = 80;
 
   @override
   void initState() {
@@ -42,12 +51,23 @@ class _RealtimeTremorChartState extends State<RealtimeTremorChart> {
   }
 
   void _startPolling() {
-    // Poll every 1 second
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!_isPaused) {
-        _fetchLatestData();
-      }
-    });
+    _timer?.cancel();
+    // Poll every 1 second for 1-minute view
+    if (_selectedRange == TimeRange.oneMinute) {
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!_isPaused) {
+          _fetchLatestData();
+        }
+      });
+    } else {
+      // For other ranges, fetch once (or poll less frequently, e.g. every minute)
+      _fetchHistoricalData();
+      _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
+        if (!_isPaused) {
+          _fetchHistoricalData();
+        }
+      });
+    }
   }
 
   Future<void> _fetchLatestData() async {
@@ -80,6 +100,76 @@ class _RealtimeTremorChartState extends State<RealtimeTremorChart> {
     }
   }
 
+  Future<void> _fetchHistoricalData() async {
+    try {
+      DateTime startTime;
+      final now = DateTime.now();
+      
+      switch (_selectedRange) {
+        case TimeRange.oneHour:
+          startTime = now.subtract(const Duration(hours: 1));
+          break;
+        case TimeRange.twentyFourHours:
+          startTime = now.subtract(const Duration(hours: 24));
+          break;
+        case TimeRange.sevenDays:
+          startTime = now.subtract(const Duration(days: 7));
+          break;
+        default:
+          startTime = now.subtract(const Duration(minutes: 1));
+      }
+
+      final data = await _apiService.getPatientTremorData(
+        patientId: widget.patientId,
+        deviceId: widget.deviceId,
+        startTime: startTime,
+        endTime: now,
+        limit: 2000, // Fetch more data to cover the time range
+      );
+
+      if (mounted) {
+        setState(() {
+          _dataPoints = data
+              .map((a) => TremorDataPoint.fromAnalysis(a))
+              .toList()
+              .reversed // API returns newest first, we want oldest first for chart
+              .toList();
+          
+          // No need to downsample here, TremorChart handles it
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching historical data: $e');
+    }
+  }
+
+  void _onRangeSelected(TimeRange range) {
+    setState(() {
+      _selectedRange = range;
+      _dataPoints.clear();
+    });
+    _startPolling();
+  }
+
+  Color _getColorForValue(double value) {
+    if (value > 70) return Colors.red;
+    if (value < 30) return Colors.blue;
+    return Colors.yellow;
+  }
+
+  int? _getFixedRangeMs() {
+    switch (_selectedRange) {
+      case TimeRange.oneMinute:
+        return 60 * 1000;
+      case TimeRange.oneHour:
+        return 60 * 60 * 1000;
+      case TimeRange.twentyFourHours:
+        return 24 * 60 * 60 * 1000;
+      case TimeRange.sevenDays:
+        return 7 * 24 * 60 * 60 * 1000;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -99,7 +189,7 @@ class _RealtimeTremorChartState extends State<RealtimeTremorChart> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Real-time Tremor Monitor',
+                      'Tremor Monitor',
                       style: TextStyle(
                         fontSize: 16.sp,
                         fontWeight: FontWeight.bold,
@@ -107,7 +197,9 @@ class _RealtimeTremorChartState extends State<RealtimeTremorChart> {
                       ),
                     ),
                     Text(
-                      'Updates every second',
+                      _selectedRange == TimeRange.oneMinute 
+                          ? 'Real-time updates' 
+                          : 'Historical data',
                       style: TextStyle(
                         fontSize: 12.sp,
                         color: AppColors.textSecondary,
@@ -115,98 +207,55 @@ class _RealtimeTremorChartState extends State<RealtimeTremorChart> {
                     ),
                   ],
                 ),
-                IconButton(
-                  icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
-                  onPressed: () {
-                    setState(() {
-                      _isPaused = !_isPaused;
-                    });
+                // Time Range Selector
+                DropdownButton<TimeRange>(
+                  value: _selectedRange,
+                  underline: Container(),
+                  items: const [
+                    DropdownMenuItem(
+                      value: TimeRange.oneMinute,
+                      child: Text('1 Min'),
+                    ),
+                    DropdownMenuItem(
+                      value: TimeRange.oneHour,
+                      child: Text('1 Hour'),
+                    ),
+                    DropdownMenuItem(
+                      value: TimeRange.twentyFourHours,
+                      child: Text('24 Hours'),
+                    ),
+                    DropdownMenuItem(
+                      value: TimeRange.sevenDays,
+                      child: Text('7 Days'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) _onRangeSelected(value);
                   },
                 ),
               ],
             ),
             SizedBox(height: 24.h),
-            SizedBox(
-              height: 200.h,
-              child: _dataPoints.isEmpty
-                  ? const Center(child: Text('Waiting for data...'))
-                  : LineChart(
-                      LineChartData(
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: false,
-                          horizontalInterval: 20,
-                          getDrawingHorizontalLine: (value) {
-                            return FlLine(
-                              color: AppColors.divider,
-                              strokeWidth: 1,
-                            );
-                          },
-                        ),
-                        titlesData: FlTitlesData(
-                          show: true,
-                          rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          bottomTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              interval: 20,
-                              getTitlesWidget: (value, meta) {
-                                return Text(
-                                  value.toInt().toString(),
-                                  style: TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 10.sp,
-                                  ),
-                                );
-                              },
-                              reservedSize: 30,
-                            ),
-                          ),
-                        ),
-                        borderData: FlBorderData(show: false),
-                        minX: 0,
-                        maxX: _maxDataPoints.toDouble(),
-                        minY: 0,
-                        maxY: 100,
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: _dataPoints
-                                .asMap()
-                                .entries
-                                .map((e) => FlSpot(e.key.toDouble(), e.value.tremorScore))
-                                .toList(),
-                            isCurved: true,
-                            color: AppColors.primary,
-                            barWidth: 3,
-                            isStrokeCapRound: true,
-                            dotData: const FlDotData(show: false),
-                            belowBarData: BarAreaData(
-                              show: true,
-                              color: AppColors.primary.withOpacity(0.1),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+            
+            // Use TremorChart widget instead of custom LineChart
+            TremorChart(
+              dataPoints: _dataPoints,
+              title: '', // Title is handled outside
+              fixedXRangeMs: _getFixedRangeMs(),
+              showParkinsonianMarkers: true,
+              enableZoom: false, // Disable zoom inside this card
             ),
+            
             SizedBox(height: 16.h),
             if (_dataPoints.isNotEmpty)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
                   _buildMetric('Current', _dataPoints.last.tremorScore.toStringAsFixed(1)),
-                  _buildMetric('Peak (1m)', 
+                  _buildMetric('Peak', 
                     _dataPoints.map((e) => e.tremorScore).reduce((a, b) => a > b ? a : b).toStringAsFixed(1)
                   ),
-                  _buildMetric('Avg (1m)', 
+                  _buildMetric('Avg', 
                     (_dataPoints.map((e) => e.tremorScore).reduce((a, b) => a + b) / _dataPoints.length).toStringAsFixed(1)
                   ),
                 ],

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'; // Import for debugPrint
+
 /// Tremor analysis data model
 /// Represents processed tremor data from AWS Lambda and DynamoDB
 class TremorAnalysis {
@@ -47,9 +49,10 @@ class TremorAnalysis {
         ? _parseDouble(features['rms']) 
         : _parseDouble(json['rms_value'] ?? json['rms']);
     
-    // Handle both tremor_index (0-1) and tremor_score (0-100)
-    double tremorIndexVal = 0.0;  // This should be 0-1 range
-    double tremorScoreVal = 0.0;  // This should be 0-100 range
+    // Handle tremor_index (0-1)
+    // We expect the API to return tremor_index in 0-1 range.
+    // If it returns > 1 (legacy data), we normalize it.
+    double tremorIndexVal = 0.0;
     
     if (json['tremor_index'] != null) {
       tremorIndexVal = _parseDouble(json['tremor_index']);
@@ -57,13 +60,15 @@ class TremorAnalysis {
       if (tremorIndexVal > 1.0) {
         tremorIndexVal = tremorIndexVal / 100.0;
       }
+    } else if (json['tremor_score'] != null) {
+      // Fallback for legacy API responses that might only have score
+      tremorIndexVal = _parseDouble(json['tremor_score']) / 100.0;
     }
-    
-    if (json['tremor_score'] != null) {
-      tremorScoreVal = _parseDouble(json['tremor_score']);
-    } else {
-      // Calculate from tremor_index
-      tremorScoreVal = tremorIndexVal * 100;
+
+    // DEBUG LOGGING
+    if (json['tremor_index'] != null || json['tremor_score'] != null) {
+      final score = (tremorIndexVal * 100).clamp(0.0, 100.0);
+      debugPrint('TremorAnalysis Debug: ID=${json['patient_id']}, RawIndex=${json['tremor_index']}, RawScore=${json['tremor_score']}, ParsedIndex=$tremorIndexVal, CalcScore=$score');
     }
     
     return TremorAnalysis(
@@ -78,7 +83,7 @@ class TremorAnalysis {
       rms: rmsValue,
       dominantFreq: _parseDouble(json['tremor_frequency'] ?? json['dominant_frequency'] ?? json['dominantFreq']),
       tremorPower: _parseDouble(json['tremor_amplitude'] ?? json['tremor_power'] ?? json['tremorPower']),
-      tremorIndex: tremorScoreVal,  // Store as 0-100 for backward compatibility with tremorScore getter
+      tremorIndex: tremorIndexVal,  // Store as 0-1
       isParkinsonian: json['is_parkinsonian'] ?? json['isParkinsonian'] ?? false,
       processedAt: DateTime.now(),
     );
@@ -130,10 +135,10 @@ class TremorAnalysis {
     return 'Very Severe';
   }
 
-  /// Get tremor score (0-10 scale)
+  /// Get tremor score (0-100 scale)
   double get tremorScore {
-    // Convert tremor index (0-1) to score (0-10)
-    return (tremorIndex * 10).clamp(0.0, 10.0);
+    // Convert tremor index (0-1) to score (0-100)
+    return (tremorIndex * 100).clamp(0.0, 100.0);
   }
 }
 

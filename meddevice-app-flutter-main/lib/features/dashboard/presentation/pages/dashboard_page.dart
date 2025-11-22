@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -24,14 +25,15 @@ class _DashboardPageState extends State<DashboardPage> {
   
   String? _patientId;  // Will be set from authenticated user
   String _patientName = 'Patient';  // Will be updated from authenticated user
-  String _selectedTimeRange = '1h';
+  String _selectedTimeRange = '1m';
   
   bool _isLoading = false;
   String? _error;
   List<TremorAnalysis> _tremorData = [];
   Map<String, dynamic>? _statistics;
+  Timer? _pollingTimer;
 
-  final List<String> _timeRanges = ['1h', '24h', '7d'];
+  final List<String> _timeRanges = ['1m', '1h', '24h', '7d'];
 
   @override
   void initState() {
@@ -41,15 +43,67 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Load patient data when patient_id is available
     if (_patientId != null && _tremorData.isEmpty && !_isLoading) {
+      _initDataLoad();
+    }
+  }
+
+  void _initDataLoad() {
+    if (_selectedTimeRange == '1m') {
+      _startPolling();
+    } else {
       _loadData();
     }
   }
 
+  void _startPolling() {
+    _pollingTimer?.cancel();
+    _loadRealtimeData(); // Initial fetch
+    _pollingTimer = Timer.periodic(const Duration(seconds: 1), (_) => _loadRealtimeData());
+  }
+
+  Future<void> _loadRealtimeData() async {
+    if (_patientId == null) return;
+
+    try {
+      final data = await _tremorApi.getPatientTremorData(
+        patientId: _patientId!,
+        limit: 1, // Get latest point
+      );
+
+      if (data.isNotEmpty && mounted) {
+        final latest = data.first;
+        
+        setState(() {
+          // Avoid duplicates
+          if (_tremorData.isEmpty || 
+              latest.analysisTimestamp.isAfter(_tremorData.last.analysisTimestamp)) {
+            _tremorData.add(latest);
+            
+            // Keep only last 80 points
+            if (_tremorData.length > 80) {
+              _tremorData.removeAt(0);
+            }
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error polling realtime data: $e');
+    }
+  }
+
   Future<void> _loadData() async {
+    _pollingTimer?.cancel();
     if (_patientId == null) {
       setState(() {
         _error = 'Patient ID not found. Please ensure you are logged in as a patient.';
@@ -115,8 +169,15 @@ class _DashboardPageState extends State<DashboardPage> {
   void _onTimeRangeChanged(String range) {
     setState(() {
       _selectedTimeRange = range;
+      _tremorData = []; // Clear data to show loading/empty state or fresh start
+      _isLoading = true;
     });
-    _loadData();
+    
+    if (range == '1m') {
+      _startPolling();
+    } else {
+      _loadData();
+    }
   }
 
   String _getActualTimeRangeTitle() {
@@ -140,7 +201,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 _patientName = authState.user.name;
               });
               print('Patient Dashboard - User: ${authState.user.email}, Patient ID: $_patientId, Has patientId field: ${authState.user.patientId != null}');
-              _loadData();
+              _initDataLoad();
             });
           }
         }
@@ -212,7 +273,7 @@ class _DashboardPageState extends State<DashboardPage> {
           if (ResponsiveBreakpoints.of(context).largerThan(MOBILE))
             IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed: _loadData,
+              onPressed: _initDataLoad,
               tooltip: 'Refresh data',
             ),
         ],
@@ -255,7 +316,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             SizedBox(height: 16.h),
             ElevatedButton(
-              onPressed: _loadData,
+              onPressed: _initDataLoad,
               child: const Text('Retry'),
             ),
           ],
@@ -506,10 +567,11 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: TremorChart(
                   dataPoints: _tremorData.map((t) => TremorDataPoint(
                     timestamp: t.analysisTimestamp,
-                    tremorScore: t.tremorIndex,
+                    tremorScore: t.tremorScore,
                     isParkinsonian: t.isParkinsonian,
                   )).toList(),
                   title: _getActualTimeRangeTitle(),
+                  fixedXRangeMs: _selectedTimeRange == '1m' ? 60000 : null, // 60s window for 1m view
                 ),
               ),
           ],
@@ -563,7 +625,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Tremor Index: ${data.tremorIndex.toStringAsFixed(2)}',
+                            'Tremor Score: ${data.tremorScore.toStringAsFixed(1)}',
                             style: FontUtils.body(
                               context: context,
                               fontWeight: FontWeight.w600,

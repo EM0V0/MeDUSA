@@ -14,6 +14,7 @@ class TremorChart extends StatefulWidget {
   final Duration? refreshInterval;
   final VoidCallback? onRefresh;
   final String title;
+  final int? fixedXRangeMs; // Optional fixed range in milliseconds
 
   const TremorChart({
     super.key,
@@ -23,6 +24,7 @@ class TremorChart extends StatefulWidget {
     this.refreshInterval,
     this.onRefresh,
     this.title = 'Tremor Score Over Time',
+    this.fixedXRangeMs,
   });
 
   @override
@@ -149,7 +151,22 @@ class _TremorChartState extends State<TremorChart> {
     double minX = 0;
     double maxX = 0;
     
-    if (processedPoints.isNotEmpty) {
+    if (widget.fixedXRangeMs != null) {
+      // Fixed range mode (e.g. for 1M view)
+      // Anchor to the latest data point or now, but ensure the window size is fixed
+      final now = DateTime.now().millisecondsSinceEpoch.toDouble();
+      maxX = now;
+      minX = now - widget.fixedXRangeMs!;
+      
+      // If we have data points that are newer than 'now' (clock skew), adjust
+      if (processedPoints.isNotEmpty) {
+        final lastPointTime = processedPoints.last.timestamp.millisecondsSinceEpoch.toDouble();
+        if (lastPointTime > maxX) {
+          maxX = lastPointTime;
+          minX = maxX - widget.fixedXRangeMs!;
+        }
+      }
+    } else if (processedPoints.isNotEmpty) {
       minX = processedPoints.first.timestamp.millisecondsSinceEpoch.toDouble();
       maxX = processedPoints.last.timestamp.millisecondsSinceEpoch.toDouble();
       
@@ -168,7 +185,7 @@ class _TremorChartState extends State<TremorChart> {
             show: true,
             drawVerticalLine: true,
             horizontalInterval: 20,
-            verticalInterval: (maxX - minX) / 5, // Dynamic vertical grid
+            verticalInterval: (maxX - minX) > 0 ? (maxX - minX) / 5 : 1.0, // Dynamic vertical grid
             getDrawingHorizontalLine: (value) {
               return FlLine(
                 color: AppColors.divider,
@@ -194,7 +211,7 @@ class _TremorChartState extends State<TremorChart> {
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 30,
-                interval: (maxX - minX) / 5, // Dynamic interval
+                interval: (maxX - minX) > 0 ? (maxX - minX) / 5 : 1.0, // Dynamic interval, prevent div by zero
                 getTitlesWidget: (value, meta) => _buildBottomTitle(value, meta, processedPoints),
               ),
             ),
@@ -214,7 +231,7 @@ class _TremorChartState extends State<TremorChart> {
             ),
           ),
           minX: minX,
-          maxX: maxX,
+          maxX: maxX > minX ? maxX : minX + 1.0, // Ensure maxX > minX
           minY: _minY,
           maxY: _maxY,
           lineBarsData: [
@@ -258,14 +275,20 @@ class _TremorChartState extends State<TremorChart> {
             orElse: () => points[index],
           );
           
-          final color = point.isParkinsonian && widget.showParkinsonianMarkers
-              ? AppColors.error
-              : AppColors.primary;
+          final score = point.tremorScore;
+          Color color;
+          if (score > 50) {
+            color = Colors.red;
+          } else if (score < 30) {
+            color = Colors.blue;
+          } else {
+            color = Colors.yellow;
+          }
 
           return FlDotCirclePainter(
-            radius: point.isParkinsonian ? 6 : 4,
+            radius: 4,
             color: color,
-            strokeWidth: 2,
+            strokeWidth: 1,
             strokeColor: Colors.white,
           );
         },
