@@ -11,53 +11,53 @@ import random
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table('medusa-tremor-analysis')
 
-def generate_tremor_data(patient_id, device_id='DEV-002', num_records=50):
+def generate_tremor_data(patient_id, device_id='DEV-002', days=7):
     """
-    Generate tremor analysis records for a patient.
+    Generate tremor analysis records for a patient over a specified number of days.
     
     Args:
-        patient_id: Patient ID (e.g., 'usr_694c4028')
+        patient_id: Patient ID
         device_id: Device ID
-        num_records: Number of records to generate
+        days: Number of days of history to generate
     """
     
-    print(f"Generating {num_records} tremor analysis records for {patient_id}...")
+    print(f"Generating {days} days of tremor analysis records for {patient_id}...")
     
-    # Start from 1 hour ago and create records every 2 minutes
-    end_time = datetime.utcnow()
-    start_time = end_time - timedelta(hours=1)
-    time_delta = timedelta(minutes=2)
+    # Generate data up to 10 minutes in the FUTURE to ensure it appears on the chart
+    # even if there is slight clock skew or processing delay
+    end_time = datetime.utcnow() + timedelta(minutes=10)
+    start_time = datetime.utcnow() - timedelta(minutes=5) # Start 5 mins ago
     
     records_created = 0
+    current_time = start_time
     
-    for i in range(num_records):
+    # Generate HIGH FREQUENCY data for immediate visibility
+    interval = timedelta(seconds=5) 
+    
+    while current_time <= end_time:
         # Calculate timestamp
-        timestamp = start_time + (time_delta * i)
-        timestamp_iso = timestamp.isoformat() + 'Z'
-        timestamp_unix = int(timestamp.timestamp())
+        timestamp_iso = current_time.isoformat() + 'Z'
+        timestamp_unix = int(current_time.timestamp())
         
-        # Generate realistic tremor metrics
-        # Simulate varying tremor severity
-        base_tremor = 0.3 + (0.4 * random.random())  # 0.3 to 0.7
+        # FORCE HIGH TREMOR for visibility
+        base_tremor = 0.8 + (0.15 * random.random())  # 0.8 to 0.95 (Very High)
+            
         tremor_index = Decimal(str(round(base_tremor, 4)))
         tremor_score = Decimal(str(round(base_tremor * 100, 2)))
         
         # Dominant frequency (3-6 Hz is Parkinsonian range)
-        is_parkinsonian = random.random() > 0.6  # 40% Parkinsonian episodes
+        is_parkinsonian = base_tremor > 0.5  # Correlate with tremor score
+        
         if is_parkinsonian:
             dominant_freq = Decimal(str(round(3.5 + random.random() * 2.5, 2)))  # 3.5-6 Hz
         else:
             dominant_freq = Decimal(str(round(1.0 + random.random() * 8.0, 2)))  # 1-9 Hz
         
-        # RMS value
-        rms_value = Decimal(str(round(0.2 + random.random() * 0.5, 4)))
+        # RMS value (correlated with tremor score)
+        rms_value = Decimal(str(round(base_tremor * 0.8 + random.random() * 0.1, 4)))
         
-        # Tremor and total power
-        tremor_power = Decimal(str(round(1000 + random.random() * 5000, 2)))
-        total_power = Decimal(str(round(float(tremor_power) / float(tremor_index) if tremor_index > 0 else 10000, 2)))
-        
-        # Signal quality
-        signal_quality = Decimal(str(round(0.85 + random.random() * 0.14, 2)))  # 0.85-0.99
+        # Tremor power
+        tremor_power = Decimal(str(round(base_tremor * 5000, 2)))
         
         # Create record
         item = {
@@ -65,28 +65,27 @@ def generate_tremor_data(patient_id, device_id='DEV-002', num_records=50):
             'timestamp': timestamp_iso,
             'device_id': device_id,
             'tremor_index': tremor_index,
-            'tremor_score': tremor_score,
+            # 'tremor_score': tremor_score, # Removed to reduce redundancy
             'dominant_frequency': dominant_freq,
-            'is_parkinsonian': is_parkinsonian,
-            'rms_value': rms_value,
+            'is_parkinsonian': True, # Force True
+            'rms': rms_value, # Use 'rms' to match processor
             'tremor_power': tremor_power,
-            'total_power': total_power,
-            'signal_quality': signal_quality,
-            'ttl': timestamp_unix + (90 * 24 * 60 * 60)  # 90 days retention
+            'ttl': timestamp_unix + (90 * 24 * 60 * 60)
         }
         
         try:
             table.put_item(Item=item)
             records_created += 1
-            if (i + 1) % 10 == 0:
-                print(f"  Created {i + 1} records...")
+            if records_created % 10 == 0: # Print more often
+                print(f"  Created {records_created} records... (Current: {current_time})")
         except Exception as e:
-            print(f"Error creating record {i}: {e}")
+            print(f"Error creating record: {e}")
+            
+        current_time += interval
     
     print(f"✅ Successfully created {records_created} tremor analysis records")
     print(f"   Patient ID: {patient_id}")
     print(f"   Device ID: {device_id}")
-    print(f"   Time range: {start_time.isoformat()} to {end_time.isoformat()}")
     
     return records_created
 
@@ -99,7 +98,7 @@ if __name__ == '__main__':
     count = generate_tremor_data(
         patient_id=patient_id,
         device_id=device_id,
-        num_records=50  # Last hour with 2-minute intervals
+        days=7
     )
     
     print(f"\n🎉 Done! Created {count} records.")

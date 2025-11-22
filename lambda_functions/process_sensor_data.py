@@ -7,7 +7,8 @@ from datetime import datetime
 from scipy.signal import butter, filtfilt
 from scipy.fft import rfft, rfftfreq
 
-dynamodb = boto3.resource('dynamodb')
+# Initialize DynamoDB with explicit region
+dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 sensor_table = dynamodb.Table('medusa-sensor-data')
 results_table = dynamodb.Table('medusa-tremor-analysis')  # Store analysis results
 devices_table = dynamodb.Table('medusa-devices-prod')     # Device registry for ownership lookup
@@ -156,6 +157,11 @@ def lambda_handler(event, context):
     
     try:
         # Prepare query parameters
+        # The Pi publishes data with millisecond timestamps (13 digits).
+        # We convert our search window (seconds) to milliseconds.
+        start_ts_ms = int(start_timestamp * 1000)
+        end_ts_ms = int(end_timestamp * 1000)
+
         query_params = {
             'KeyConditionExpression': 'device_id = :did AND #ts BETWEEN :start AND :end',
             'ExpressionAttributeNames': {
@@ -163,8 +169,8 @@ def lambda_handler(event, context):
             },
             'ExpressionAttributeValues': {
                 ':did': device_id,
-                ':start': start_timestamp,
-                ':end': end_timestamp
+                ':start': start_ts_ms,
+                ':end': end_ts_ms
             },
             'ScanIndexForward': True  # Oldest first for time series
         }
@@ -182,33 +188,44 @@ def lambda_handler(event, context):
             response = sensor_table.query(**query_params)
             items.extend(response['Items'])
         
-        if len(items) < window_size:
-            return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'status': 'insufficient_data',
-                    'message': f'Only {len(items)} samples found, need {window_size}',
-                    'device_id': device_id
-                })
-            }
-        
         # Convert Decimal to float for numpy processing
         items = decimal_to_float(items)
         
         # Extract accelerometer magnitude time series
-        # Data format: accelerometer_x/y/z are Lists of values
         magnitude_data = []
         
         for item in items:
-            x_vals = item.get('accelerometer_x', [])
-            y_vals = item.get('accelerometer_y', [])
-            z_vals = item.get('accelerometer_z', [])
-            
-            # Calculate magnitude for each sample in this record
-            if x_vals and y_vals and z_vals:
-                for x, y, z in zip(x_vals, y_vals, z_vals):
+            # Use pre-calculated magnitude if available (from enrichment Lambda)
+            if 'magnitude' in item:
+                try:
+                    magnitude_data.append(float(item['magnitude']))
+                    continue
+                except (ValueError, TypeError):
+                    pass  # Fallback to calculation
+
+            # Handle single value format (Pi) - accel_x, accel_y, accel_z
+            if 'accel_x' in item:
+                try:
+                    x = float(item['accel_x'])
+                    y = float(item['accel_y'])
+                    z = float(item['accel_z'])
                     mag = np.sqrt(x**2 + y**2 + z**2)
                     magnitude_data.append(mag)
+                except (ValueError, TypeError):
+                    continue
+            
+            # Support both new simplified schema (x,y,z) and old schema (accelerometer_x, etc)
+            # These are list-based formats
+            else:
+                x_vals = item.get('x', item.get('accelerometer_x', []))
+                y_vals = item.get('y', item.get('accelerometer_y', []))
+                z_vals = item.get('z', item.get('accelerometer_z', []))
+                
+                # Calculate magnitude for each sample in this record
+                if x_vals and y_vals and z_vals:
+                    for x, y, z in zip(x_vals, y_vals, z_vals):
+                        mag = np.sqrt(x**2 + y**2 + z**2)
+                        magnitude_data.append(mag)
         
         magnitude_data = np.array(magnitude_data)
         
@@ -242,24 +259,17 @@ def lambda_handler(event, context):
         analysis_result = {
             'device_id': device_id,
             'patient_id': final_patient_id,
-            'patient_name': items[0].get('patient_name'),
             'analysis_timestamp': int(analysis_ts),
             'timestamp': datetime.utcfromtimestamp(int(analysis_ts)).isoformat() + 'Z', # Add ISO timestamp for querying
-            'window_start': start_timestamp,
-            'window_end': end_timestamp,
-            'sample_count': len(items),
-            'sampling_rate': sampling_rate,
             
             # Tremor features (convert to Decimal for DynamoDB)
             'rms': Decimal(str(features['rms'])),
             'dominant_freq': Decimal(str(features['dominant_freq'])),
             'tremor_power': Decimal(str(features['tremor_power'])),
             'tremor_index': Decimal(str(features['tremor_index'])),
-            'tremor_score': Decimal(str(features['tremor_index'] * 100)),
             'is_parkinsonian': features['is_parkinsonian'],
             
             # Metadata
-            'processed_at': int(datetime.utcnow().timestamp()),
             'ttl': int(datetime.utcnow().timestamp()) + (90 * 24 * 60 * 60)  # 90 days retention
         }
         

@@ -48,6 +48,29 @@ Processes accelerometer data to extract Parkinson's tremor features using signal
 }
 ```
 
+### 2. `enrich_code/lambda_function.py` (Enrichment Lambda)
+Enriches raw IoT sensor data with patient information from the `medusa-device-patient-mapping` table.
+
+**Trigger:**
+- AWS IoT Core Rule (Topic: `medusa/+/sensor/data`)
+
+**Input Event Format (from IoT Core):**
+```json
+{
+  "device_id": "medusa-pi-01",
+  "timestamp": 1700000000123,
+  "accel_x": 0.12,
+  "accel_y": 0.05,
+  "accel_z": 9.81,
+  "magnitude": 9.81,
+  "sequence": 123,
+  "ttl": 1702592000
+}
+```
+
+**Output (to DynamoDB `medusa-sensor-data`):**
+- Adds `patient_id`, `patient_name`, `assignment_timestamp`, `enriched_at`.
+
 ## Deployment
 
 ### Prerequisites

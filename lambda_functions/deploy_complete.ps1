@@ -82,7 +82,7 @@ if (-not $SkipDynamoDB) {
     Write-Host ""
 
     # Create sensor-data table
-    Write-Host "[1/2] Creating medusa-sensor-data table..." -ForegroundColor Yellow
+    Write-Host "[1/3] Creating medusa-sensor-data table..." -ForegroundColor Yellow
     try {
         aws dynamodb describe-table --table-name medusa-sensor-data --region $Region 2>&1 | Out-Null
         Write-Host "✓ Table already exists" -ForegroundColor Green
@@ -91,19 +91,55 @@ if (-not $SkipDynamoDB) {
         aws dynamodb create-table `
             --table-name medusa-sensor-data `
             --attribute-definitions `
-                AttributeName=patient_id,AttributeType=S `
+                AttributeName=device_id,AttributeType=S `
                 AttributeName=timestamp,AttributeType=N `
+                AttributeName=patient_id,AttributeType=S `
             --key-schema `
-                AttributeName=patient_id,KeyType=HASH `
+                AttributeName=device_id,KeyType=HASH `
                 AttributeName=timestamp,KeyType=RANGE `
+            --global-secondary-indexes `
+                "[{\"IndexName\":\"patient-timeline-index\",\"KeySchema\":[{\"AttributeName\":\"patient_id\",\"KeyType\":\"HASH\"},{\"AttributeName\":\"timestamp\",\"KeyType\":\"RANGE\"}],\"Projection\":{\"ProjectionType\":\"ALL\"}}]" `
             --billing-mode PAY_PER_REQUEST `
             --region $Region | Out-Null
         
-        Write-Host "✓ Table created" -ForegroundColor Green
+        Write-Host "✓ Table created with patient-timeline-index GSI" -ForegroundColor Green
+
+        # Enable TTL
+        Write-Host "  Enabling TTL..." -ForegroundColor Gray
+        Start-Sleep -Seconds 5  # Wait for table to be active
+        aws dynamodb update-time-to-live `
+            --table-name medusa-sensor-data `
+            --time-to-live-specification "Enabled=true,AttributeName=ttl" `
+            --region $Region | Out-Null
+        Write-Host "✓ TTL enabled" -ForegroundColor Green
+    }
+
+    # Create device-patient-mapping table
+    Write-Host "[2/3] Creating medusa-device-patient-mapping table..." -ForegroundColor Yellow
+    try {
+        aws dynamodb describe-table --table-name medusa-device-patient-mapping --region $Region 2>&1 | Out-Null
+        Write-Host "✓ Table already exists" -ForegroundColor Green
+    } catch {
+        Write-Host "  Creating new table..." -ForegroundColor Gray
+        aws dynamodb create-table `
+            --table-name medusa-device-patient-mapping `
+            --attribute-definitions `
+                AttributeName=device_id,AttributeType=S `
+                AttributeName=assignment_timestamp,AttributeType=N `
+                AttributeName=patient_id,AttributeType=S `
+            --key-schema `
+                AttributeName=device_id,KeyType=HASH `
+                AttributeName=assignment_timestamp,KeyType=RANGE `
+            --global-secondary-indexes `
+                "[{\"IndexName\":\"patient-device-index\",\"KeySchema\":[{\"AttributeName\":\"patient_id\",\"KeyType\":\"HASH\"},{\"AttributeName\":\"assignment_timestamp\",\"KeyType\":\"RANGE\"}],\"Projection\":{\"ProjectionType\":\"ALL\"}}]" `
+            --billing-mode PAY_PER_REQUEST `
+            --region $Region | Out-Null
+        
+        Write-Host "✓ Table created with patient-device-index GSI" -ForegroundColor Green
     }
 
     # Create tremor-analysis table
-    Write-Host "[2/2] Creating medusa-tremor-analysis table..." -ForegroundColor Yellow
+    Write-Host "[3/3] Creating medusa-tremor-analysis table..." -ForegroundColor Yellow
     try {
         aws dynamodb describe-table --table-name medusa-tremor-analysis --region $Region 2>&1 | Out-Null
         Write-Host "✓ Table already exists" -ForegroundColor Green
@@ -113,7 +149,7 @@ if (-not $SkipDynamoDB) {
             --table-name medusa-tremor-analysis `
             --attribute-definitions `
                 AttributeName=patient_id,AttributeType=S `
-                AttributeName=timestamp,AttributeType=N `
+                AttributeName=timestamp,AttributeType=S `
                 AttributeName=device_id,AttributeType=S `
             --key-schema `
                 AttributeName=patient_id,KeyType=HASH `
@@ -149,17 +185,22 @@ if (-not $SkipLambda) {
     Write-Host ""
 
     # Deploy ProcessSensorData Lambda
-    Write-Host "[1/3] Deploying ProcessSensorData Lambda..." -ForegroundColor Yellow
+    Write-Host "[1/4] Deploying ProcessSensorData Lambda..." -ForegroundColor Yellow
     & .\deploy.ps1 -Region $Region
     Write-Host ""
 
+    # Deploy Enrichment Lambda
+    Write-Host "[2/4] Deploying Enrichment Lambda..." -ForegroundColor Yellow
+    & .\deploy_enrichment_lambda.ps1 -Region $Region -CreateRole
+    Write-Host ""
+
     # Deploy QueryTremorData Lambda
-    Write-Host "[2/3] Deploying QueryTremorData Lambda..." -ForegroundColor Yellow
+    Write-Host "[3/4] Deploying QueryTremorData Lambda..." -ForegroundColor Yellow
     & .\deploy_query_lambda.ps1 -Region $Region -CreateRole
     Write-Host ""
 
     # Deploy GetTremorStatistics Lambda
-    Write-Host "[3/3] Deploying GetTremorStatistics Lambda..." -ForegroundColor Yellow
+    Write-Host "[4/4] Deploying GetTremorStatistics Lambda..." -ForegroundColor Yellow
     & .\deploy_statistics_lambda.ps1 -Region $Region
     Write-Host ""
 }

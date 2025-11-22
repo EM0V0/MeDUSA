@@ -39,8 +39,9 @@ Remove-Item -Path process_sensor_data.zip -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path package -Force | Out-Null
 
 # Install dependencies
-Write-Host "Installing dependencies..."
-pip install -r requirements.txt -t package/ --quiet
+Write-Host "Installing dependencies (Linux binaries)..."
+# Exclude boto3 as it is in the runtime
+pip install --platform manylinux2014_x86_64 --target package/ --implementation cp --python-version 3.10 --only-binary=:all: --upgrade numpy scipy
 
 # Copy Lambda function
 Copy-Item process_sensor_data.py package/
@@ -49,6 +50,12 @@ Copy-Item process_sensor_data.py package/
 Write-Host "Creating ZIP archive..."
 Compress-Archive -Path package\* -DestinationPath process_sensor_data.zip -Force
 Write-Host "✓ Deployment package created: process_sensor_data.zip" -ForegroundColor Green
+
+# Upload to S3
+$BucketName = "medusa-deploy-artifacts-charlotte"
+$S3Key = "lambda/process_sensor_data.zip"
+Write-Host "Uploading to S3 ($BucketName)..."
+aws s3 cp process_sensor_data.zip "s3://$BucketName/$S3Key"
 
 # Check if function exists
 Write-Host ""
@@ -64,18 +71,20 @@ if ($functionExists) {
     Write-Host "✓ Function exists, updating code..." -ForegroundColor Green
     aws lambda update-function-code `
         --function-name $FunctionName `
-        --zip-file fileb://process_sensor_data.zip `
+        --s3-bucket $BucketName `
+        --s3-key $S3Key `
         --region $Region `
         --output json | Out-Null
     Write-Host "✓ Function code updated" -ForegroundColor Green
 } else {
     Write-Host "Function does not exist, creating new function..." -ForegroundColor Yellow
+    
     aws lambda create-function `
         --function-name $FunctionName `
-        --runtime python3.11 `
+        --runtime python3.10 `
         --role $RoleArn `
         --handler process_sensor_data.lambda_handler `
-        --zip-file fileb://process_sensor_data.zip `
+        --code "S3Bucket=$BucketName,S3Key=$S3Key" `
         --timeout 60 `
         --memory-size 512 `
         --region $Region `
@@ -86,8 +95,10 @@ if ($functionExists) {
 # Update configuration
 Write-Host ""
 Write-Host "Step 3: Updating function configuration..." -ForegroundColor Green
+
 aws lambda update-function-configuration `
     --function-name $FunctionName `
+    --runtime python3.10 `
     --timeout 60 `
     --memory-size 512 `
     --region $Region `

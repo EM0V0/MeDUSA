@@ -153,7 +153,7 @@ def lambda_handler(event, context):
         # Prepare query parameters
         query_params = {
             'KeyConditionExpression': key_condition,
-            'Limit': min(limit, 500),  # Cap at 500 to prevent excessive reads
+            'Limit': min(limit, 2000),  # Cap at 2000 to prevent excessive reads
             'ScanIndexForward': False  # Sort by timestamp DESC (newest first)
         }
         
@@ -185,19 +185,12 @@ def lambda_handler(event, context):
                 'rms': item.get('rms_value', item.get('rms', 0)),  # Map rms_value to rms
                 'dominant_frequency': item.get('dominant_frequency', item.get('dominant_freq', 0)),
                 'tremor_power': item.get('tremor_power', 0),
-                'total_power': item.get('total_power', 0),
                 
                 # Handle both tremor_score (0-100) and tremor_index (0-1)
+                # We only return tremor_index (0-1) to the frontend to avoid redundancy
                 'tremor_index': item.get('tremor_index', 0),
-                'tremor_score': item.get('tremor_score', float(item.get('tremor_index', 0)) * 100),
                 
                 'is_parkinsonian': item.get('is_parkinsonian', False),
-                'signal_quality': item.get('signal_quality', 0),
-                
-                # Optional fields
-                'patient_name': item.get('patient_name'),
-                'sample_count': item.get('sample_count'),
-                'sampling_rate': item.get('sampling_rate'),
             }
             normalized_items.append(normalized_item)
         

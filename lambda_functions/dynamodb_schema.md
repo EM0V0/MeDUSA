@@ -15,20 +15,20 @@ The design prioritizes:
 Stores raw accelerometer readings from wearable devices.
 
 ### Primary Key
-- **Partition Key**: `patient_id` (String) - Patient identifier
-- **Sort Key**: `timestamp` (Number) - Unix timestamp (seconds) when data was collected
+- **Partition Key**: `device_id` (String) - Device identifier
+- **Sort Key**: `timestamp` (Number) - Unix timestamp (milliseconds) when data was collected
 
 ### Attributes
 
 | Attribute Name | Type | Description | Required |
 |----------------|------|-------------|----------|
-| `patient_id` | String | Patient identifier (e.g., "PAT-001") | Yes |
-| `timestamp` | Number | Unix timestamp (seconds) | Yes |
 | `device_id` | String | Device identifier (e.g., "DEV-001") | Yes |
-| `accelerometer_x` | List<Number> | X-axis acceleration samples | Yes |
-| `accelerometer_y` | List<Number> | Y-axis acceleration samples | Yes |
-| `accelerometer_z` | List<Number> | Z-axis acceleration samples | Yes |
-| `sampling_rate` | Number | Sampling frequency (Hz), typically 100 | Yes |
+| `timestamp` | Number | Unix timestamp (milliseconds) | Yes |
+| `patient_id` | String | Patient identifier (e.g., "PAT-001") | Yes |
+| `accel_x` | Number | X-axis acceleration sample | Yes |
+| `accel_y` | Number | Y-axis acceleration sample | Yes |
+| `accel_z` | Number | Z-axis acceleration sample | Yes |
+| `sampling_rate` | Number | Sampling frequency (Hz), typically 100 | No |
 | `battery_level` | Number | Device battery percentage (0-100) | No |
 | `signal_strength` | Number | Bluetooth signal strength (dBm) | No |
 | `device_status` | String | Device status (active/low_battery/error) | No |
@@ -36,7 +36,7 @@ Stores raw accelerometer readings from wearable devices.
 ### Purpose
 - Stores raw sensor data for Lambda processing
 - Retention: 30 days (no TTL, managed by Lambda or manual cleanup)
-- Write pattern: High frequency (every 5 seconds per device)
+- Write pattern: High frequency (100Hz per device)
 - Read pattern: Lambda batch processing (query recent data)
 
 ---
@@ -47,29 +47,29 @@ Stores processed tremor analysis results.
 
 ### Primary Key
 - **Partition Key**: `patient_id` (String) - Patient identifier
-- **Sort Key**: `timestamp` (Number) - Unix timestamp when analysis was performed
+- **Sort Key**: `timestamp` (String) - ISO 8601 timestamp (e.g., "2023-10-27T10:00:00Z")
 
 ### Attributes
 
 | Attribute Name | Type | Description | Required |
 |----------------|------|-------------|----------|
 | `patient_id` | String | Patient identifier (e.g., "PAT-001") | Yes |
-| `timestamp` | Number | Unix timestamp (seconds) when analysis was performed | Yes |
+| `timestamp` | String | ISO 8601 timestamp | Yes |
+| `analysis_timestamp` | Number | Unix timestamp (seconds) | Yes |
 | `device_id` | String | Device identifier (e.g., "DEV-001") | Yes |
 | `tremor_index` | Number | Tremor power ratio (0-1), higher = more tremor | Yes |
-| `dominant_frequency` | Number | Dominant frequency in spectrum (Hz) | Yes |
+| `tremor_score` | Number | Tremor score (0-100), derived from index | Yes |
+| `dominant_freq` | Number | Dominant frequency in spectrum (Hz) | Yes |
 | `is_parkinsonian` | Boolean | True if tremor in 3-6 Hz band with index > 0.3 | Yes |
-| `rms_value` | Number | Root mean square of filtered acceleration | Yes |
+| `rms` | Number | Root mean square of filtered acceleration | Yes |
 | `tremor_power` | Number | Spectral power in 3-6 Hz tremor band | Yes |
-| `total_power` | Number | Total spectral power (excluding DC) | Yes |
-| `signal_quality` | Number | Quality score (0-1), based on signal-to-noise ratio | Yes |
 | `ttl` | Number | Time-to-live timestamp for auto-deletion (90 days) | Yes |
 
 ### Global Secondary Indexes
 
 #### DeviceIndex (Optional but recommended)
 - **Partition Key**: `device_id` (String)
-- **Sort Key**: `timestamp` (Number)
+- **Sort Key**: `timestamp` (String)
 - **Projection**: ALL
 - **Purpose**: Query all analyses for a specific device (useful for device diagnostics)
 - **Use case**: Monitor device behavior, detect sensor failures
@@ -77,12 +77,12 @@ Stores processed tremor analysis results.
 ### Access Patterns
 
 1. **Get patient tremor history** (Primary)
-   - Query: `patient_id = "PAT-001"` AND `timestamp BETWEEN start AND end`
+   - Query: `patient_id = "PAT-001"` AND `timestamp BETWEEN start_iso AND end_iso`
    - Uses: Primary key
    - Typical limit: 500 records (last 24 hours at 5-min intervals)
 
 2. **Get device-specific data** (Secondary)
-   - Query: `device_id = "DEV-001"` AND `timestamp BETWEEN start AND end`
+   - Query: `device_id = "DEV-001"` AND `timestamp BETWEEN start_iso AND end_iso`
    - Uses: DeviceIndex GSI
    - Use case: Device troubleshooting
 

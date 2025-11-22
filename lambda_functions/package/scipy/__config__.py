@@ -28,7 +28,7 @@ CONFIG = _cleanup(
             "c": {
                 "name": "gcc",
                 "linker": r"ld.bfd",
-                "version": "10.3.0",
+                "version": "10.2.1",
                 "commands": r"cc",
                 "args": r"",
                 "linker args": r"",
@@ -36,7 +36,7 @@ CONFIG = _cleanup(
             "cython": {
                 "name": r"cython",
                 "linker": r"cython",
-                "version": r"3.1.6",
+                "version": r"3.0.12",
                 "commands": r"cython",
                 "args": r"",
                 "linker args": r"",
@@ -44,7 +44,7 @@ CONFIG = _cleanup(
             "c++": {
                 "name": "gcc",
                 "linker": r"ld.bfd",
-                "version": "10.3.0",
+                "version": "10.2.1",
                 "commands": r"c++",
                 "args": r"",
                 "linker args": r"",
@@ -52,14 +52,14 @@ CONFIG = _cleanup(
             "fortran": {
                 "name": "gcc",
                 "linker": r"ld.bfd",
-                "version": "10.3.0",
+                "version": "10.2.1",
                 "commands": r"gfortran",
                 "args": r"",
                 "linker args": r"",
             },
             "pythran": {
-                "version": r"0.18.0",
-                "include directory": r"C:\Users\runneradmin\AppData\Local\Temp\build-env-dfcay8wl\Lib\site-packages/pythran"
+                "version": r"0.17.0",
+                "include directory": r"../../tmp/pip-build-env-jujiy7q_/overlay/lib/python3.10/site-packages/pythran"
             },
         },
         "Machine Information": {
@@ -67,13 +67,13 @@ CONFIG = _cleanup(
                 "cpu": r"x86_64",
                 "family": r"x86_64",
                 "endian": r"little",
-                "system": r"windows",
+                "system": r"linux",
             },
             "build": {
                 "cpu": r"x86_64",
                 "family": r"x86_64",
                 "endian": r"little",
-                "system": r"windows",
+                "system": r"linux",
             },
             "cross-compiled": bool("False".lower().replace('false', '')),
         },
@@ -81,33 +81,33 @@ CONFIG = _cleanup(
             "blas": {
                 "name": "scipy-openblas",
                 "found": bool("True".lower().replace('false', '')),
-                "version": "0.3.29.dev",
+                "version": "0.3.28",
                 "detection method": "pkgconfig",
-                "include directory": r"C:/Users/runneradmin/AppData/Local/Temp/cibw-run-0_as6mvx/cp312-win_amd64/build/venv/Lib/site-packages/scipy_openblas32/include",
-                "lib directory": r"C:/Users/runneradmin/AppData/Local/Temp/cibw-run-0_as6mvx/cp312-win_amd64/build/venv/Lib/site-packages/scipy_openblas32/lib",
-                "openblas configuration": r"OpenBLAS 0.3.29.dev DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24",
-                "pc file directory": r"D:/a/scipy/scipy",
+                "include directory": r"/opt/_internal/cpython-3.10.15/lib/python3.10/site-packages/scipy_openblas32/include",
+                "lib directory": r"/opt/_internal/cpython-3.10.15/lib/python3.10/site-packages/scipy_openblas32/lib",
+                "openblas configuration": r"OpenBLAS 0.3.28 DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+                "pc file directory": r"/project",
             },
             "lapack": {
                 "name": "scipy-openblas",
                 "found": bool("True".lower().replace('false', '')),
-                "version": "0.3.29.dev",
+                "version": "0.3.28",
                 "detection method": "pkgconfig",
-                "include directory": r"C:/Users/runneradmin/AppData/Local/Temp/cibw-run-0_as6mvx/cp312-win_amd64/build/venv/Lib/site-packages/scipy_openblas32/include",
-                "lib directory": r"C:/Users/runneradmin/AppData/Local/Temp/cibw-run-0_as6mvx/cp312-win_amd64/build/venv/Lib/site-packages/scipy_openblas32/lib",
-                "openblas configuration": r"OpenBLAS 0.3.29.dev DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24",
-                "pc file directory": r"D:/a/scipy/scipy",
+                "include directory": r"/opt/_internal/cpython-3.10.15/lib/python3.10/site-packages/scipy_openblas32/include",
+                "lib directory": r"/opt/_internal/cpython-3.10.15/lib/python3.10/site-packages/scipy_openblas32/lib",
+                "openblas configuration": r"OpenBLAS 0.3.28 DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+                "pc file directory": r"/project",
             },
             "pybind11": {
                 "name": "pybind11",
-                "version": "3.0.1",
+                "version": "2.13.6",
                 "detection method": "config-tool",
                 "include directory": r"unknown",
             },
         },
         "Python Information": {
-            "path": r"C:\Users\runneradmin\AppData\Local\Temp\build-env-dfcay8wl\Scripts\python.exe",
-            "version": "3.12",
+            "path": r"/opt/python/cp310-cp310/bin/python",
+            "version": "3.10",
         },
     }
 )
