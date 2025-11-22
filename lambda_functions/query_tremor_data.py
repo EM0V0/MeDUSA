@@ -153,7 +153,7 @@ def lambda_handler(event, context):
         # Prepare query parameters
         query_params = {
             'KeyConditionExpression': key_condition,
-            'Limit': min(limit, 2000),  # Cap at 2000 to prevent excessive reads
+            'Limit': min(limit, 5000),  # Cap at 5000 to allow for longer time ranges (e.g. 1H at 1Hz = 3600 pts)
             'ScanIndexForward': False  # Sort by timestamp DESC (newest first)
         }
         

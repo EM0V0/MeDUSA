@@ -191,14 +191,18 @@ def lambda_handler(event, context):
         # Convert Decimal to float for numpy processing
         items = decimal_to_float(items)
         
-        # Extract accelerometer magnitude time series
-        magnitude_data = []
+        # Extract accelerometer magnitude time series with timestamps
+        # We need timestamps to align the sliding window
+        time_series_data = []
         
         for item in items:
+            ts = float(item['timestamp']) / 1000.0 # Convert ms to seconds
+            
             # Use pre-calculated magnitude if available (from enrichment Lambda)
             if 'magnitude' in item:
                 try:
-                    magnitude_data.append(float(item['magnitude']))
+                    mag = float(item['magnitude'])
+                    time_series_data.append((ts, mag))
                     continue
                 except (ValueError, TypeError):
                     pass  # Fallback to calculation
@@ -210,7 +214,7 @@ def lambda_handler(event, context):
                     y = float(item['accel_y'])
                     z = float(item['accel_z'])
                     mag = np.sqrt(x**2 + y**2 + z**2)
-                    magnitude_data.append(mag)
+                    time_series_data.append((ts, mag))
                 except (ValueError, TypeError):
                     continue
             
@@ -222,74 +226,152 @@ def lambda_handler(event, context):
                 z_vals = item.get('z', item.get('accelerometer_z', []))
                 
                 # Calculate magnitude for each sample in this record
+                # Note: If we have array data, we assume uniform sampling within the record
+                # But we only have one timestamp for the record.
+                # For simplicity, we'll just use the record timestamp for all samples in the batch
+                # or distribute them if we knew the rate.
+                # Given the user wants "per second" points, and array data is usually high freq,
+                # we might need to be careful.
+                # For now, let's assume single-value mode is dominant for the Pi.
                 if x_vals and y_vals and z_vals:
                     for x, y, z in zip(x_vals, y_vals, z_vals):
                         mag = np.sqrt(x**2 + y**2 + z**2)
-                        magnitude_data.append(mag)
+                        time_series_data.append((ts, mag))
         
-        magnitude_data = np.array(magnitude_data)
-        
-        if len(magnitude_data) < window_size:
+        # Calculate actual sampling rate
+        actual_fs = sampling_rate
+        if len(time_series_data) > 1:
+            duration = time_series_data[-1][0] - time_series_data[0][0]
+            if duration > 0:
+                actual_fs = len(time_series_data) / duration
+                print(f"Calculated actual sampling rate: {actual_fs:.2f} Hz")
+
+        if len(time_series_data) == 0:
             return {
                 'statusCode': 200,
                 'body': json.dumps({
                     'status': 'insufficient_data',
-                    'message': f'Only {len(magnitude_data)} samples found, need {window_size}',
+                    'message': f'No samples found',
                     'device_id': device_id
                 })
             }
+            
+        # Sort by timestamp
+        time_series_data.sort(key=lambda x: x[0])
         
         # Initialize tremor processor
+        # Adjust filter cutoff if sampling rate is low
+        filter_cutoff = 12
+        if actual_fs < 25: # Nyquist for 12Hz is 24Hz
+            filter_cutoff = actual_fs / 2.1 # Set cutoff slightly below Nyquist
+            if filter_cutoff < 1: filter_cutoff = 1 # Minimum cutoff
+            
         processor = TremorProcessor(
-            fs=sampling_rate,
+            fs=actual_fs,
             tremor_band=(3, 6),  # Parkinson's tremor frequency range
-            filter_cutoff=12
+            filter_cutoff=filter_cutoff
         )
-        
-        # Process data and extract features
-        features = processor.process(magnitude_data)
-        
-        # Prepare analysis result for storage
-        # Use end_timestamp as the analysis timestamp so historical processing is accurate
-        analysis_ts = end_timestamp
         
         # Use the resolved patient_id, fallback to item's patient_id, then UNASSIGNED
         final_patient_id = patient_id if patient_id else items[0].get('patient_id', 'UNASSIGNED')
         
-        analysis_result = {
-            'device_id': device_id,
-            'patient_id': final_patient_id,
-            'analysis_timestamp': int(analysis_ts),
-            'timestamp': datetime.utcfromtimestamp(int(analysis_ts)).isoformat() + 'Z', # Add ISO timestamp for querying
-            
-            # Tremor features (convert to Decimal for DynamoDB)
-            'rms': Decimal(str(features['rms'])),
-            'dominant_freq': Decimal(str(features['dominant_freq'])),
-            'tremor_power': Decimal(str(features['tremor_power'])),
-            'tremor_index': Decimal(str(features['tremor_index'])),
-            'is_parkinsonian': features['is_parkinsonian'],
-            
-            # Metadata
-            'ttl': int(datetime.utcnow().timestamp()) + (90 * 24 * 60 * 60)  # 90 days retention
-        }
+        # Sliding Window Analysis
+        # We want to generate multiple analysis points for the chart.
+        # E.g. One point every 1 second.
+        # Window size for analysis: e.g. 5 seconds (500 samples at 100Hz)
         
-        # Store analysis result in DynamoDB
-        results_table.put_item(Item=analysis_result)
+        analysis_window_duration = 5.0 # seconds
+        step_size = 1.0 # seconds
+        
+        # Determine start and end of the data range
+        data_start_time = time_series_data[0][0]
+        data_end_time = time_series_data[-1][0]
+        
+        current_window_start = data_start_time
+        
+        analysis_results = []
+        
+        # If we have very few samples (e.g. 1Hz data), just process each point or small windows
+        if actual_fs < 5:
+             print("Low sampling rate detected. Processing in simplified mode.")
+             # Just take 5 second windows regardless of sample count
+             pass
+
+        while current_window_start + analysis_window_duration <= data_end_time + step_size: # Allow one last partial window
+            current_window_end = current_window_start + analysis_window_duration
+            
+            # Extract samples in this window
+            window_samples = [mag for ts, mag in time_series_data if current_window_start <= ts < current_window_end]
+            
+            # Check if we have enough samples (at least 1)
+            if len(window_samples) > 0:
+                
+                # Process window
+                use_fallback = False
+                if actual_fs < 5:
+                    use_fallback = True
+                else:
+                    try:
+                        features = processor.process(np.array(window_samples))
+                    except Exception as e:
+                        print(f"Error processing window: {e}")
+                        use_fallback = True
+                
+                if use_fallback:
+                    # Fallback for low sampling rate or errors
+                    # Calculate AC component (remove DC/Gravity)
+                    ac_component = np.array(window_samples) - np.mean(window_samples)
+                    rms_ac = np.sqrt(np.mean(np.square(ac_component)))
+                    
+                    # Estimate tremor index based on AC amplitude (assuming 0.2g is severe)
+                    # RMS of 1.0 is gravity. RMS of AC component represents shaking.
+                    estimated_index = min(float(rms_ac) / 0.2, 1.0) 
+                    
+                    features = {
+                        'rms': float(np.sqrt(np.mean(np.square(window_samples)))), # Total RMS
+                        'dominant_freq': 0.0,
+                        'tremor_power': float(rms_ac ** 2), # Variance as power proxy
+                        'tremor_index': estimated_index,
+                        'is_parkinsonian': estimated_index > 0.3
+                    }
+                
+                # Timestamp for this analysis point is the END of the window
+                analysis_ts = current_window_end
+                
+                analysis_result = {
+                    'device_id': device_id,
+                    'patient_id': final_patient_id,
+                    'timestamp': datetime.utcfromtimestamp(analysis_ts).isoformat() + 'Z',
+                    
+                    # Tremor features
+                    'rms': Decimal(str(features['rms'])),
+                    'dominant_freq': Decimal(str(features['dominant_freq'])),
+                    'tremor_power': Decimal(str(features['tremor_power'])),
+                    'tremor_index': Decimal(str(features['tremor_index'])),
+                    'is_parkinsonian': features['is_parkinsonian'],
+                    
+                    # Metadata
+                    'ttl': int(datetime.utcnow().timestamp()) + (90 * 24 * 60 * 60)
+                }
+                analysis_results.append(analysis_result)
+            
+            # Move to next window
+            current_window_start += step_size
+            
+        # Batch write results to DynamoDB
+        if analysis_results:
+            with results_table.batch_writer() as batch:
+                for result in analysis_results:
+                    batch.put_item(Item=result)
         
         return {
             'statusCode': 200,
             'body': json.dumps({
                 'status': 'success',
                 'device_id': device_id,
-                'patient_id': analysis_result['patient_id'],
-                'analysis': {
-                    'rms': features['rms'],
-                    'dominant_freq': features['dominant_freq'],
-                    'tremor_power': features['tremor_power'],
-                    'tremor_index': features['tremor_index'],
-                    'is_parkinsonian': features['is_parkinsonian']
-                },
-                'samples_processed': len(items)
+                'patient_id': final_patient_id,
+                'points_generated': len(analysis_results),
+                'samples_processed': len(time_series_data)
             })
         }
         

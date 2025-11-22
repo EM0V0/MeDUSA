@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -32,15 +33,28 @@ class TremorChart extends StatefulWidget {
 }
 
 class _TremorChartState extends State<TremorChart> {
-  double _minX = 0;
-  double _maxX = 20;
   double _minY = 0;
   double _maxY = 100;
+  Timer? _ticker;
 
   @override
   void initState() {
     super.initState();
     _setupAutoRefresh();
+    
+    // Start a ticker to update the chart window every 100ms for smooth sliding
+    // This ensures the chart slides left even if no new data arrives
+    if (widget.fixedXRangeMs != null) {
+      _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
   }
 
   void _setupAutoRefresh() {
@@ -153,19 +167,72 @@ class _TremorChartState extends State<TremorChart> {
     
     if (widget.fixedXRangeMs != null) {
       // Fixed range mode (e.g. for 1M view)
-      // Anchor to the latest data point or now, but ensure the window size is fixed
+      // Always anchor to NOW to create a continuous sliding window effect
       final now = DateTime.now().millisecondsSinceEpoch.toDouble();
-      maxX = now;
-      minX = now - widget.fixedXRangeMs!;
       
-      // If we have data points that are newer than 'now' (clock skew), adjust
-      if (processedPoints.isNotEmpty) {
-        final lastPointTime = processedPoints.last.timestamp.millisecondsSinceEpoch.toDouble();
-        if (lastPointTime > maxX) {
-          maxX = lastPointTime;
-          minX = maxX - widget.fixedXRangeMs!;
-        }
-      }
+      maxX = now;
+      minX = maxX - widget.fixedXRangeMs!;
+      
+      // Filter points to strictly within [minX, maxX]
+      final visiblePoints = processedPoints.where((p) {
+        final t = p.timestamp.millisecondsSinceEpoch.toDouble();
+        return t >= minX && t <= maxX;
+      }).toList();
+      
+      // Ensure points are sorted by timestamp to prevent zigzag lines
+      visiblePoints.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      return SizedBox(
+        height: 180.h,
+        child: LineChart(
+          LineChartData(
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: true,
+              horizontalInterval: 20,
+              verticalInterval: (maxX - minX) > 0 ? (maxX - minX) / 5 : 1.0,
+              getDrawingHorizontalLine: (value) => FlLine(color: AppColors.divider, strokeWidth: 1),
+              getDrawingVerticalLine: (value) => FlLine(color: AppColors.divider, strokeWidth: 1),
+            ),
+            titlesData: FlTitlesData(
+              show: true,
+              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 30,
+                  interval: (maxX - minX) > 0 ? (maxX - minX) / 5 : 1.0,
+                  getTitlesWidget: (value, meta) => _buildBottomTitle(value, meta, visiblePoints),
+                ),
+              ),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  interval: 20,
+                  reservedSize: 42,
+                  getTitlesWidget: _buildLeftTitle,
+                ),
+              ),
+            ),
+            borderData: FlBorderData(show: true, border: Border.all(color: AppColors.divider)),
+            minX: minX,
+            maxX: maxX,
+            minY: _minY,
+            maxY: _maxY,
+            lineBarsData: [
+              _buildTremorScoreLine(visiblePoints),
+            ],
+            lineTouchData: LineTouchData(
+              enabled: true,
+              touchTooltipData: LineTouchTooltipData(
+                getTooltipColor: (touchedSpot) => AppColors.darkPrimary,
+                getTooltipItems: (spots) => _buildTooltipItems(spots, visiblePoints),
+              ),
+            ),
+          ),
+        ),
+      );
     } else if (processedPoints.isNotEmpty) {
       minX = processedPoints.first.timestamp.millisecondsSinceEpoch.toDouble();
       maxX = processedPoints.last.timestamp.millisecondsSinceEpoch.toDouble();
@@ -175,9 +242,17 @@ class _TremorChartState extends State<TremorChart> {
         minX -= 300000; // 5 mins
         maxX += 300000;
       }
-    }
 
-    return SizedBox(
+      // Filter points to be within the visible range to prevent overflow drawing
+      final visiblePoints = processedPoints.where((p) {
+        final t = p.timestamp.millisecondsSinceEpoch.toDouble();
+        return t >= minX && t <= maxX;
+      }).toList();
+      
+      // Ensure sorted
+      visiblePoints.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      return SizedBox(
       height: 180.h,
       child: LineChart(
         LineChartData(
@@ -212,7 +287,7 @@ class _TremorChartState extends State<TremorChart> {
                 showTitles: true,
                 reservedSize: 30,
                 interval: (maxX - minX) > 0 ? (maxX - minX) / 5 : 1.0, // Dynamic interval, prevent div by zero
-                getTitlesWidget: (value, meta) => _buildBottomTitle(value, meta, processedPoints),
+                getTitlesWidget: (value, meta) => _buildBottomTitle(value, meta, visiblePoints),
               ),
             ),
             leftTitles: AxisTitles(
@@ -235,14 +310,29 @@ class _TremorChartState extends State<TremorChart> {
           minY: _minY,
           maxY: _maxY,
           lineBarsData: [
-            _buildTremorScoreLine(processedPoints),
+            _buildTremorScoreLine(visiblePoints),
           ],
           lineTouchData: LineTouchData(
             enabled: true,
             touchTooltipData: LineTouchTooltipData(
               getTooltipColor: (touchedSpot) => AppColors.darkPrimary,
-              getTooltipItems: (spots) => _buildTooltipItems(spots, processedPoints),
+              getTooltipItems: (spots) => _buildTooltipItems(spots, visiblePoints),
             ),
+          ),
+        ),
+      ),
+    );
+    }
+    
+    // Return empty chart if no data points
+    return SizedBox(
+      height: 180.h,
+      child: Center(
+        child: Text(
+          'No data available',
+          style: TextStyle(
+            color: AppColors.textDisabled,
+            fontSize: 14.sp,
           ),
         ),
       ),

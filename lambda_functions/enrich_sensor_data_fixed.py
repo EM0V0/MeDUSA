@@ -76,12 +76,9 @@ def lambda_handler(event, context):
                 'accelerometer_y': [Decimal(str(y)) for y in accel_y],
                 'accelerometer_z': [Decimal(str(z)) for z in accel_z],
                 'sampling_rate': event.get('sampling_rate', 100),
-                'ttl': event.get('ttl', int(event['timestamp']) + 2592000),  # 30 days default
                 
                 # Patient enrichment
-                'patient_id': patient_id,
-                'patient_name': patient_name,
-                'enriched_at': int(datetime.utcnow().timestamp())
+                'patient_id': patient_id
             }
             
             # Optional fields
@@ -89,10 +86,6 @@ def lambda_handler(event, context):
                 enriched_data['battery_level'] = int(event['battery_level'])
             if 'temperature' in event and event['temperature'] is not None:
                 enriched_data['temperature'] = Decimal(str(event['temperature']))
-            if 'sequence' in event:
-                enriched_data['sequence'] = int(event['sequence'])
-            if 'device_status' in event:
-                enriched_data['device_status'] = event['device_status']
         
         else:
             print("Single-value mode detected")
@@ -104,12 +97,9 @@ def lambda_handler(event, context):
                 'accel_x': Decimal(str(accel_x)),
                 'accel_y': Decimal(str(accel_y)),
                 'accel_z': Decimal(str(accel_z)),
-                'ttl': event.get('ttl', int(event['timestamp']) + 2592000),
                 
                 # Patient enrichment
-                'patient_id': patient_id,
-                'patient_name': patient_name,
-                'enriched_at': int(datetime.utcnow().timestamp())
+                'patient_id': patient_id
             }
             
             # Optional fields
@@ -117,8 +107,6 @@ def lambda_handler(event, context):
                 enriched_data['magnitude'] = Decimal(str(event['magnitude']))
             if 'temperature' in event and event['temperature'] is not None:
                 enriched_data['temperature'] = Decimal(str(event['temperature']))
-            if 'sequence' in event:
-                enriched_data['sequence'] = int(event['sequence'])
         
         # Write to sensor table
         sensor_table.put_item(Item=enriched_data)

@@ -75,25 +75,39 @@ class _DashboardPageState extends State<DashboardPage> {
     if (_patientId == null) return;
 
     try {
+      // Fetch more points initially to fill the 1-minute chart (60s)
+      // If we already have data, just fetch recent ones to catch up
+      final int limit = _tremorData.isEmpty ? 80 : 20;
+
       final data = await _tremorApi.getPatientTremorData(
         patientId: _patientId!,
-        limit: 1, // Get latest point
+        limit: limit, 
       );
 
-      if (data.isNotEmpty && mounted) {
-        final latest = data.first;
-        
+      if (mounted) {
         setState(() {
-          // Avoid duplicates
-          if (_tremorData.isEmpty || 
-              latest.analysisTimestamp.isAfter(_tremorData.last.analysisTimestamp)) {
-            _tremorData.add(latest);
+          if (data.isNotEmpty) {
+            // Merge new data with existing data, avoiding duplicates
+            final existingIds = _tremorData.map((t) => t.analysisTimestamp.millisecondsSinceEpoch).toSet();
             
-            // Keep only last 80 points
-            if (_tremorData.length > 80) {
-              _tremorData.removeAt(0);
+            // Add only new points
+            final newPoints = data.where((t) => 
+              !existingIds.contains(t.analysisTimestamp.millisecondsSinceEpoch)
+            ).toList();
+            
+            if (newPoints.isNotEmpty) {
+              _tremorData.addAll(newPoints);
+              
+              // Sort by timestamp
+              _tremorData.sort((a, b) => a.analysisTimestamp.compareTo(b.analysisTimestamp));
+              
+              // Keep only last 120 points (2 minutes of data at 1Hz)
+              if (_tremorData.length > 120) {
+                _tremorData = _tremorData.sublist(_tremorData.length - 120);
+              }
             }
           }
+          // Always update state to refresh chart time window (sliding effect)
           _isLoading = false;
         });
       }
@@ -571,13 +585,23 @@ class _DashboardPageState extends State<DashboardPage> {
                     isParkinsonian: t.isParkinsonian,
                   )).toList(),
                   title: _getActualTimeRangeTitle(),
-                  fixedXRangeMs: _selectedTimeRange == '1m' ? 60000 : null, // 60s window for 1m view
+                  fixedXRangeMs: _getFixedRangeMs(),
                 ),
               ),
           ],
         ),
       ),
     );
+  }
+
+  int? _getFixedRangeMs() {
+    switch (_selectedTimeRange) {
+      case '1m': return 60 * 1000;
+      case '1h': return 60 * 60 * 1000;
+      case '24h': return 24 * 60 * 60 * 1000;
+      case '7d': return 7 * 24 * 60 * 60 * 1000;
+      default: return null;
+    }
   }
 
   Widget _buildRecentActivity() {
