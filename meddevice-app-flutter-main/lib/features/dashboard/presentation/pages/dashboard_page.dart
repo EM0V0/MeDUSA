@@ -76,34 +76,59 @@ class _DashboardPageState extends State<DashboardPage> {
 
     try {
       // Fetch more points initially to fill the 1-minute chart (60s)
-      // If we already have data, just fetch recent ones to catch up
+      // If we already have data, just fetch recent ones to catch up.
+      // Use a small overlap (2s) so we don't miss narrowly timed points.
       final int limit = _tremorData.isEmpty ? 80 : 20;
 
+      DateTime now = DateTime.now();
+      DateTime? startTime;
+      DateTime endTime = now;
+
+      if (_tremorData.isNotEmpty) {
+        // Overlap by 2 seconds to guard against race/latency
+        startTime = _tremorData.last.analysisTimestamp.subtract(const Duration(seconds: 2));
+      }
+
+      // Always request up-to-now (endTime) so we fetch the newest points
       final data = await _tremorApi.getPatientTremorData(
         patientId: _patientId!,
-        limit: limit, 
+        limit: limit,
+        startTime: startTime,
+        endTime: endTime,
       );
 
       if (mounted) {
         setState(() {
           if (data.isNotEmpty) {
-            // Merge new data with existing data, avoiding duplicates
-            final existingIds = _tremorData.map((t) => t.analysisTimestamp.millisecondsSinceEpoch).toSet();
-            
-            // Add only new points
-            final newPoints = data.where((t) => 
-              !existingIds.contains(t.analysisTimestamp.millisecondsSinceEpoch)
-            ).toList();
-            
-            if (newPoints.isNotEmpty) {
-              _tremorData.addAll(newPoints);
-              
-              // Sort by timestamp
-              _tremorData.sort((a, b) => a.analysisTimestamp.compareTo(b.analysisTimestamp));
-              
-              // Keep only last 120 points (2 minutes of data at 1Hz)
-              if (_tremorData.length > 120) {
-                _tremorData = _tremorData.sublist(_tremorData.length - 120);
+            // Merge new data with existing data by appending only strictly newer points.
+            if (data.isNotEmpty) {
+              DateTime? newestLocal = _tremorData.isNotEmpty ? _tremorData.last.analysisTimestamp : null;
+
+              // Keep points that are newer than the newest local point (allow tiny overlap)
+              final newPoints = data.where((t) {
+                if (newestLocal == null) return true;
+                return t.analysisTimestamp.isAfter(newestLocal.subtract(const Duration(milliseconds: 10)));
+              }).toList();
+
+              if (newPoints.isNotEmpty) {
+                // Append and dedupe by timestamp (in case API returns overlapping sets)
+                _tremorData.addAll(newPoints);
+                _tremorData.sort((a, b) => a.analysisTimestamp.compareTo(b.analysisTimestamp));
+                // Remove exact-duplicate timestamps
+                final deduped = <TremorAnalysis>[];
+                DateTime? lastTs;
+                for (final t in _tremorData) {
+                  if (lastTs == null || t.analysisTimestamp.isAfter(lastTs)) {
+                    deduped.add(t);
+                    lastTs = t.analysisTimestamp;
+                  }
+                }
+                _tremorData = deduped;
+
+                // Keep a reasonable history window (by count)
+                if (_tremorData.length > 240) {
+                  _tremorData = _tremorData.sublist(_tremorData.length - 240);
+                }
               }
             }
           }
