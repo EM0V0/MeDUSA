@@ -2,18 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/admin/presentation/pages/audit_logs_page.dart';
-import '../../features/admin/presentation/pages/device_management_page.dart';
-import '../../features/admin/presentation/pages/system_settings_page.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
 import '../../features/admin/presentation/pages/user_management_page.dart';
 import '../../features/devices/presentation/pages/device_connection_page.dart';
 import '../../features/devices/presentation/pages/device_scan_page.dart';
+import '../../features/devices/presentation/pages/wifi_provision_page.dart';
+import '../../features/devices/presentation/pages/winble_test_page.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
-import '../../features/auth/presentation/pages/register_page.dart';
+import '../../features/auth/presentation/pages/register_page_with_verification.dart';
+import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/role_test_page.dart';
-import '../../features/auth/presentation/pages/two_factor_setup_page.dart';
-import '../../features/auth/presentation/pages/two_factor_verify_page.dart';
 import '../../features/dashboard/presentation/pages/smart_dashboard_page.dart';
 import '../../features/messages/presentation/pages/messages_page.dart';
 import '../../features/patients/presentation/pages/patient_detail_page.dart';
@@ -50,55 +50,18 @@ class AppRouter {
         name: 'register',
         pageBuilder: (context, state) => CustomTransitionPage(
           key: state.pageKey,
-          child: const AuthLayout(child: RegisterPage()),
+          child: const AuthLayout(child: RegisterPageWithVerification()),
           transitionsBuilder: _slideTransition,
         ),
       ),
-      
-      // 2FA Routes
       GoRoute(
-        path: '/2fa-setup',
-        name: '2fa-setup',
-        pageBuilder: (context, state) {
-          final email = state.uri.queryParameters['email'] ?? '';
-          return CustomTransitionPage(
-            key: state.pageKey,
-            child: TwoFactorSetupPage(
-              userEmail: email,
-              onSetupComplete: () {
-                GoRouter.of(context).go('/dashboard');
-              },
-              onCancel: () {
-                GoRouter.of(context).go('/login');
-              },
-            ),
-            transitionsBuilder: _slideTransition,
-          );
-        },
-      ),
-      GoRoute(
-        path: '/2fa-verify',
-        name: '2fa-verify',
-        pageBuilder: (context, state) {
-          final email = state.uri.queryParameters['email'] ?? '';
-          return CustomTransitionPage(
-            key: state.pageKey,
-            child: TwoFactorVerifyPage(
-              userEmail: email,
-              onVerificationComplete: (success) {
-                if (success) {
-                  GoRouter.of(context).go('/dashboard');
-                } else {
-                  GoRouter.of(context).go('/login');
-                }
-              },
-              onCancel: () {
-                GoRouter.of(context).go('/login');
-              },
-            ),
-            transitionsBuilder: _slideTransition,
-          );
-        },
+        path: '/forgot-password',
+        name: 'forgot-password',
+        pageBuilder: (context, state) => CustomTransitionPage(
+          key: state.pageKey,
+          child: const AuthLayout(child: ForgotPasswordPage()),
+          transitionsBuilder: _slideTransition,
+        ),
       ),
 
       // Main App Routes (with shell navigation)
@@ -192,33 +155,6 @@ class AppRouter {
             ),
           ),
 
-          GoRoute(
-            path: '/device-management',
-            name: 'device-management',
-            pageBuilder: (context, state) => NoTransitionPage(
-              key: state.pageKey,
-              child: const DeviceManagementPage(),
-            ),
-          ),
-
-          GoRoute(
-            path: '/system-settings',
-            name: 'system-settings',
-            pageBuilder: (context, state) => NoTransitionPage(
-              key: state.pageKey,
-              child: const SystemSettingsPage(),
-            ),
-          ),
-
-          GoRoute(
-            path: '/audit-logs',
-            name: 'audit-logs',
-            pageBuilder: (context, state) => NoTransitionPage(
-              key: state.pageKey,
-              child: const AuditLogsPage(),
-            ),
-          ),
-
           // Device Connection Routes (for patients)
           GoRoute(
             path: '/device-scan',
@@ -229,6 +165,16 @@ class AppRouter {
             ),
           ),
 
+          // WinBle Test Page (Windows BLE + WinRT Pairing)
+          GoRoute(
+            path: '/winble-test',
+            name: 'winble-test',
+            pageBuilder: (context, state) => NoTransitionPage(
+              key: state.pageKey,
+              child: const WinBleTestPage(),
+            ),
+          ),
+
           GoRoute(
             path: '/device-connection',
             name: 'device-connection',
@@ -236,6 +182,30 @@ class AppRouter {
               key: state.pageKey,
               child: const DeviceConnectionPage(),
             ),
+          ),
+
+          // WiFi Provisioning Route (for setting up device WiFi credentials)
+          GoRoute(
+            path: '/wifi-provision',
+            name: 'wifi-provision',
+            pageBuilder: (context, state) {
+              // Get the device from extra parameter (passed from device scan page)
+              final device = state.extra as BluetoothDevice?;
+              
+              if (device == null) {
+                // If no device provided, redirect to device scan
+                return NoTransitionPage(
+                  key: state.pageKey,
+                  child: const DeviceScanPage(),
+                );
+              }
+              
+              return CustomTransitionPage(
+                key: state.pageKey,
+                child: WiFiProvisionPage(device: device),
+                transitionsBuilder: _slideTransition,
+              );
+            },
           ),
 
           // Profile Route
@@ -270,24 +240,31 @@ class AppRouter {
       final authState = authBloc.state;
       
       final isAuthenticated = authState is AuthAuthenticated;
-      final isLoggingIn = state.matchedLocation == '/login' || state.matchedLocation == '/register';
+      final isAuthPage = state.matchedLocation == '/login' || 
+                         state.matchedLocation == '/register' ||
+                         state.matchedLocation == '/forgot-password';
 
       // If not authenticated and not on auth page, redirect to login
-      if (!isAuthenticated && !isLoggingIn) {
+      if (!isAuthenticated && !isAuthPage) {
+        debugPrint('[Router] User not authenticated, redirecting to login');
         return '/login';
       }
 
       // If authenticated and on auth page, redirect to dashboard
-      if (isAuthenticated && isLoggingIn) {
+      if (isAuthenticated && isAuthPage) {
+        debugPrint('[Router] User authenticated, redirecting from auth page to dashboard');
         return '/dashboard';
       }
 
       // No redirect needed
       return null;
     } catch (e) {
+      debugPrint('[Router] Error in redirect: $e');
       // If BLoC is not available (app initializing), allow auth pages
-      final isLoggingIn = state.matchedLocation == '/login' || state.matchedLocation == '/register';
-      return isLoggingIn ? null : '/login';
+      final isAuthPage = state.matchedLocation == '/login' || 
+                         state.matchedLocation == '/register' ||
+                         state.matchedLocation == '/forgot-password';
+      return isAuthPage ? null : '/login';
     }
   }
 

@@ -5,6 +5,8 @@ class User {
   final String role;
   final DateTime? lastLogin;
   final bool isActive;
+  final String? patientId;  // For patients - their patient ID (e.g., PAT-001)
+  final String? token;      // Auth token (not stored in DB, used for session)
 
   const User({
     required this.id,
@@ -13,6 +15,8 @@ class User {
     required this.role,
     this.lastLogin,
     this.isActive = true,
+    this.patientId,
+    this.token,
   });
 
   Map<String, dynamic> toJson() {
@@ -23,17 +27,31 @@ class User {
       'role': role,
       'lastLogin': lastLogin?.toIso8601String(),
       'isActive': isActive,
+      'patient_id': patientId,
+      // token is intentionally excluded from toJson to avoid persisting it with user data
     };
   }
 
   factory User.fromJson(Map<String, dynamic> json) {
+    // Handle backend response format with first_name/last_name
+    String fullName;
+    if (json.containsKey('first_name') && json.containsKey('last_name')) {
+      final firstName = json['first_name'] ?? '';
+      final lastName = json['last_name'] ?? '';
+      fullName = '$firstName $lastName'.trim();
+    } else {
+      fullName = json['name'] ?? '';
+    }
+    
     return User(
       id: json['id'] ?? '',
       email: json['email'] ?? '',
-      name: json['name'] ?? '',
+      name: fullName,
       role: json['role'] ?? 'user',
-      lastLogin: json['lastLogin'] != null ? DateTime.parse(json['lastLogin']) : null,
-      isActive: json['isActive'] ?? true,
+      lastLogin: json['last_login'] != null ? DateTime.parse(json['last_login']) : null,
+      isActive: json['is_active'] ?? true,
+      patientId: json['patient_id'],  // Parse patient_id from backend
+      token: json['token'], // Allow parsing token if present
     );
   }
 
@@ -44,6 +62,8 @@ class User {
     String? role,
     DateTime? lastLogin,
     bool? isActive,
+    String? patientId,
+    String? token,
   }) {
     return User(
       id: id ?? this.id,
@@ -52,6 +72,8 @@ class User {
       role: role ?? this.role,
       lastLogin: lastLogin ?? this.lastLogin,
       isActive: isActive ?? this.isActive,
+      patientId: patientId ?? this.patientId,
+      token: token ?? this.token,
     );
   }
 }

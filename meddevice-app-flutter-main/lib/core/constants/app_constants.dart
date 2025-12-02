@@ -202,9 +202,24 @@ class AppConstants {
   static const double contentMaxWidth = 1200.0;       // Content area maximum width
   static const double contentPaddingRatio = 0.05;     // 5% of screen width as padding
 
-  // API Configuration
-  static const String baseUrl = 'http://localhost:3000';
-  static const String apiVersion = '/api/v1';
+  // API Configuration - AWS Lambda Production
+  // General API v3 - Authentication, Users, Patients, Devices
+  static const String _generalApiBaseUrl = 'https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod';
+  
+  // Tremor API - Tremor Analysis and Statistics (specialized endpoint)
+  static const String _tremorApiBaseUrl = 'https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod';
+  
+  // Use General API as default base URL for authentication and general endpoints
+  static String get baseUrl {
+    // You can add environment detection here if needed
+    return _generalApiBaseUrl;
+  }
+  
+  // Tremor API endpoint for tremor-specific requests
+  static String get tremorApiUrl => _tremorApiBaseUrl;
+  
+  // API version (automatically added by network interceptor)
+  static const String apiVersion = '';
 
   // Storage Keys
   static const String tokenKey = 'auth_token';
@@ -248,6 +263,13 @@ class AppConstants {
   static const int passwordMinLength = 8;
   static const int maxLoginAttempts = 5;
   static const Duration lockoutDuration = Duration(minutes: 15);
+  
+  // Password Strength Requirements (Scheme A: Basic Enhancement)
+  static const bool passwordRequireUppercase = true;
+  static const bool passwordRequireLowercase = true;
+  static const bool passwordRequireDigit = true;
+  static const bool passwordRequireSpecialChar = true;
+  static const String passwordSpecialChars = '!@#\$%^&*()_+-=[]{}|;:,.<>?';
 
   // UI Constants
   static const double cardElevation = 2.0;

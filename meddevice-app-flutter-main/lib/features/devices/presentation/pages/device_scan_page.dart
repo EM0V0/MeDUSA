@@ -1,15 +1,22 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart' as flutter_blue_plus;
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
+import '../../../../core/di/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
 import '../../../../shared/services/bluetooth_service.dart' show MedicalBluetoothService;
+import '../../../../shared/services/network_service.dart';
+import '../../../../shared/services/winble_wifi_helper_service.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class DeviceScanPage extends StatefulWidget {
   const DeviceScanPage({super.key});
@@ -20,11 +27,15 @@ class DeviceScanPage extends StatefulWidget {
 
 class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStateMixin {
   final MedicalBluetoothService _bluetoothService = MedicalBluetoothService();
+  final WinBleWiFiHelperService _wifiService = WinBleWiFiHelperService();
   late AnimationController _scanAnimationController;
   late Animation<double> _scanAnimation;
   
   StreamSubscription? _devicesSubscription;
   StreamSubscription? _statusSubscription;
+  
+  // Listener for WiFi service state changes
+  void Function()? _wifiServiceListener;
   
   List<BluetoothDevice> _discoveredDevices = [];
   String _statusMessage = 'Ready to scan';
@@ -64,16 +75,30 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
 
   void _setupSubscriptions() {
     _devicesSubscription = _bluetoothService.devicesStream.listen((devices) {
-      setState(() {
-        _discoveredDevices = devices;
-      });
+      if (mounted) {
+        setState(() {
+          _discoveredDevices = devices;
+        });
+      }
     });
 
     _statusSubscription = _bluetoothService.statusStream.listen((status) {
-      setState(() {
-        _statusMessage = status;
-      });
+      if (mounted) {
+        setState(() {
+          _statusMessage = status;
+        });
+      }
     });
+    
+    // Listen to WiFi service status to update paired device display
+    _wifiServiceListener = () {
+      if (mounted) {
+        setState(() {
+          // Trigger rebuild to show/hide paired device card
+        });
+      }
+    };
+    _wifiService.addListener(_wifiServiceListener!);
   }
 
   @override
@@ -81,6 +106,9 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
     _scanAnimationController.dispose();
     _devicesSubscription?.cancel();
     _statusSubscription?.cancel();
+    if (_wifiServiceListener != null) {
+      _wifiService.removeListener(_wifiServiceListener!);
+    }
     super.dispose();
   }
 
@@ -290,11 +318,16 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
   }
 
   Widget _buildContent() {
+    // Check if there's a paired device from WiFi service
+    final hasPairedDevice = _wifiService.connectedDeviceAddress != null && _wifiService.isPaired;
+    
     if (_bluetoothService.isConnected) {
       return _buildConnectedView();
-    } else if (_discoveredDevices.isEmpty && !_bluetoothService.isScanning) {
+    } else if (_discoveredDevices.isEmpty && !_bluetoothService.isScanning && !hasPairedDevice) {
+      // Only show empty state if no paired devices exist
       return _buildEmptyState();
     } else {
+      // Show device list if: scanning, has discovered devices, OR has paired device
       return _buildDevicesList();
     }
   }
@@ -367,11 +400,117 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
   }
 
   Widget _buildDevicesList() {
+    // Check if there's a paired/connected device from WinBle WiFi service
+    final connectedAddress = _wifiService.connectedDeviceAddress;
+    final isPaired = _wifiService.isPaired;
+    
     return Container(
       padding: EdgeInsets.all(16.w),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Show paired device section if exists
+          if (connectedAddress != null && isPaired) ...[
+            Text(
+              'Paired Device',
+              style: FontUtils.headline(
+                context: context,
+                color: AppColors.lightOnSurface,
+              ),
+            ),
+            SizedBox(height: 12.h),
+            Container(
+              padding: EdgeInsets.all(16.w),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.3),
+                  width: 2,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(12.w),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    child: Icon(
+                      Icons.bluetooth_connected_rounded,
+                      color: AppColors.success,
+                      size: IconUtils.getResponsiveIconSize(IconSizeType.medium, context),
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'MeDUSA Device',
+                          style: FontUtils.body(
+                            context: context,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.lightOnSurface,
+                          ),
+                        ),
+                        SizedBox(height: 4.h),
+                        Text(
+                          connectedAddress,
+                          style: FontUtils.caption(
+                            context: context,
+                            color: AppColors.lightOnSurfaceVariant,
+                          ),
+                        ),
+                        SizedBox(height: 4.h),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
+                          child: Text(
+                            'Connected & Paired',
+                            style: FontUtils.caption(
+                              context: context,
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      // Create a dummy BluetoothDevice to pass to WiFi provision page
+                      // We only need the address for reconnection
+                      context.go('/wifi-provision', extra: _createDeviceFromAddress(connectedAddress));
+                    },
+                    icon: Icon(
+                      Icons.wifi_rounded,
+                      size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
+                    ),
+                    label: Text(
+                      'Manage WiFi',
+                      style: FontUtils.body(
+                        context: context,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 24.h),
+          ],
           Text(
             'Available Devices',
             style: FontUtils.headline(
@@ -381,17 +520,63 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
           ),
           SizedBox(height: 16.h),
           Expanded(
-            child: ListView.builder(
-              itemCount: _discoveredDevices.length,
-              itemBuilder: (context, index) {
-                final device = _discoveredDevices[index];
-                return _buildDeviceCard(device);
-              },
-            ),
+            child: _discoveredDevices.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32.w),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.bluetooth_searching_rounded,
+                            size: 48,
+                            color: AppColors.lightOnSurfaceVariant,
+                          ),
+                          SizedBox(height: 16.h),
+                          Text(
+                            'No devices found yet',
+                            style: FontUtils.body(
+                              context: context,
+                              color: AppColors.lightOnSurfaceVariant,
+                            ),
+                          ),
+                          SizedBox(height: 8.h),
+                          Text(
+                            'Click "Start Scanning" to search for devices',
+                            style: FontUtils.caption(
+                              context: context,
+                              color: AppColors.lightOnSurfaceVariant,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _discoveredDevices.length,
+                    itemBuilder: (context, index) {
+                      final device = _discoveredDevices[index];
+                      return _buildDeviceCard(device);
+                    },
+                  ),
           ),
         ],
       ),
     );
+  }
+  
+  /// Create a BluetoothDevice from MAC address for navigation
+  /// This is a workaround since we can't store the original device object
+  BluetoothDevice _createDeviceFromAddress(String address) {
+    // Try to find in discovered devices first
+    for (var device in _discoveredDevices) {
+      if (device.remoteId.str == address) {
+        return device;
+      }
+    }
+    // If not found, create from address (FlutterBluePlus will handle reconnection)
+    return flutter_blue_plus.BluetoothDevice.fromId(address);
   }
 
   Widget _buildDeviceCard(BluetoothDevice device) {
@@ -423,7 +608,9 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
         columnSpacing: 12.h,
         children: [
           ResponsiveRowColumnItem(
+            rowFlex: 1,
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   padding: EdgeInsets.all(12.w),
@@ -443,9 +630,10 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
                   ),
                 ),
                 SizedBox(width: 12.w),
-                Expanded(
+                Flexible(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         deviceName,
@@ -487,26 +675,54 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
             ),
           ),
           ResponsiveRowColumnItem(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            child: ResponsiveRowColumn(
+              layout: ResponsiveBreakpoints.of(context).smallerThan(TABLET)
+                  ? ResponsiveRowColumnType.COLUMN
+                  : ResponsiveRowColumnType.ROW,
+              rowMainAxisAlignment: MainAxisAlignment.end,
+              rowSpacing: 8.w,
+              columnSpacing: 8.h,
               children: [
-                ElevatedButton.icon(
-                  onPressed: () => _connectToDevice(device),
-                  icon: Icon(
-                    Icons.link_rounded,
-                    size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
-                  ),
-                  label: Text(
-                    'Connect',
-                    style: FontUtils.body(
-                      context: context,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
+                ResponsiveRowColumnItem(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _connectToDevice(device),
+                    icon: Icon(
+                      Icons.link_rounded,
+                      size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
+                    ),
+                    label: Text(
+                      'Connect',
+                      style: FontUtils.body(
+                        context: context,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
                     ),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                ),
+                ResponsiveRowColumnItem(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _setupWiFi(device),
+                    icon: Icon(
+                      Icons.wifi_rounded,
+                      size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
+                    ),
+                    label: Text(
+                      'WiFi Setup',
+                      style: FontUtils.body(
+                        context: context,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                    ),
                   ),
                 ),
               ],
@@ -711,41 +927,110 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
   Future<void> _connectToDevice(BluetoothDevice device) async {
     _scanAnimationController.stop();
     
+    if (!mounted) return;
+    
+    // Show dialog and capture its context
+    BuildContext? dialogContext;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            SizedBox(height: 16.h),
-            Text(
-              'Connecting to ${device.platformName}...',
-              style: FontUtils.body(context: context),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    final success = await _bluetoothService.connectToDevice(device);
-    
-    if (mounted) {
-      Navigator.of(context).pop(); // Close loading dialog
-      
-      if (!success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_bluetoothService.lastError ?? 'Connection failed'),
-            backgroundColor: AppColors.error,
+      builder: (dialogCtx) {
+        dialogContext = dialogCtx;
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              SizedBox(height: 16.h),
+              Text(
+                'Connecting to ${device.platformName}...',
+                style: FontUtils.body(context: dialogCtx),
+              ),
+            ],
           ),
         );
+      },
+    );
+
+    try {
+      final success = await _bluetoothService.connectToDevice(device);
+      
+      if (success) {
+        // Bind device to patient in backend
+        try {
+          final authState = context.read<AuthBloc>().state;
+          if (authState is AuthAuthenticated) {
+            final userId = authState.user.id;
+            final networkService = ServiceLocator().get<NetworkService>();
+            
+            await networkService.post(
+              '/devices/bind',
+              data: {
+                'deviceId': device.remoteId.toString(),
+                'patientId': userId,
+              },
+            );
+            debugPrint('Device bound to patient successfully');
+          }
+        } catch (e) {
+          debugPrint('Failed to bind device: $e');
+          // We don't stop the flow here, as bluetooth connection is successful
+        }
       }
+      
+      if (mounted) {
+        // Close dialog using root navigator to avoid GoRouter issues
+        if (dialogContext != null) {
+          try {
+            Navigator.of(dialogContext!, rootNavigator: true).pop();
+          } catch (e) {
+            // Fallback: try with page context
+            try {
+              Navigator.of(context, rootNavigator: true).pop();
+            } catch (e2) {
+              debugPrint('Error closing dialog: $e2');
+            }
+          }
+        }
+        
+        if (!success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_bluetoothService.lastError ?? 'Connection failed'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Ensure dialog is closed even on exception
+      if (mounted) {
+        if (dialogContext != null) {
+          try {
+            Navigator.of(dialogContext!, rootNavigator: true).pop();
+          } catch (popError) {
+            try {
+              Navigator.of(context, rootNavigator: true).pop();
+            } catch (e2) {
+              debugPrint('Error closing dialog after exception: $e2');
+            }
+          }
+        }
+      }
+      // Don't rethrow - bluetooth_service already handled the error
     }
   }
 
   Future<void> _disconnect() async {
     await _bluetoothService.disconnect();
+  }
+
+  /// Navigate to WiFi provisioning page with the selected device
+  /// This avoids redundant scanning - the device is already discovered
+  void _setupWiFi(BluetoothDevice device) {
+    _scanAnimationController.stop();
+    
+    // Navigate to WiFi provision page, passing the device
+    context.go('/wifi-provision', extra: device);
   }
 }

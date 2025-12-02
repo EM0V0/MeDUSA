@@ -5,6 +5,7 @@ import 'package:responsive_framework/responsive_framework.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
+import 'patient_detail_page.dart';
 
 class PatientsPage extends StatefulWidget {
   const PatientsPage({super.key});
@@ -582,7 +583,17 @@ class _PatientsPageState extends State<PatientsPage> {
             Expanded(
               flex: 2,
               child: GestureDetector(
-                onTap: () => _showPatientDetails(patient),
+                onTap: () {
+                  // Navigate to patient detail page with tremor chart
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => PatientDetailPage(
+                        patientId: patient.id,
+                        patientName: patient.name,
+                      ),
+                    ),
+                  );
+                },
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1024,13 +1035,21 @@ class _PatientsPageState extends State<PatientsPage> {
   void _handlePatientAction(String value, Patient patient) {
     switch (value) {
       case 'view':
-        _showPatientDetails(patient);
+        // Navigate to patient detail page with tremor chart
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => PatientDetailPage(
+              patientId: patient.id,
+              patientName: patient.name,
+            ),
+          ),
+        );
         break;
       case 'edit':
         _editPatient(patient);
         break;
       case 'message':
-        _sendMessageToSelected(); // Assuming _sendMessageToSelected is the correct action for 'message'
+        _sendMessageToSelected();
         break;
       case 'delete':
         _deletePatient(patient);

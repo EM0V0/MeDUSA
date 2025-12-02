@@ -1,0 +1,4 @@
+backend-py/.venv/
+backend-py/__pycache__/
+backend-py/backend.zip
+backend-py/python/

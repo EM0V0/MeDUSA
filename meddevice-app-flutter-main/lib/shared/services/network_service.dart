@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'secure_network_service.dart';
 
 /// Network service abstract class
 abstract class NetworkService {
@@ -41,27 +42,42 @@ abstract class NetworkService {
   void clearAuthToken();
 }
 
-/// Network service implementation
+/// Network service implementation with TLS 1.3 security
 class NetworkServiceImpl implements NetworkService {
   final Dio _dio;
+  final SecureNetworkService _secureService;
 
-  NetworkServiceImpl(this._dio) {
+  NetworkServiceImpl(this._dio) : _secureService = SecureNetworkService() {
     _setupInterceptors();
   }
 
+  /// Factory constructor for medical-grade secure networking
+  factory NetworkServiceImpl.secure() {
+    final secureService = SecureNetworkService();
+    return NetworkServiceImpl(secureService.dio);
+  }
+
   void _setupInterceptors() {
-    // Request interceptor for adding auth token
+    // Request interceptor for adding auth token and API version prefix
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
+          // Automatically prepend /api/v1 to all paths if not already present
+          if (!options.path.startsWith('/api/v1') && !options.path.startsWith('http')) {
+            options.path = '/api/v1${options.path}';
+          }
+          
           // Add any default headers or processing here
           options.headers['Accept'] = 'application/json';
           options.headers['Content-Type'] = 'application/json';
+          
+          debugPrint('[NetworkService] Request: ${options.method} ${options.path}');
           
           handler.next(options);
         },
         onResponse: (response, handler) {
           // Handle successful responses
+          debugPrint('[NetworkService] Response: ${response.statusCode} ${response.requestOptions.path}');
           handler.next(response);
         },
         onError: (error, handler) {

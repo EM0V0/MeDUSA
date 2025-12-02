@@ -23,6 +23,32 @@ class AuditService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Log a general event (for TLS monitoring service)
+  Future<void> logEvent(String event, {
+    String? description,
+    Map<String, dynamic>? metadata,
+    String severity = 'info',
+  }) async {
+    final log = AuditLog(
+      id: 'event_${DateTime.now().millisecondsSinceEpoch}',
+      timestamp: DateTime.now(),
+      userId: 'system',
+      userName: 'System',
+      action: event,
+      resource: 'system',
+      category: AuditCategory.system,
+      severity: severity == 'critical' ? AuditSeverity.critical 
+                : severity == 'warning' ? AuditSeverity.warning 
+                : AuditSeverity.info,
+      details: description ?? event,
+      metadata: metadata,
+      ipAddress: '127.0.0.1',
+      userAgent: 'MeDUSA Security Monitor',
+    );
+    
+    _addLog(log);
+  }
+
   /// Log a user action
   void logUserAction({
     required String userId,
@@ -429,6 +455,7 @@ enum AuditCategory {
   userAction,
   dataAccess,
   security,
+  system,
   systemEvent,
   authentication,
   configuration,
@@ -451,6 +478,8 @@ extension AuditCategoryExtension on AuditCategory {
         return 'Data Access';
       case AuditCategory.security:
         return 'Security';
+      case AuditCategory.system:
+        return 'System';
       case AuditCategory.systemEvent:
         return 'System Event';
       case AuditCategory.authentication:
@@ -474,4 +503,10 @@ extension AuditSeverityExtension on AuditSeverity {
         return 'Critical';
     }
   }
+}
+
+/// Implementation of AuditService for dependency injection
+class AuditServiceImpl extends AuditService {
+  // Use singleton pattern - delegate to parent singleton
+  AuditServiceImpl() : super._internal();
 }

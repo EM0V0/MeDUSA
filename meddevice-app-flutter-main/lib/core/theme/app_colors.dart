@@ -78,6 +78,7 @@ class AppColors {
 
   // Universal system colors
   static const Color outline = Color(0xFF79747E);
+  static const Color outlineVariant = Color(0xFFCAC4D0);
   static const Color shadow = Color(0xFF000000);
   static const Color surfaceTint = primary;
   static const Color inverseSurface = Color(0xFF313033);
@@ -154,6 +155,17 @@ class AppColors {
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
+
+  // Text colors
+  static const Color textPrimary = Color(0xFF2D3748);
+  static const Color textSecondary = Color(0xFF718096);
+  static const Color textDisabled = Color(0xFFA0AEC0);
+  
+  // Divider colors
+  static const Color divider = Color(0xFFE2E8F0);
+  
+  // Primary variant
+  static const Color darkPrimary = Color(0xFF1565C0);
 
   // Opacity variants
   static Color get primaryWithOpacity => primary.withValues(alpha: 0.12);
