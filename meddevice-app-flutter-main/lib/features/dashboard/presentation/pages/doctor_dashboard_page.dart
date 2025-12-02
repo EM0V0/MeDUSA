@@ -4,9 +4,11 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/di/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
+import '../../../../shared/services/network_service.dart';
 import '../../../../shared/services/role_service.dart';
 import '../../../../shared/widgets/patient_selector.dart';
 import '../../../patients/data/datasources/tremor_api_service.dart';
@@ -27,7 +29,7 @@ class DoctorDashboardPage extends StatefulWidget {
 class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
   final RoleService _roleService = RoleService();
   final TremorApiService _tremorApi = TremorApiService();
-  final DoctorPatientService _doctorPatientService = DoctorPatientService();
+  late final DoctorPatientService _doctorPatientService;
   
   String? _doctorId;
   List<Map<String, dynamic>> _availablePatients = [];
@@ -48,6 +50,7 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
   @override
   void initState() {
     super.initState();
+    _doctorPatientService = DoctorPatientService(serviceLocator.get<NetworkService>());
   }
 
   @override

@@ -71,7 +71,7 @@ See **[API_DOCUMENTATION.md](API_DOCUMENTATION.md)** for complete endpoint refer
 - **Database**: DynamoDB (on-demand billing)
 - **Email**: AWS SES
 - **Storage**: S3
-- **Authentication**: JWT (bcrypt + PyJWT)
+- **Authentication**: JWT (PyJWT) with Argon2id for password hashing. Access tokens are signed with HS256 using a secret configured via the `JWT_SECRET` environment variable (production values are injected from AWS Secrets Manager; local/dev scripts provide a dev fallback). Refresh tokens are issued and short access token lifetimes are enforced.
 
 ### Key Features
 - ✅ Role-based access control (Admin, Doctor, Patient)
@@ -82,6 +82,13 @@ See **[API_DOCUMENTATION.md](API_DOCUMENTATION.md)** for complete endpoint refer
 - ✅ Bluetooth device integration
 
 ---
+
+### Implementation notes (security & device onboarding)
+
+- **Authorizer / JWT verification**: The API uses a Lambda Token Authorizer implementation (see `lambda_functions/authorizer.py`) which extracts the bearer token from the authorizer event (`authorizationToken`), removes the `Bearer ` prefix if present, and verifies the token using the `JWT_SECRET` and HS256. The authorizer then returns a generated IAM policy document; the current implementation uses a permissive wildcard resource for the API and relies on application-level `role` claims for finer-grained access control (see `medusa-cloud-components-python-backend/.../auth.py`). In production, `JWT_SECRET` should be stored and rotated in Secrets Manager (see `template.yaml`), and the dev fallback must never be used for production deployments.
+
+- **Device onboarding / registration**: The repo contains a simple demonstration script `register_device.py` which writes a device item directly to the DynamoDB table `medusa-devices-prod` for testing. This is intended as a quick binding helper for development. Production device provisioning should rely on managed IoT provisioning (X.509 certs / Just-in-Time provisioning or a secure registration API), authenticated device identity, and TLS-protected channels rather than hard-coded scripts.
+
 
 ## 🔵 Bluetooth Capabilities
 

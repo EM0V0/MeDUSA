@@ -294,7 +294,7 @@ def files_get(fileKey: str):
 # -------- Poses
 @app.get("/api/v1/poses", response_model=PosePage)
 @require_role("admin", "doctor", "patient")
-def poses_list(patientId: str, request: Request, nextToken: Optional[str] = None):
+async def poses_list(patientId: str, request: Request, nextToken: Optional[str] = None):
     try:
         # RBAC: Check ownership
         user_id = get_user_id(request)
@@ -328,7 +328,7 @@ def poses_list(patientId: str, request: Request, nextToken: Optional[str] = None
 
 @app.post("/api/v1/poses", response_model=PosePage)
 @require_role("admin", "doctor", "patient")
-def poses_create(body: PoseCreateReq, request: Request):
+async def poses_create(body: PoseCreateReq, request: Request):
     """
     Create pose data - API v3 compliant
     Returns list with single created pose
@@ -373,7 +373,7 @@ def pose_get(poseId: str):
 
 @app.get("/api/v1/patients/{userId}/poses", response_model=PosePage)
 @require_role("admin", "doctor", "patient")
-def patient_pose_list(userId: str, request: Request):
+async def patient_pose_list(userId: str, request: Request):
     # RBAC: Check ownership
     current_user_id = get_user_id(request)
     user_role = get_user_role(request)
@@ -1051,7 +1051,7 @@ async def bind_device(body: DeviceBindReq, request: Request):
 # -------- Doctor Endpoints
 @app.get("/api/v1/doctor/patients", response_model=DoctorPatientsRes)
 @require_role("doctor")
-def get_doctor_patients(request: Request, doctor_id: str):
+async def get_doctor_patients(request: Request, doctor_id: str):
     """Get patients assigned to a doctor"""
     user_id = get_user_id(request)
     if user_id != doctor_id:
@@ -1080,27 +1080,42 @@ def get_doctor_patients(request: Request, doctor_id: str):
 
 @app.post("/api/v1/doctor/assign-patient")
 @require_role("doctor")
-def assign_patient(request: Request, body: AssignPatientReq):
+async def assign_patient(request: Request, body: AssignPatientReq):
     """Assign a patient to a doctor"""
-    user_id = get_user_id(request)
-    if user_id != body.doctor_id:
-        raise HTTPException(403, detail="Access denied")
+    try:
+        user_id = get_user_id(request)
+        if user_id != body.doctor_id:
+            raise HTTPException(403, detail="Access denied")
+            
+        print(f"Assigning patient {body.patient_email} to doctor {body.doctor_id}")
         
-    # Find patient by email
-    patient = db.get_user_by_email(body.patient_email)
-    if not patient:
-        raise HTTPException(404, detail="Patient not found")
+        # Find patient by email
+        patient = db.get_user_by_email(body.patient_email)
+        if not patient:
+            print(f"Patient not found: {body.patient_email}")
+            raise HTTPException(404, detail="Patient not found")
+            
+        print(f"Found patient: {patient['id']}")
+            
+        # Create profile
+        profile = {
+            "userId": patient["id"],
+            "doctorId": body.doctor_id,
+            "assignedAt": datetime.now(timezone.utc).isoformat(),
+            "status": "active"
+        }
+        print(f"Creating profile: {profile}")
+        db.create_patient_profile(profile)
         
-    # Create profile
-    profile = {
-        "userId": patient["id"],
-        "doctorId": body.doctor_id,
-        "assignedAt": datetime.now(timezone.utc).isoformat(),
-        "status": "active"
-    }
-    db.create_patient_profile(profile)
-    
-    return {"success": True, "message": "Patient assigned successfully"}
+        return {"success": True, "message": "Patient assigned successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Error assigning patient: {str(e)}")
+        print(traceback.format_exc())
+        # Return the actual error for debugging
+        raise HTTPException(500, detail=f"Internal Server Error: {str(e)}")
 
 # -------- Tremor Analysis
 @app.get("/api/v1/tremor/analysis", response_model=TremorResponse)
