@@ -39,6 +39,8 @@ class _LoginPageState extends State<LoginPage> {
           if (state is AuthAuthenticated) {
             // Navigate to dashboard on successful login
             GoRouter.of(context).go('/dashboard');
+          } else if (state is AuthMfaRequired) {
+            _showMfaDialog(context, state.tempToken);
           } else if (state is AuthError) {
             // Show error message
             ScaffoldMessenger.of(context).showSnackBar(
@@ -251,6 +253,52 @@ class _LoginPageState extends State<LoginPage> {
       LoginRequested(
         email: _emailController.text.trim(),
         password: _passwordController.text,
+      ),
+    );
+  }
+
+  void _showMfaDialog(BuildContext context, String tempToken) {
+    final codeController = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('MFA Verification'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Please enter the verification code from your authenticator app.'),
+            SizedBox(height: 16.h),
+            TextField(
+              controller: codeController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Verification Code',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (codeController.text.isNotEmpty) {
+                Navigator.pop(context); // Close dialog
+                BlocProvider.of<AuthBloc>(context).add(
+                  MfaLoginRequested(
+                    tempToken: tempToken,
+                    code: codeController.text.trim(),
+                  ),
+                );
+              }
+            },
+            child: const Text('Verify'),
+          ),
+        ],
       ),
     );
   }

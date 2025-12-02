@@ -81,6 +81,20 @@ class AuthRemoteDataSourceMock implements AuthRemoteDataSource {
   }
 
   @override
+  Future<User> mfaLogin(String tempToken, String code) async {
+    // Simulate network delay
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // For mock purposes, accept any code "123456"
+    if (code == "123456") {
+      // Return a default mock user
+      return _mockUsers['demo@medusa.com']!;
+    }
+    
+    throw Exception('Invalid MFA code');
+  }
+
+  @override
   Future<User> register(String name, String email, String password, String role) async {
     // Simulate network delay
     await Future.delayed(const Duration(milliseconds: 800));

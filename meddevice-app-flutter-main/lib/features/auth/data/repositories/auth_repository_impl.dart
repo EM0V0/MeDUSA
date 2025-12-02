@@ -2,6 +2,7 @@ import '../datasources/auth_local_data_source.dart';
 import '../datasources/auth_remote_data_source.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../../domain/exceptions/auth_exceptions.dart';
 import '../../../../shared/services/email_service.dart';
 import '../../../../shared/services/verification_service.dart';
 
@@ -33,8 +34,30 @@ class AuthRepositoryImpl implements AuthRepository {
       await localDataSource.cacheUser(user);
       
       return user;
+    } on MfaRequiredException {
+      rethrow;
     } catch (e) {
       throw Exception('Login failed: $e');
+    }
+  }
+
+  @override
+  Future<User> mfaLogin(String tempToken, String code) async {
+    try {
+      // Attempt remote mfa login
+      final user = await remoteDataSource.mfaLogin(tempToken, code);
+      
+      // Save token if present
+      if (user.token != null) {
+        await localDataSource.saveToken(user.token!);
+      }
+      
+      // Cache user data locally
+      await localDataSource.cacheUser(user);
+      
+      return user;
+    } catch (e) {
+      throw Exception('MFA Login failed: $e');
     }
   }
 

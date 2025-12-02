@@ -2,9 +2,11 @@ import 'package:dio/dio.dart';
 import '../../../../shared/services/encryption_service.dart';
 import '../../../../shared/services/network_service.dart';
 import '../../domain/entities/user.dart';
+import '../../domain/exceptions/auth_exceptions.dart';
 
 abstract class AuthRemoteDataSource {
   Future<User> login(String email, String password);
+  Future<User> mfaLogin(String tempToken, String code);
   Future<User> register(String name, String email, String password, String role);
   Future<void> logout();
   Future<void> refreshToken();
@@ -37,6 +39,14 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       final responseData = response.data;
       
       print('Login full response: $responseData');
+
+      // Check for MFA requirement
+      if (responseData['mfaRequired'] == true) {
+        final tempToken = responseData['tempToken'];
+        if (tempToken != null) {
+           throw MfaRequiredException(tempToken: tempToken);
+        }
+      }
       
       // Store access JWT in network service for future requests
       if (responseData['accessJwt'] != null) {
@@ -68,8 +78,51 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       } else {
         throw Exception('Login failed: ${e.message ?? 'Unknown error'}');
       }
+    } on MfaRequiredException {
+      rethrow;
     } catch (e) {
       throw Exception('Login failed: $e');
+    }
+  }
+
+  @override
+  Future<User> mfaLogin(String tempToken, String code) async {
+    try {
+      final data = {
+        'tempToken': tempToken,
+        'code': code,
+      };
+
+      final response = await networkService.post(
+        '/auth/mfa/login',
+        data: data,
+      );
+
+      final responseData = response.data;
+      
+      // Store access JWT in network service for future requests
+      if (responseData['accessJwt'] != null) {
+        networkService.setAuthToken(responseData['accessJwt']);
+      }
+      
+      // Extract user data from login response
+      if (responseData['user'] == null) {
+        throw Exception('MFA Login response missing user data');
+      }
+      
+      final userData = responseData['user'] as Map<String, dynamic>;
+      
+      // Create user object and attach token
+      final user = User.fromJson(userData);
+      return user.copyWith(token: responseData['accessJwt']);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        throw Exception('Invalid MFA code.');
+      } else {
+        throw Exception('MFA Login failed: ${e.message ?? 'Unknown error'}');
+      }
+    } catch (e) {
+      throw Exception('MFA Login failed: $e');
     }
   }
 

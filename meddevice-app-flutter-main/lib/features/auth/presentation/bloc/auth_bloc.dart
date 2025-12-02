@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../shared/services/role_service.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../../domain/exceptions/auth_exceptions.dart';
 
 // Events
 abstract class AuthEvent {}
@@ -16,6 +17,16 @@ class LoginRequested extends AuthEvent {
     required this.email, 
     required this.password,
     this.role,
+  });
+}
+
+class MfaLoginRequested extends AuthEvent {
+  final String tempToken;
+  final String code;
+
+  MfaLoginRequested({
+    required this.tempToken,
+    required this.code,
   });
 }
 
@@ -94,6 +105,12 @@ class AuthAuthenticated extends AuthState {
   AuthAuthenticated({required this.user});
 }
 
+class AuthMfaRequired extends AuthState {
+  final String tempToken;
+
+  AuthMfaRequired({required this.tempToken});
+}
+
 class AuthUnauthenticated extends AuthState {}
 
 class AuthError extends AuthState {
@@ -137,6 +154,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       : _authRepository = authRepository,
         super(AuthInitial()) {
     on<LoginRequested>(_onLoginRequested);
+    on<MfaLoginRequested>(_onMfaLoginRequested);
     on<RegisterRequested>(_onRegisterRequested);
     on<LogoutRequested>(_onLogoutRequested);
     on<AuthStatusChanged>(_onAuthStatusChanged);
@@ -156,6 +174,26 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     try {
       final user = await _authRepository.login(event.email, event.password);
+      
+      // Initialize role service with user
+      _roleService.initialize(user);
+      
+      emit(AuthAuthenticated(user: user));
+    } on MfaRequiredException catch (e) {
+      emit(AuthMfaRequired(tempToken: e.tempToken));
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
+    }
+  }
+
+  Future<void> _onMfaLoginRequested(
+    MfaLoginRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+
+    try {
+      final user = await _authRepository.mfaLogin(event.tempToken, event.code);
       
       // Initialize role service with user
       _roleService.initialize(user);
