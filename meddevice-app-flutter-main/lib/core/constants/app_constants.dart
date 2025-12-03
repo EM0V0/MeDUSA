@@ -204,10 +204,10 @@ class AppConstants {
 
   // API Configuration - AWS Lambda Production
   // General API v3 - Authentication, Users, Patients, Devices
-  static const String _generalApiBaseUrl = 'https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod';
+  static const String _generalApiBaseUrl = 'https://7i5ew9xg55.execute-api.us-east-1.amazonaws.com/Prod';
   
   // Tremor API - Tremor Analysis and Statistics (specialized endpoint)
-  static const String _tremorApiBaseUrl = 'https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod';
+  static const String _tremorApiBaseUrl = 'https://7i5ew9xg55.execute-api.us-east-1.amazonaws.com/Prod';
   
   // Use General API as default base URL for authentication and general endpoints
   static String get baseUrl {
