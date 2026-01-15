@@ -1,7 +1,7 @@
 import requests
 import json
 
-# 使用你刚才确认的 API 端点
+# Use the API endpoint confirmed previously
 BASE_URL = "https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod"
 
 def print_result(test_name, response, expected_status=[403, 406]):
