@@ -59,9 +59,9 @@ def lambda_handler(event, context):
             print(f"Device {device_id} -> Patient {patient_id} (status: {device_status})")
         
         # Detect data format (single-value vs array)
-        accel_x = event.get('accel_x')
-        accel_y = event.get('accel_y')
-        accel_z = event.get('accel_z')
+        accel_x = event.get('accel_x', event.get('x'))
+        accel_y = event.get('accel_y', event.get('y'))
+        accel_z = event.get('accel_z', event.get('z'))
         
         is_array_mode = isinstance(accel_x, list)
         

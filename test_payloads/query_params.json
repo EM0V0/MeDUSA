@@ -1,0 +1,10 @@
+{
+    "TableName": "medusa-sensor-data",
+    "KeyConditionExpression": "device_id = :did AND #ts BETWEEN :start AND :end",
+    "ExpressionAttributeNames": {"#ts": "timestamp"},
+    "ExpressionAttributeValues": {
+        ":did": {"S": "medusa-pi-01"},
+        ":start": {"N": "1765075000000"},
+        ":end": {"N": "1765076000000"}
+    }
+}

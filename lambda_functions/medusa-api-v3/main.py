@@ -13,7 +13,7 @@ if os.path.isdir(_vendored) and _vendored not in sys.path:
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from mangum import Mangum
 
 from models import (
@@ -24,9 +24,13 @@ from models import (
     DeviceRegisterReq, DeviceUpdateReq, Device, DevicePage, DeviceBindReq,
     PatientProfileCreateReq, PatientProfileUpdateReq, PatientProfile, PatientWithProfile, PatientPage,
     SessionCreateReq, SessionUpdateReq, Session, SessionWithDetails, SessionPage,
-    TremorResponse, AssignPatientReq, DoctorPatientsRes
+    TremorResponse, AssignPatientReq, DoctorPatientsRes,
+    MfaSetupRes, MfaVerifyReq, MfaLoginReq
 )
-from auth import auth_middleware, issue_tokens, verify_pw, hash_pw
+from auth import (
+    auth_middleware, issue_tokens, verify_pw, hash_pw,
+    generate_mfa_secret, verify_mfa_code, get_mfa_qr_url, issue_temp_token, verify_jwt
+)
 from password_validator import PasswordValidator
 from email_service import EmailService
 from rbac import require_role, get_user_id, get_user_role
@@ -58,6 +62,30 @@ app.add_middleware(
     allow_credentials=True, # Allow cookies/auth headers
     max_age=600  # Cache preflight for 10 minutes
 )
+
+# Fix CT43: Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    return response
+
+# Fix CT56: Global Exception Handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    # Log the full error (CloudWatch will capture this print)
+    print(f"INTERNAL ERROR: {str(exc)}")
+    print(traceback.format_exc())
+    
+    # Return generic message to client
+    return JSONResponse(
+        status_code=500,
+        content={"code": "INTERNAL_ERROR", "message": "An internal server error occurred. Please contact support."}
+    )
 
 @app.middleware("http")
 async def _auth_mw(request: Request, call_next):
@@ -101,7 +129,9 @@ def register(req: RegisterReq):
         "role": role,
         "name": req.email.split('@')[0],  # Generate name from email
         "password": hash_pw(req.password),
-        "createdAt": datetime.now(timezone.utc).isoformat()
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "mfa_enabled": False,
+        "mfa_secret": None
     }
     db.put_user(user)
     
@@ -129,10 +159,36 @@ def login(req: LoginReq):
     Login user - API v3 compliant
     Returns flat response with accessJwt, refreshToken, expiresIn, and user info
     """
+    # Check account lockout status
+    failed_attempts, last_failed = db.get_failed_login(req.email)
+    if failed_attempts >= 5:
+        now = int(time.time())
+        # Lockout duration: 15 minutes (900 seconds)
+        if now - last_failed < 900:
+            remaining = 900 - (now - last_failed)
+            raise HTTPException(403, detail={
+                "code": "ACCOUNT_LOCKED", 
+                "message": f"Account locked due to too many failed attempts. Please try again in {int(remaining/60)} minutes."
+            })
+
     u = db.get_user_by_email(req.email)
     if not u or not verify_pw(req.password, u["password"]):
+        # Increment failed attempts
+        db.increment_failed_login(req.email)
         raise HTTPException(401, detail={"code":"AUTH_INVALID","message":"invalid credentials"})
     
+    # Reset failed attempts on successful login
+    db.reset_failed_login(req.email)
+    
+    # Check MFA
+    if u.get("mfa_enabled", False):
+        # Issue temp token for MFA challenge
+        temp_token = issue_temp_token(u["id"], u["role"])
+        return LoginRes(
+            mfaRequired=True,
+            tempToken=temp_token
+        )
+
     # Generate tokens
     tokens = issue_tokens(u["id"], u["role"])
     db.save_refresh(
@@ -156,6 +212,100 @@ def login(req: LoginReq):
             "name": u.get("name", u["email"].split("@")[0])
         }
     )
+
+@app.post("/api/v1/auth/mfa/login", response_model=LoginRes)
+def mfa_login(req: MfaLoginReq):
+    """
+    Complete login with MFA code
+    """
+    # Verify temp token
+    try:
+        claims = verify_jwt(req.tempToken)
+        if claims.get("scope") != "mfa_pending":
+            raise HTTPException(401, detail={"code":"AUTH_INVALID","message":"invalid token scope"})
+    except Exception:
+        raise HTTPException(401, detail={"code":"AUTH_INVALID","message":"invalid or expired temp token"})
+    
+    user_id = claims["sub"]
+    u = db.get_user(user_id)
+    if not u:
+        raise HTTPException(404, detail={"code":"USER_NOT_FOUND","message":"user not found"})
+    
+    # Verify MFA code
+    if not u.get("mfa_enabled") or not u.get("mfa_secret"):
+        raise HTTPException(400, detail={"code":"MFA_NOT_ENABLED","message":"MFA not enabled for this user"})
+        
+    if not verify_mfa_code(u["mfa_secret"], req.code):
+        raise HTTPException(401, detail={"code":"MFA_INVALID","message":"invalid MFA code"})
+    
+    # Generate full tokens
+    tokens = issue_tokens(u["id"], u["role"])
+    db.save_refresh(
+        tokens["refreshToken"],
+        {
+            "userId": u["id"], 
+            "role": u["role"], 
+            "expiresAt": int(time.time()) + int(os.environ.get("REFRESH_TTL_SECONDS","604800"))
+        }
+    )
+    
+    return LoginRes(
+        accessJwt=tokens["accessJwt"],
+        refreshToken=tokens["refreshToken"],
+        expiresIn=tokens["expiresIn"],
+        user={
+            "id": u["id"],
+            "email": u["email"],
+            "role": u["role"],
+            "name": u.get("name", u["email"].split("@")[0])
+        }
+    )
+
+@app.post("/api/v1/auth/mfa/setup", response_model=MfaSetupRes)
+def mfa_setup(request: Request):
+    """
+    Initiate MFA setup
+    Returns secret and QR code URL
+    """
+    user_id = get_user_id(request)
+    u = db.get_user(user_id)
+    if not u:
+        raise HTTPException(404, detail={"code":"USER_NOT_FOUND","message":"user not found"})
+    
+    # Generate secret
+    secret = generate_mfa_secret()
+    qr_url = get_mfa_qr_url(u["email"], secret)
+    
+    # Store secret temporarily (or permanently but disabled)
+    # Here we update user with secret but keep mfa_enabled=False until verified
+    u["mfa_secret"] = secret
+    u["mfa_enabled"] = False
+    db.put_user(u)
+    
+    return MfaSetupRes(secret=secret, qrCodeUrl=qr_url)
+
+@app.post("/api/v1/auth/mfa/verify", status_code=200)
+def mfa_verify(req: MfaVerifyReq, request: Request):
+    """
+    Verify MFA setup and enable MFA
+    """
+    user_id = get_user_id(request)
+    u = db.get_user(user_id)
+    if not u:
+        raise HTTPException(404, detail={"code":"USER_NOT_FOUND","message":"user not found"})
+    
+    secret = u.get("mfa_secret")
+    if not secret:
+        raise HTTPException(400, detail={"code":"MFA_NOT_SETUP","message":"MFA setup not initiated"})
+    
+    if not verify_mfa_code(secret, req.code):
+        raise HTTPException(401, detail={"code":"MFA_INVALID","message":"invalid MFA code"})
+    
+    # Enable MFA
+    u["mfa_enabled"] = True
+    db.put_user(u)
+    
+    return {"success": True, "message": "MFA enabled successfully"}
 
 @app.post("/api/v1/auth/refresh", response_model=RefreshRes)
 def refresh(req: RefreshReq):

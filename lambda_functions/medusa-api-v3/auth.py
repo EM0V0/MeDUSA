@@ -1,4 +1,4 @@
-import os, time, jwt
+import os, time, jwt, pyotp
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from fastapi import Request, HTTPException
@@ -20,6 +20,24 @@ def verify_pw(pw: str, hashed: str) -> bool:
         return ph.verify(hashed, pw)
     except (VerifyMismatchError, Exception):
         return False
+
+def generate_mfa_secret() -> str:
+    return pyotp.random_base32()
+
+def verify_mfa_code(secret: str, code: str) -> bool:
+    totp = pyotp.TOTP(secret)
+    return totp.verify(code)
+
+def get_mfa_qr_url(email: str, secret: str) -> str:
+    return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name="MeDUSA")
+
+def issue_temp_token(sub: str, role: str) -> str:
+    now = int(time.time())
+    # Short lived token (5 mins) for MFA challenge
+    return jwt.encode(
+        {"sub": sub, "role": role, "exp": now + 300, "scope": "mfa_pending"},
+        JWT_SECRET, algorithm="HS256"
+    )
 
 def issue_tokens(sub: str, role: str) -> Dict[str, Any]:
     """
@@ -53,6 +71,7 @@ def verify_jwt(token: str) -> Dict[str, Any]:
 OPEN_PATH_SUFFIXES = [
     "/admin/health", 
     "/auth/login", 
+    "/auth/mfa/login",
     "/auth/register", 
     "/auth/refresh", 
     "/auth/logout", 

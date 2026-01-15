@@ -8,29 +8,44 @@ from datetime import datetime
 
 class LoginReq(BaseModel):
     """Login request - API v3"""
-    email: str
-    password: str
+    email: str = Field(..., max_length=255)
+    password: str = Field(..., max_length=128)
 
 class RegisterReq(BaseModel):
     """Register request - API v3"""
-    email: str
-    password: str
-    role: str = "patient"  # API v3 requires role field
+    email: str = Field(..., max_length=255)
+    password: str = Field(..., max_length=128)
+    role: str = Field("patient", max_length=20)  # API v3 requires role field
 
 class RefreshReq(BaseModel):
     """Refresh request - API v3 uses camelCase"""
-    refreshToken: str = Field(alias="refreshToken")
+    refreshToken: str = Field(..., alias="refreshToken", max_length=2048)
 
 class ResetPasswordReq(BaseModel):
     """Reset password request"""
-    email: str
-    newPassword: str
+    email: str = Field(..., max_length=255)
+    newPassword: str = Field(..., max_length=128)
 
 class SendVerificationCodeReq(BaseModel):
     """Send verification code request"""
-    email: str
-    code: str
-    type: str  # 'registration' or 'password_reset'
+    email: str = Field(..., max_length=255)
+    code: str = Field(..., max_length=10)
+    type: str = Field(..., max_length=20)  # 'registration' or 'password_reset'
+
+class MfaSetupRes(BaseModel):
+    """MFA Setup Response"""
+    secret: str
+    qrCodeUrl: str
+
+class MfaVerifyReq(BaseModel):
+    """MFA Verify Request"""
+    code: str = Field(..., max_length=10)
+    secret: Optional[str] = Field(None, max_length=64) # For setup verification
+
+class MfaLoginReq(BaseModel):
+    """MFA Login Request"""
+    tempToken: str = Field(..., max_length=2048)
+    code: str = Field(..., max_length=10)
 
 # ========================================
 # Auth Response Models (API v3 - flat, no data wrapper)
@@ -48,10 +63,12 @@ class RegisterRes(BaseModel):
 
 class LoginRes(BaseModel):
     """Login response - API v3 format (200)"""
-    accessJwt: str  # API v3 uses accessJwt
-    refreshToken: str
-    expiresIn: int  # API v3 uses camelCase
-    user: dict  # User information
+    accessJwt: Optional[str] = None  # API v3 uses accessJwt
+    refreshToken: Optional[str] = None
+    expiresIn: Optional[int] = None  # API v3 uses camelCase
+    user: Optional[dict] = None  # User information
+    mfaRequired: bool = False
+    tempToken: Optional[str] = None
     
     class Config:
         populate_by_name = True
@@ -83,14 +100,14 @@ class UserOut(BaseModel):
 
 class PoseCreateReq(BaseModel):
     """Request model for creating a pose"""
-    patientId: Optional[str] = None
-    fileKey: str
+    patientId: Optional[str] = Field(None, max_length=50)
+    fileKey: str = Field(..., max_length=255)
 
 class PresignReq(BaseModel):
-    filename: str
-    contentType: str
-    scope: str  # "pose" | "report"
-    patientId: Optional[str] = None
+    filename: str = Field(..., max_length=255)
+    contentType: str = Field(..., max_length=100)
+    scope: str = Field(..., max_length=20)  # "pose" | "report"
+    patientId: Optional[str] = Field(None, max_length=50)
 
 class PresignRes(BaseModel):
     uploadUrl: str
@@ -123,22 +140,22 @@ class ReportPage(BaseModel):
 
 class DeviceRegisterReq(BaseModel):
     """Register device request"""
-    macAddress: str
-    name: str
-    type: str = "tremor_sensor"
-    firmwareVersion: str = "1.0.0"
+    macAddress: str = Field(..., max_length=17)
+    name: str = Field(..., max_length=100)
+    type: str = Field("tremor_sensor", max_length=50)
+    firmwareVersion: str = Field("1.0.0", max_length=20)
 
 class DeviceUpdateReq(BaseModel):
     """Update device request"""
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=100)
     batteryLevel: Optional[int] = None
-    status: Optional[str] = None
-    firmwareVersion: Optional[str] = None
+    status: Optional[str] = Field(None, max_length=20)
+    firmwareVersion: Optional[str] = Field(None, max_length=20)
 
 class DeviceBindReq(BaseModel):
     """Bind device request"""
-    deviceId: str
-    patientId: str
+    deviceId: str = Field(..., max_length=50)
+    patientId: str = Field(..., max_length=50)
 
 class Device(BaseModel):
     """Device model"""
@@ -171,17 +188,17 @@ class DevicePage(BaseModel):
 
 class PatientProfileCreateReq(BaseModel):
     """Create patient profile request (for admin/doctor)"""
-    userId: str
-    doctorId: str
-    diagnosis: Optional[str] = None
-    severity: Optional[str] = "mild"  # mild, moderate, severe
-    notes: Optional[str] = None
+    userId: str = Field(..., max_length=50)
+    doctorId: str = Field(..., max_length=50)
+    diagnosis: Optional[str] = Field(None, max_length=500)
+    severity: Optional[str] = Field("mild", max_length=20)  # mild, moderate, severe
+    notes: Optional[str] = Field(None, max_length=2000)
 
 class PatientProfileUpdateReq(BaseModel):
     """Update patient profile request"""
-    diagnosis: Optional[str] = None
-    severity: Optional[str] = None
-    notes: Optional[str] = None
+    diagnosis: Optional[str] = Field(None, max_length=500)
+    severity: Optional[str] = Field(None, max_length=20)
+    notes: Optional[str] = Field(None, max_length=2000)
 
 class PatientProfile(BaseModel):
     """Patient profile model"""
@@ -226,13 +243,13 @@ class PatientPage(BaseModel):
 
 class SessionCreateReq(BaseModel):
     """Create measurement session request"""
-    deviceId: str
-    patientId: str
-    notes: Optional[str] = None
+    deviceId: str = Field(..., max_length=50)
+    patientId: str = Field(..., max_length=50)
+    notes: Optional[str] = Field(None, max_length=2000)
 
 class SessionUpdateReq(BaseModel):
     """Update session request"""
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=2000)
 
 class Session(BaseModel):
     """Measurement session model"""
@@ -304,8 +321,8 @@ class TremorResponse(BaseModel):
 # ========================================
 
 class AssignPatientReq(BaseModel):
-    doctor_id: str
-    patient_email: str
+    doctor_id: str = Field(..., max_length=50)
+    patient_email: str = Field(..., max_length=255)
 
 class DoctorPatientItem(BaseModel):
     patient_id: str

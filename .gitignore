@@ -1,7 +1,7 @@
 # ==============================
 # MeDUSA Project .gitignore
 # Medical Device Management System
-# Frontend: Flutter/Dart | Backend: Rust/AWS Lambda
+# Backend: Python/AWS Lambda
 # ==============================
 
 # ==============================
@@ -243,3 +243,15 @@ test_patient_data/
 *.bak
 *.orig
 *~
+# ==============================
+# Python
+# ==============================
+__pycache__/
+*.py[cod]
+*.class
+.pytest_cache/
+.venv/
+venv/
+
+*.zip
+
