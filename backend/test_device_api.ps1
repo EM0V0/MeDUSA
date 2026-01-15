@@ -57,13 +57,13 @@ if ($doctorRegisterResp.userId) {
         }' -s | ConvertFrom-Json
     
     $doctorToken = $doctorLoginResp.accessJwt
-    Write-Host "✅ 医生登录成功" -ForegroundColor Green
+    Write-Host "✅ Doctor login successful" -ForegroundColor Green
 }
 
 Start-Sleep -Seconds 1
 
-# Step 3: 患者注册设备
-Write-Host "`nStep 3: 患者注册设备..." -ForegroundColor Yellow
+# Step 3: Patient Registers Device
+Write-Host "`nStep 3: Patient Registers Device..." -ForegroundColor Yellow
 $deviceResp = curl.exe -X POST "$API_URL/devices" `
     -H "Content-Type: application/json" `
     -H "Authorization: Bearer $patientToken" `
@@ -75,32 +75,32 @@ $deviceResp = curl.exe -X POST "$API_URL/devices" `
     }' -s | ConvertFrom-Json
 
 if ($deviceResp.id) {
-    Write-Host "✅ 设备注册成功: $($deviceResp.id)" -ForegroundColor Green
+    Write-Host "✅ Device registration successful: $($deviceResp.id)" -ForegroundColor Green
     $deviceId = $deviceResp.id
 } else {
-    Write-Host "❌ 设备注册失败" -ForegroundColor Red
+    Write-Host "❌ Device registration failed" -ForegroundColor Red
     Write-Host "Response: $deviceResp" -ForegroundColor Red
     exit 1
 }
 
 Start-Sleep -Seconds 1
 
-# Step 4: 患者查看自己的设备
-Write-Host "`nStep 4: 患者查看自己的设备..." -ForegroundColor Yellow
+# Step 4: Patient Views Own Devices
+Write-Host "`nStep 4: Patient Views Own Devices..." -ForegroundColor Yellow
 $myDevicesResp = curl.exe -X GET "$API_URL/devices/my" `
     -H "Authorization: Bearer $patientToken" `
     -s | ConvertFrom-Json
 
 if ($myDevicesResp.items) {
-    Write-Host "✅ 查询成功，设备数量: $($myDevicesResp.items.Count)" -ForegroundColor Green
+    Write-Host "✅ Query successful, device count: $($myDevicesResp.items.Count)" -ForegroundColor Green
 } else {
-    Write-Host "❌ 查询失败" -ForegroundColor Red
+    Write-Host "❌ Query failed" -ForegroundColor Red
 }
 
 Start-Sleep -Seconds 1
 
-# Step 5: 患者更新设备状态
-Write-Host "`nStep 5: 患者更新设备状态..." -ForegroundColor Yellow
+# Step 5: Patient Updates Device Status
+Write-Host "`nStep 5: Patient Updates Device Status..." -ForegroundColor Yellow
 $updateResp = curl.exe -X PUT "$API_URL/devices/$deviceId" `
     -H "Content-Type: application/json" `
     -H "Authorization: Bearer $patientToken" `
@@ -110,91 +110,91 @@ $updateResp = curl.exe -X PUT "$API_URL/devices/$deviceId" `
     }' -s | ConvertFrom-Json
 
 if ($updateResp.status -eq "online") {
-    Write-Host "✅ 设备状态更新成功: $($updateResp.status), 电量: $($updateResp.batteryLevel)%" -ForegroundColor Green
+    Write-Host "✅ Device status update successful: $($updateResp.status), Battery: $($updateResp.batteryLevel)%" -ForegroundColor Green
 } else {
-    Write-Host "❌ 更新失败" -ForegroundColor Red
+    Write-Host "❌ Update failed" -ForegroundColor Red
 }
 
 Start-Sleep -Seconds 1
 
-# Step 6: 医生查看所有设备 (RBAC 测试)
-Write-Host "`nStep 6: 医生查看所有设备 (RBAC 测试)..." -ForegroundColor Yellow
+# Step 6: Doctor Views All Devices (RBAC Test)
+Write-Host "`nStep 6: Doctor Views All Devices (RBAC Test)..." -ForegroundColor Yellow
 $allDevicesResp = curl.exe -X GET "$API_URL/devices" `
     -H "Authorization: Bearer $doctorToken" `
     -s | ConvertFrom-Json
 
 if ($allDevicesResp.items) {
-    Write-Host "✅ 医生可以查看所有设备，数量: $($allDevicesResp.items.Count)" -ForegroundColor Green
+    Write-Host "✅ Doctor can view all devices, count: $($allDevicesResp.items.Count)" -ForegroundColor Green
 } else {
-    Write-Host "❌ 查询失败" -ForegroundColor Red
+    Write-Host "❌ Query failed" -ForegroundColor Red
 }
 
 Start-Sleep -Seconds 1
 
-# Step 7: 患者尝试查看所有设备 (应该被拒绝)
-Write-Host "`nStep 7: 患者尝试查看所有设备 (应该被拒绝)..." -ForegroundColor Yellow
+# Step 7: Patient Attempts to View All Devices (Should be Denied)
+Write-Host "`nStep 7: Patient Attempts to View All Devices (Should be Denied)..." -ForegroundColor Yellow
 $forbiddenResp = curl.exe -X GET "$API_URL/devices" `
     -H "Authorization: Bearer $patientToken" `
     -s 2>&1
 
 if ($forbiddenResp -like "*FORBIDDEN*" -or $forbiddenResp -like "*403*") {
-    Write-Host "✅ RBAC 正确：患者被拒绝访问" -ForegroundColor Green
+    Write-Host "✅ RBAC Correct: Patient access denied" -ForegroundColor Green
 } else {
-    Write-Host "⚠️  RBAC 可能有问题：患者应该被拒绝" -ForegroundColor Yellow
+    Write-Host "⚠️  RBAC Issue: Patient should be denied" -ForegroundColor Yellow
 }
 
 Start-Sleep -Seconds 1
 
-# Step 8: 患者查看设备详情
-Write-Host "`nStep 8: 患者查看设备详情..." -ForegroundColor Yellow
+# Step 8: Patient Views Device Details
+Write-Host "`nStep 8: Patient Views Device Details..." -ForegroundColor Yellow
 $deviceDetailResp = curl.exe -X GET "$API_URL/devices/$deviceId" `
     -H "Authorization: Bearer $patientToken" `
     -s | ConvertFrom-Json
 
 if ($deviceDetailResp.id) {
-    Write-Host "✅ 设备详情查询成功" -ForegroundColor Green
+    Write-Host "✅ Device details query successful" -ForegroundColor Green
     Write-Host "   ID: $($deviceDetailResp.id)" -ForegroundColor Gray
     Write-Host "   Name: $($deviceDetailResp.name)" -ForegroundColor Gray
     Write-Host "   MAC: $($deviceDetailResp.macAddress)" -ForegroundColor Gray
     Write-Host "   Status: $($deviceDetailResp.status)" -ForegroundColor Gray
     Write-Host "   Battery: $($deviceDetailResp.batteryLevel)%" -ForegroundColor Gray
 } else {
-    Write-Host "❌ 查询失败" -ForegroundColor Red
+    Write-Host "❌ Query failed" -ForegroundColor Red
 }
 
 Start-Sleep -Seconds 1
 
-# Step 9: 患者删除设备
-Write-Host "`nStep 9: 患者删除设备..." -ForegroundColor Yellow
+# Step 9: Patient Deletes Device
+Write-Host "`nStep 9: Patient Deletes Device..." -ForegroundColor Yellow
 $deleteResp = curl.exe -X DELETE "$API_URL/devices/$deviceId" `
     -H "Authorization: Bearer $patientToken" `
     -s | ConvertFrom-Json
 
 if ($deleteResp.success) {
-    Write-Host "✅ 设备删除成功" -ForegroundColor Green
+    Write-Host "✅ Device deletion successful" -ForegroundColor Green
 } else {
-    Write-Host "❌ 删除失败" -ForegroundColor Red
+    Write-Host "❌ Deletion failed" -ForegroundColor Red
 }
 
-# 总结
+# Summary
 Write-Host "`n================================" -ForegroundColor Cyan
-Write-Host "✅ 设备管理 API 测试完成！" -ForegroundColor Green
+Write-Host "✅ Device Management API Test Completed!" -ForegroundColor Green
 Write-Host "================================`n" -ForegroundColor Cyan
 
-Write-Host "测试结果:" -ForegroundColor White
-Write-Host "  ✅ 患者可以注册设备" -ForegroundColor Green
-Write-Host "  ✅ 患者可以查看自己的设备" -ForegroundColor Green
-Write-Host "  ✅ 患者可以更新设备状态" -ForegroundColor Green
-Write-Host "  ✅ 患者可以删除自己的设备" -ForegroundColor Green
-Write-Host "  ✅ 医生可以查看所有设备" -ForegroundColor Green
-Write-Host "  ✅ RBAC 权限控制正确" -ForegroundColor Green
+Write-Host "Test Results:" -ForegroundColor White
+Write-Host "  ✅ Patient can register device" -ForegroundColor Green
+Write-Host "  ✅ Patient can view own devices" -ForegroundColor Green
+Write-Host "  ✅ Patient can update device status" -ForegroundColor Green
+Write-Host "  ✅ Patient can delete own device" -ForegroundColor Green
+Write-Host "  ✅ Doctor can view all devices" -ForegroundColor Green
+Write-Host "  ✅ RBAC permission control correct" -ForegroundColor Green
 
-Write-Host "`n📚 API 端点:" -ForegroundColor Cyan
-Write-Host "  POST   /api/v1/devices          - 注册设备 (Patient)" -ForegroundColor White
-Write-Host "  GET    /api/v1/devices/my       - 查看我的设备 (Patient)" -ForegroundColor White
-Write-Host "  GET    /api/v1/devices          - 查看所有设备 (Doctor, Admin)" -ForegroundColor White
-Write-Host "  GET    /api/v1/devices/{id}     - 查看设备详情" -ForegroundColor White
-Write-Host "  PUT    /api/v1/devices/{id}     - 更新设备 (Patient)" -ForegroundColor White
-Write-Host "  DELETE /api/v1/devices/{id}     - 删除设备 (Patient, Admin)" -ForegroundColor White
-Write-Host "  GET    /api/v1/patients/{id}/devices - 查看患者设备 (Doctor, Admin)`n" -ForegroundColor White
+Write-Host "`n📚 API Endpoints:" -ForegroundColor Cyan
+Write-Host "  POST   /api/v1/devices          - Register Device (Patient)" -ForegroundColor White
+Write-Host "  GET    /api/v1/devices/my       - View My Devices (Patient)" -ForegroundColor White
+Write-Host "  GET    /api/v1/devices          - View All Devices (Doctor, Admin)" -ForegroundColor White
+Write-Host "  GET    /api/v1/devices/{id}     - View Device Details" -ForegroundColor White
+Write-Host "  PUT    /api/v1/devices/{id}     - Update Device (Patient)" -ForegroundColor White
+Write-Host "  DELETE /api/v1/devices/{id}     - Delete Device (Patient, Admin)" -ForegroundColor White
+Write-Host "  GET    /api/v1/patients/{id}/devices - View Patient Devices (Doctor, Admin)`n" -ForegroundColor White
 
