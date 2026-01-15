@@ -7,7 +7,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
-import '../../../../core/utils/icon_utils.dart';
 import '../../../patients/data/datasources/tremor_api_service.dart';
 import '../../../patients/data/models/tremor_analysis.dart';
 import '../../../patients/presentation/widgets/tremor_chart.dart';

@@ -393,11 +393,6 @@ class SecureNetworkService {
     }
   }
 
-  /// 生成请求ID
-  String _generateRequestId() {
-    return 'req_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(10000)}';
-  }
-
   /// 清理资源
   void dispose() {
     _dio.close();

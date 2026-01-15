@@ -39,8 +39,6 @@ class TLSMonitoringService {
     final startTime = DateTime.now();
     
     try {
-      final uri = Uri.parse(endpoint.startsWith('http') ? endpoint : 'https://$endpoint');
-      
       // 获取TLS连接信息
       final tlsInfo = await _securityService.getTLSConnectionInfo();
       

@@ -23,15 +23,6 @@ class PairingManager {
   
   static PairingManager get instance => _instance;
 
-  // Callback for requesting PIN from user
-  Future<String?> Function(BluetoothDevice device)? _pinRequestCallback;
-
-  /// Set the callback function that will be invoked when a PIN is required
-  /// This should show a dialog or input field to the user
-  void setPinRequestCallback(Future<String?> Function(BluetoothDevice device) callback) {
-    _pinRequestCallback = callback;
-  }
-
   /// Check if the device is currently paired at OS level
   Future<bool> isPaired(BluetoothDevice device) async {
     if (kIsWeb) {

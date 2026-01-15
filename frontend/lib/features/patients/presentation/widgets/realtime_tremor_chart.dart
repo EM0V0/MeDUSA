@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../data/datasources/tremor_api_service.dart';
@@ -149,12 +147,6 @@ class _RealtimeTremorChartState extends State<RealtimeTremorChart> {
       _dataPoints.clear();
     });
     _startPolling();
-  }
-
-  Color _getColorForValue(double value) {
-    if (value > 70) return Colors.red;
-    if (value < 30) return Colors.blue;
-    return Colors.yellow;
   }
 
   int? _getFixedRangeMs() {

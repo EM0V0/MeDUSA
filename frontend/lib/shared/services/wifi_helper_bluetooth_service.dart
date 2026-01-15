@@ -129,8 +129,6 @@ class WiFiHelperBluetoothService extends ChangeNotifier {
         return [];
       }
 
-      final targetServiceUuid = flutter_blue_plus.Guid("c0de0000-7e1a-4f83-bf3a-0c0ffee0c0de");
-
       // Do NOT use withServices filter - many devices don't advertise services in broadcast
       // We filter by device name "medusa" instead
       await FlutterBlueAdapter.startScan(

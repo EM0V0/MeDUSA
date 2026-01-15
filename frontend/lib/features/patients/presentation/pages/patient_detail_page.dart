@@ -32,8 +32,6 @@ class _PatientDetailPageState extends State<PatientDetailPage> with SingleTicker
   TabController? _tabController;
   
   // Time range filters
-  DateTime _startTime = DateTime.now().subtract(const Duration(hours: 24));
-  DateTime _endTime = DateTime.now();
   String _selectedTimeRange = '24h';
 
   @override

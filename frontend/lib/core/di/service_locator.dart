@@ -1,6 +1,5 @@
 
 import 'package:flutter/foundation.dart';
-import 'package:get_it/get_it.dart';
 import '../../features/auth/data/datasources/auth_local_data_source.dart';
 import '../../features/auth/data/datasources/auth_remote_data_source.dart';
 import '../../features/auth/data/datasources/auth_remote_data_source_mock.dart';

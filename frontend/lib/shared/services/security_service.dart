@@ -81,13 +81,11 @@ class SecurityServiceImpl implements SecurityService {
   
   final FlutterSecureStorage _secureStorage;
   final LocalAuthentication _localAuth;
-  final EncryptionService _encryptionService;
   final Random _random = Random.secure();
 
   SecurityServiceImpl({
     FlutterSecureStorage? secureStorage,
     LocalAuthentication? localAuth,
-    EncryptionService? encryptionService,
   })  : _secureStorage = secureStorage ?? const FlutterSecureStorage(
           aOptions: AndroidOptions(
             encryptedSharedPreferences: true,
@@ -96,8 +94,7 @@ class SecurityServiceImpl implements SecurityService {
             accessibility: KeychainAccessibility.first_unlock_this_device,
           ),
         ),
-        _localAuth = localAuth ?? LocalAuthentication(),
-        _encryptionService = encryptionService ?? EncryptionServiceImpl();
+        _localAuth = localAuth ?? LocalAuthentication();
 
   @override
   Future<void> initialize() async {

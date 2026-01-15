@@ -45,9 +45,8 @@ abstract class NetworkService {
 /// Network service implementation with TLS 1.3 security
 class NetworkServiceImpl implements NetworkService {
   final Dio _dio;
-  final SecureNetworkService _secureService;
 
-  NetworkServiceImpl(this._dio) : _secureService = SecureNetworkService() {
+  NetworkServiceImpl(this._dio) {
     _setupInterceptors();
   }
 

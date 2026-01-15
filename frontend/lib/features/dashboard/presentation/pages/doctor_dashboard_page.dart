@@ -10,7 +10,6 @@ import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
 import '../../../../shared/services/network_service.dart';
 import '../../../../shared/services/role_service.dart';
-import '../../../../shared/widgets/patient_selector.dart';
 import '../../../patients/data/datasources/tremor_api_service.dart';
 import '../../../patients/data/models/tremor_analysis.dart';
 import '../../../patients/presentation/widgets/tremor_chart.dart';
