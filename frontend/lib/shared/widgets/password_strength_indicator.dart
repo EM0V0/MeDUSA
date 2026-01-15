@@ -70,7 +70,7 @@ class PasswordStrengthIndicator extends StatelessWidget {
                 height: 4.h,
                 margin: EdgeInsets.only(right: index < 3 ? 4.w : 0),
                 decoration: BoxDecoration(
-                  color: isActive ? _getStrengthColor(strength) : AppColors.onSurfaceVariant.withOpacity(0.3),
+                  color: isActive ? _getStrengthColor(strength) : AppColors.onSurfaceVariant.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2.r),
                 ),
               ),
@@ -86,10 +86,10 @@ class PasswordStrengthIndicator extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(12.w),
       decoration: BoxDecoration(
-        color: AppColors.onSurfaceVariant.withOpacity(0.1),
+        color: AppColors.onSurfaceVariant.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8.r),
         border: Border.all(
-          color: AppColors.onSurfaceVariant.withOpacity(0.2),
+          color: AppColors.onSurfaceVariant.withValues(alpha: 0.2),
           width: 1,
         ),
       ),
@@ -122,7 +122,7 @@ class PasswordStrengthIndicator extends StatelessWidget {
           Icon(
             isMet ? Icons.check_circle : Icons.radio_button_unchecked,
             size: 14.sp,
-            color: isMet ? AppColors.success : AppColors.onSurfaceVariant.withOpacity(0.5),
+            color: isMet ? AppColors.success : AppColors.onSurfaceVariant.withValues(alpha: 0.5),
           ),
           SizedBox(width: 8.w),
           Expanded(
