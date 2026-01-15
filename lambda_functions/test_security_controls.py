@@ -37,7 +37,7 @@ def test_ct103_unauth_access():
     # Try to access a protected endpoint without token
     url = f"{API_ENDPOINT}/api/v1/tremor/analysis?patient_id=PAT-001"
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         if response.status_code in [401, 403]:
             print(f"✅ PASS: Access denied with status {response.status_code}")
             return True
