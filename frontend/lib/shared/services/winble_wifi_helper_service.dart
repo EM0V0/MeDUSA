@@ -132,14 +132,6 @@ class WinBleWiFiHelperService extends ChangeNotifier {
     }
   }
   
-  /// Show PIN input dialog
-  Future<String?> _showPinDialog() async {
-    // This method is now handled by the UI layer (wifi_provision_page.dart)
-    // The PIN input dialog is shown there and the PIN is passed to this service
-    debugPrint('[WinBleWiFi] 🔐 PIN input dialog should be handled by UI layer');
-    return null; // This will be overridden by the actual PIN from UI
-  }
-
   /// Connect and pair with device (without provisioning WiFi yet)
   /// 
   /// [deviceAddress]: BLE device address (MAC)
