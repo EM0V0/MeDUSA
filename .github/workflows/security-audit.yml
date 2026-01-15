@@ -1,0 +1,103 @@
+name: Security Audit & SBOM
+
+on:
+  push:
+    branches: [ "main", "develop", "refactor/*" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '0 0 * * 0' # Weekly
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  security-check:
+    name: 🛡️ Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------
+      # 1. Secret Scanning
+      # ---------------------------------------------------------
+      - name: TruffleHog OSS - Secret Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+        continue-on-error: true 
+
+      # ---------------------------------------------------------
+      # 2. Backend Security (Python)
+      # ---------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Security Tools
+        run: |
+          pip install bandit safety
+          
+      - name: Bandit - SAST Scan (Backend)
+        run: |
+          # Recursive scan, skip B101 (assert), format as text
+          bandit -r lambda_functions/ -ll -X B101
+
+      - name: Safety - Dependency Scan
+        run: |
+          if [ -f lambda_functions/requirements.txt ]; then
+            safety check -r lambda_functions/requirements.txt
+          fi
+
+      # ---------------------------------------------------------
+      # 3. Frontend Security (Flutter)
+      # ---------------------------------------------------------
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+      
+      - name: Flutter Dependencies & Audit
+        working-directory: frontend
+        run: |
+          flutter pub get
+          # Flutter 3.19+ has built-in audit, fallback if not available
+          # flutter pub audit || echo "Audit command not available on this version"
+          flutter analyze
+
+  sbom-generation:
+    name: 📦 Generate SBOM
+    runs-on: ubuntu-latest
+    needs: security-check
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM (CycloneDX) - Backend
+        uses: anchore/sbom-action@v0
+        with:
+          path: lambda_functions/
+          format: cyclonedx-json
+          output-file: medusa-backend-sbom.json
+
+      - name: Generate SBOM (CycloneDX) - Frontend
+        uses: anchore/sbom-action@v0
+        with:
+          path: frontend/
+          format: cyclonedx-json
+          output-file: medusa-frontend-sbom.json
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Medusa-SBOMs
+          path: |
+            medusa-backend-sbom.json
+            medusa-frontend-sbom.json
