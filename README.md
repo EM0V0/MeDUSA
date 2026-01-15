@@ -9,6 +9,15 @@ A professional Parkinson's disease tremor monitoring system with real-time data 
 - **[API Documentation](doc_assets/API_DOCUMENTATION.md)** - Complete backend API reference
 - **[Reproducibility Guide](doc_assets/Reproducibility_Guide.md)** - Guide for running the simulation and backend
 
+## 🔐 Test Accounts
+
+Use these credentials to test the application immediately:
+
+| Role | Email | Password | Status |
+| :--- | :--- | :--- | :--- |
+| **Patient/Doctor** | `zsun54@jh.edu` | `Testhnp123!` | Active (MFA Enabled) |
+| **Patient/Doctor** | `andysun12@outlook.com` | `Testhnp123!` | Active (MFA Enabled) |
+
 ---
 
 ## 🚀 Quick Start
