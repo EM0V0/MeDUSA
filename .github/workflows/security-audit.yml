@@ -48,8 +48,8 @@ jobs:
           
       - name: Bandit - SAST Scan (Backend)
         run: |
-          # Recursive scan, skip B101 (assert), format as text
-          bandit -r lambda_functions/ -ll --skip B101
+          # Recursive scan, skip B101 (assert), exclude vendored dependencies
+          bandit -r lambda_functions/ -ll --skip B101 -x lambda_functions/package,lambda_functions/medusa-api-v3/anyio,lambda_functions/medusa-api-v3/pycparser
 
       - name: Safety - Dependency Scan
         run: |
