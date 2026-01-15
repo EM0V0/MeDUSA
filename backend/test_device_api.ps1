@@ -1,13 +1,13 @@
-# 设备管理 API 测试脚本
-# 测试 RBAC 权限和设备 CRUD 操作
+# Device Management API Test Script
+# Tests RBAC and Device CRUD operations
 
 $API_URL = "https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod/api/v1"
 
-Write-Host "`n🧪 设备管理 API 测试" -ForegroundColor Cyan
+Write-Host "`n🧪 Device Management API Test" -ForegroundColor Cyan
 Write-Host "================================`n" -ForegroundColor Cyan
 
-# Step 1: 注册患者账户
-Write-Host "Step 1: 注册患者账户..." -ForegroundColor Yellow
+# Step 1: Register Patient Account
+Write-Host "Step 1: Register Patient Account..." -ForegroundColor Yellow
 $registerResp = curl.exe -X POST "$API_URL/auth/register" `
     -H "Content-Type: application/json" `
     -d '{
@@ -17,11 +17,11 @@ $registerResp = curl.exe -X POST "$API_URL/auth/register" `
     }' -s | ConvertFrom-Json
 
 if ($registerResp.userId) {
-    Write-Host "✅ 患者注册成功: $($registerResp.userId)" -ForegroundColor Green
+    Write-Host "✅ Patient registration successful: $($registerResp.userId)" -ForegroundColor Green
     $patientToken = $registerResp.accessJwt
 } else {
-    # 如果已存在，尝试登录
-    Write-Host "⚠️  账户已存在，尝试登录..." -ForegroundColor Yellow
+    # If exists, try login
+    Write-Host "⚠️  Account exists, attempting login..." -ForegroundColor Yellow
     $loginResp = curl.exe -X POST "$API_URL/auth/login" `
         -H "Content-Type: application/json" `
         -d '{
@@ -30,13 +30,13 @@ if ($registerResp.userId) {
         }' -s | ConvertFrom-Json
     
     $patientToken = $loginResp.accessJwt
-    Write-Host "✅ 患者登录成功" -ForegroundColor Green
+    Write-Host "✅ Patient login successful" -ForegroundColor Green
 }
 
 Start-Sleep -Seconds 1
 
-# Step 2: 注册医生账户
-Write-Host "`nStep 2: 注册医生账户..." -ForegroundColor Yellow
+# Step 2: Register Doctor Account
+Write-Host "`nStep 2: Register Doctor Account..." -ForegroundColor Yellow
 $doctorRegisterResp = curl.exe -X POST "$API_URL/auth/register" `
     -H "Content-Type: application/json" `
     -d '{
@@ -46,7 +46,7 @@ $doctorRegisterResp = curl.exe -X POST "$API_URL/auth/register" `
     }' -s | ConvertFrom-Json
 
 if ($doctorRegisterResp.userId) {
-    Write-Host "✅ 医生注册成功: $($doctorRegisterResp.userId)" -ForegroundColor Green
+    Write-Host "✅ Doctor registration successful: $($doctorRegisterResp.userId)" -ForegroundColor Green
     $doctorToken = $doctorRegisterResp.accessJwt
 } else {
     $doctorLoginResp = curl.exe -X POST "$API_URL/auth/login" `

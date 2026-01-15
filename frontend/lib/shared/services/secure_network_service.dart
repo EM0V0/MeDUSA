@@ -144,12 +144,12 @@ class SecureNetworkService {
             return;
           }
           
-          // 在Web环境中只添加基本的安全头，避免CORS问题
+          // In Web environment, only add basic security headers to avoid CORS issues
           if (kIsWeb) {
-            // Web环境中只添加必要的头，避免CORS限制
-            // 不添加可能导致预检请求失败的安全头
+            // Only add necessary headers in Web environment to avoid CORS restrictions
+            // Do not add security headers that might cause preflight request failure
           } else {
-            // 非Web环境添加完整的安全头
+            // Add full security headers for non-Web environments
             options.headers['X-Content-Type-Options'] = 'nosniff';
             options.headers['X-Frame-Options'] = 'DENY';
             options.headers['X-XSS-Protection'] = '1; mode=block';
