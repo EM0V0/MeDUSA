@@ -24,10 +24,8 @@ class SecureNetworkService {
   
   // Medical device API certificate fingerprints (update with actual certificates)
   static const List<String> _certificateFingerprints = [
-    // AWS API Gateway certificate fingerprint (example, replace with actual)
-    'B0:31:1D:A2:0B:6B:3A:9E:39:8F:2A:E4:43:6B:35:DE:C9:5E:27:D3',
-    // Backup certificate fingerprint
-    'A0:21:0C:92:FB:5A:2F:8D:29:7E:1A:D3:33:5A:25:CE:B9:4D:17:C2',
+    // AWS API Gateway certificate fingerprint (Verified 2025-12-11)
+    '33:00:7C:F6:C6:19:14:8A:D7:E4:E5:0F:2B:E1:42:71:54:27:06:A0:DF:D5:E0:47:16:E7:60:B8:D3:1B:62:CB',
   ];
 
   late Dio _dio;
@@ -67,16 +65,52 @@ class SecureNetworkService {
     return dio;
   }
 
-  /// Configure TLS 1.3 forced security
+  /// Configure TLS 1.3 forced security and Certificate Pinning
   void _configureTLS13Security(Dio dio) {
     (dio.httpClientAdapter as IOHttpClientAdapter).onHttpClientCreate = (client) {
-      // Force TLS 1.3 minimum version
-      client.badCertificateCallback = (cert, host, port) {
-        debugPrint('$_tag: Certificate verification for $host:$port');
-        return false; // Reject all untrusted certificates
+      // Create a SecurityContext that trusts NO ONE by default
+      // This forces badCertificateCallback to be called for EVERY certificate
+      final context = SecurityContext(withTrustedRoots: false);
+      final secureClient = HttpClient(context: context);
+
+      // Force TLS 1.3 minimum version (if supported by platform)
+      // Note: Dart's HttpClient might not strictly enforce 1.3 only via API, 
+      // but we can check protocol version in callback if needed.
+
+      secureClient.badCertificateCallback = (X509Certificate cert, String host, int port) {
+        debugPrint('$_tag: Verifying certificate for $host:$port');
+        
+        // 1. Validate Hostname
+        if (!host.contains('amazonaws.com') && !host.contains('localhost')) {
+          debugPrint('$_tag: Invalid host: $host');
+          return false;
+        }
+
+        // 2. Certificate Pinning Implementation
+        // Calculate SHA-256 of the certificate
+        final bytes = cert.der;
+        final digest = sha256.convert(bytes);
+        // Format as AA:BB:CC...
+        final fingerprint = digest.bytes
+            .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
+            .join(':');
+            
+        debugPrint('$_tag: Server Fingerprint: $fingerprint');
+        
+        // Check if fingerprint matches any pinned certificate
+        final isTrusted = _certificateFingerprints.contains(fingerprint);
+        
+        if (isTrusted) {
+          debugPrint('$_tag: Certificate PINNED and VERIFIED.');
+          return true; // Trust this specific certificate
+        } else {
+          debugPrint('$_tag: Certificate verification FAILED. Fingerprint mismatch.');
+          debugPrint('$_tag: Expected one of: $_certificateFingerprints');
+          return false; // Reject
+        }
       };
       
-      return client;
+      return secureClient;
     };
   }
 

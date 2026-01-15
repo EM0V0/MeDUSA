@@ -292,9 +292,6 @@ try {
 
 # Deploy API
 Write-Host "[12/12] Deploying API to stage: $StageName..." -ForegroundColor Yellow
-
-# Deploy API
-Write-Host "[12/12] Deploying API to stage: $StageName..." -ForegroundColor Yellow
 aws apigateway create-deployment `
     --rest-api-id $ApiId `
     --stage-name $StageName `
@@ -304,8 +301,44 @@ aws apigateway create-deployment `
 
 Write-Host "✓ API deployed" -ForegroundColor Green
 
+# Configure Usage Plan and Throttling (Fix for CT39)
+Write-Host "[13/12] Configuring Usage Plan and Throttling..." -ForegroundColor Yellow
+$usagePlanName = "${ApiName}-UsagePlan"
+$usagePlans = aws apigateway get-usage-plans --region $Region --output json | ConvertFrom-Json
+$existingPlan = $usagePlans.items | Where-Object { $_.name -eq $usagePlanName }
+
+if ($existingPlan) {
+    $UsagePlanId = $existingPlan.id
+    Write-Host "✓ Found existing Usage Plan: $UsagePlanId" -ForegroundColor Green
+} else {
+    $usagePlan = aws apigateway create-usage-plan `
+        --name $usagePlanName `
+        --description "Usage plan for MeDUSA API with throttling" `
+        --throttle burstLimit=200,rateLimit=100 `
+        --region $Region `
+        --output json | ConvertFrom-Json
+    $UsagePlanId = $usagePlan.id
+    Write-Host "✓ Usage Plan created: $UsagePlanId (Rate: 100, Burst: 200)" -ForegroundColor Green
+}
+
+# Associate Stage with Usage Plan
+Write-Host "  Associating stage $StageName with Usage Plan..." -ForegroundColor Gray
+try {
+    aws apigateway update-usage-plan `
+        --usage-plan-id $UsagePlanId `
+        --patch-operations op=add,path=/apiStages,value="${ApiId}:${StageName}" `
+        --region $Region 2>&1 | Out-Null
+    Write-Host "✓ Stage associated with Usage Plan" -ForegroundColor Green
+} catch {
+    Write-Host "⚠ Stage might already be associated or error occurred: $_" -ForegroundColor Yellow
+}
+
 # Construct API endpoint URL
 $ApiEndpoint = "https://${ApiId}.execute-api.${Region}.amazonaws.com/${StageName}"
+
+# NOTE: To enforce TLS 1.2+, you must configure a Custom Domain Name in API Gateway.
+# The default *.execute-api endpoint supports TLS 1.0/1.1 for compatibility.
+# See: https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-custom-domain-tls-version.html
 
 # Test the API endpoints
 Write-Host ""

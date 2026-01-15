@@ -243,3 +243,15 @@ test_patient_data/
 *.bak
 *.orig
 *~
+# ==============================
+# Python
+# ==============================
+__pycache__/
+*.py[cod]
+*.class
+.pytest_cache/
+.venv/
+venv/
+
+*.zip
+

@@ -1,0 +1,1 @@
+{"statusCode": 200, "body": "{\"status\": \"insufficient_data\", \"message\": \"Only 0 samples found, need 10\", \"device_id\": \"medusa-pi-01\"}"}

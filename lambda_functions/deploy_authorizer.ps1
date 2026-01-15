@@ -6,7 +6,7 @@ param(
     [string]$FunctionName = "MedusaAuthorizer",
     [string]$Region = "us-east-1",
     [string]$RoleName = "MedusaLambdaRole",
-    [string]$JwtSecret = "dev-secret",
+    [string]$JwtSecret = "your-super-secret-jwt-key-minimum-32-characters-long-for-HS256",
     [switch]$CreateRole,
     [switch]$Help
 )
@@ -105,7 +105,7 @@ Write-Host "[4/6] Deploying Lambda function..." -ForegroundColor Yellow
 # Check if function exists
 $functionExists = $false
 try {
-    aws lambda get-function --function-name $FunctionName --region $Region --output json | Out-Null
+    aws lambda get-function --function-name $FunctionName --region $Region --output json 2>&1 | Out-Null
     $functionExists = $true
 } catch {
     $functionExists = $false

@@ -224,6 +224,14 @@ def lambda_handler(event, context):
                 x_vals = item.get('x', item.get('accelerometer_x', []))
                 y_vals = item.get('y', item.get('accelerometer_y', []))
                 z_vals = item.get('z', item.get('accelerometer_z', []))
+
+                # Handle case where x_vals is a single value but not caught by previous check
+                if not isinstance(x_vals, list) and x_vals is not None:
+                     x_vals = [x_vals]
+                if not isinstance(y_vals, list) and y_vals is not None:
+                     y_vals = [y_vals]
+                if not isinstance(z_vals, list) and z_vals is not None:
+                     z_vals = [z_vals]
                 
                 # Calculate magnitude for each sample in this record
                 # Note: If we have array data, we assume uniform sampling within the record

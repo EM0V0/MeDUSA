@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart'; // Import for debugPrint
-
 /// Tremor analysis data model
 /// Represents processed tremor data from AWS Lambda and DynamoDB
 class TremorAnalysis {
@@ -63,12 +61,6 @@ class TremorAnalysis {
     } else if (json['tremor_score'] != null) {
       // Fallback for legacy API responses that might only have score
       tremorIndexVal = _parseDouble(json['tremor_score']) / 100.0;
-    }
-
-    // DEBUG LOGGING
-    if (json['tremor_index'] != null || json['tremor_score'] != null) {
-      final score = (tremorIndexVal * 100).clamp(0.0, 100.0);
-      debugPrint('TremorAnalysis Debug: ID=${json['patient_id']}, RawIndex=${json['tremor_index']}, RawScore=${json['tremor_score']}, ParsedIndex=$tremorIndexVal, CalcScore=$score');
     }
     
     return TremorAnalysis(

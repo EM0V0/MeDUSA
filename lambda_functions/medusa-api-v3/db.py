@@ -145,6 +145,65 @@ def take_refresh(token: str) -> Optional[Dict[str,Any]]:
         T_REFRESH.delete_item(Key=key)
     return item
 
+def increment_failed_login(email: str) -> int:
+    """Increment failed login attempts for a user"""
+    user = get_user_by_email(email)
+    if not user:
+        return 0
+    
+    now = int(datetime.now(timezone.utc).timestamp())
+    
+    if USE_MEMORY:
+        attempts = user.get("failedLoginAttempts", 0) + 1
+        user["failedLoginAttempts"] = attempts
+        user["lastFailedLogin"] = now
+        return attempts
+
+    # Update in DynamoDB
+    try:
+        resp = T_USERS.update_item(
+            Key=_user_key(user["id"]),
+            UpdateExpression="SET failedLoginAttempts = if_not_exists(failedLoginAttempts, :zero) + :inc, lastFailedLogin = :now",
+            ExpressionAttributeValues={
+                ":zero": 0,
+                ":inc": 1,
+                ":now": now
+            },
+            ReturnValues="UPDATED_NEW"
+        )
+        return int(resp.get("Attributes", {}).get("failedLoginAttempts", 0))
+    except Exception as e:
+        print(f"Error incrementing failed login: {e}")
+        return 0
+
+def reset_failed_login(email: str) -> None:
+    """Reset failed login attempts on successful login"""
+    user = get_user_by_email(email)
+    if not user:
+        return
+        
+    if USE_MEMORY:
+        user["failedLoginAttempts"] = 0
+        user["lastFailedLogin"] = 0
+        return
+
+    try:
+        T_USERS.update_item(
+            Key=_user_key(user["id"]),
+            UpdateExpression="SET failedLoginAttempts = :zero, lastFailedLogin = :zero",
+            ExpressionAttributeValues={":zero": 0}
+        )
+    except Exception as e:
+        print(f"Error resetting failed login: {e}")
+
+def get_failed_login(email: str) -> Tuple[int, int]:
+    """Get failed login count and last attempt timestamp"""
+    user = get_user_by_email(email)
+    if not user:
+        return 0, 0
+        
+    return int(user.get("failedLoginAttempts", 0)), int(user.get("lastFailedLogin", 0))
+
 def list_poses_by_patient(pid: str, limit:int=50, next_token=None) -> Tuple[List[Dict[str,Any]], Any]:
     if USE_MEMORY:
         items = [p for p in _poses if p["patientId"]==pid]
