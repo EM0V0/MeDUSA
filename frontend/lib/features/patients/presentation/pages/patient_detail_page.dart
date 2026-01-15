@@ -123,26 +123,6 @@ class _PatientDetailPageState extends State<PatientDetailPage> with SingleTicker
   void _changeTimeRange(String range) {
     setState(() {
       _selectedTimeRange = range;
-      final now = DateTime.now();
-      
-      switch (range) {
-        case '1h':
-          _startTime = now.subtract(const Duration(hours: 1));
-          break;
-        case '6h':
-          _startTime = now.subtract(const Duration(hours: 6));
-          break;
-        case '24h':
-          _startTime = now.subtract(const Duration(hours: 24));
-          break;
-        case '7d':
-          _startTime = now.subtract(const Duration(days: 7));
-          break;
-        case '30d':
-          _startTime = now.subtract(const Duration(days: 30));
-          break;
-      }
-      _endTime = now;
     });
     
     _loadTremorData();

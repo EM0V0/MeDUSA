@@ -6,8 +6,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter/foundation.dart';
 
-import 'encryption_service.dart';
-
 /// Custom exception for security-related errors
 class SecurityException implements Exception {
   final String message;
