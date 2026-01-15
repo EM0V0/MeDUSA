@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
 
       # ---------------------------------------------------------
       # 1. Secret Scanning
@@ -47,7 +49,7 @@ jobs:
       - name: Bandit - SAST Scan (Backend)
         run: |
           # Recursive scan, skip B101 (assert), format as text
-          bandit -r lambda_functions/ -ll -X B101
+          bandit -r lambda_functions/ -ll --skip B101
 
       - name: Safety - Dependency Scan
         run: |
