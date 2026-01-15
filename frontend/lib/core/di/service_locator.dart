@@ -1,4 +1,6 @@
 
+import 'package:flutter/foundation.dart';
+import 'package:get_it/get_it.dart';
 import '../../features/auth/data/datasources/auth_local_data_source.dart';
 import '../../features/auth/data/datasources/auth_remote_data_source.dart';
 import '../../features/auth/data/datasources/auth_remote_data_source_mock.dart';
@@ -67,14 +69,14 @@ class ServiceLocator {
       register<AuthRemoteDataSource>(
         AuthRemoteDataSourceMock(),
       );
-      print('🧪 Using MOCK authentication (no backend required)');
-      print('   Available test accounts:');
-      print('   - demo@medusa.com (Patient)');
-      print('   - doctor@medusa.com (Doctor)');
-      print('   - patient@medusa.com (Patient)');
-      print('   - admin@medusa.com (Admin)');
-      print('   - nurse@medusa.com (Nurse)');
-      print('   Any password will work for testing!');
+      debugPrint('🧪 Using MOCK authentication (no backend required)');
+      debugPrint('   Available test accounts:');
+      debugPrint('   - demo@medusa.com (Patient)');
+      debugPrint('   - doctor@medusa.com (Doctor)');
+      debugPrint('   - patient@medusa.com (Patient)');
+      debugPrint('   - admin@medusa.com (Admin)');
+      debugPrint('   - nurse@medusa.com (Nurse)');
+      debugPrint('   Any password will work for testing!');
     } else {
       // Use real backend authentication
       register<AuthRemoteDataSource>(

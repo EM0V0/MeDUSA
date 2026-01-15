@@ -30,12 +30,12 @@ class PermissionWidget extends StatelessWidget {
   final bool showDeniedMessage;
 
   const PermissionWidget({
-    Key? key,
+    super.key,
     required this.allowedRoles,
     required this.child,
     this.fallback,
     this.showDeniedMessage = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -147,10 +147,10 @@ class RoleBasedWidget extends StatelessWidget {
   final Widget? defaultWidget;
 
   const RoleBasedWidget({
-    Key? key,
+    super.key,
     required this.roleWidgets,
     this.defaultWidget,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

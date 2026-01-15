@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
-import 'package:crypto/crypto.dart';
 import '../../core/constants/app_constants.dart';
 
 /// Function to retrieve the current auth token
@@ -15,12 +14,13 @@ class SecureNetworkService {
   static const String _tag = 'SecureNetworkService';
   
   // TLS 1.3 configuration constants
-  static const List<String> _allowedTlsVersions = ['TLSv1.3'];
-  static const List<String> _allowedCipherSuites = [
-    'TLS_AES_256_GCM_SHA384',
-    'TLS_CHACHA20_POLY1305_SHA256', 
-    'TLS_AES_128_GCM_SHA256',
-  ];
+  // Note: These constants are kept for future reference or advanced configuration, mostly handled by OS stack now.
+  // static const List<String> _allowedTlsVersions = ['TLSv1.3'];
+  // static const List<String> _allowedCipherSuites = [
+  //   'TLS_AES_256_GCM_SHA384',
+  //   'TLS_CHACHA20_POLY1305_SHA256', 
+  //   'TLS_AES_128_GCM_SHA256',
+  // ];
   
   // Medical device API certificate fingerprints (update with actual certificates)
   static const List<String> _certificateFingerprints = [
@@ -67,7 +67,7 @@ class SecureNetworkService {
 
   /// Configure TLS 1.3 forced security and Certificate Pinning
   void _configureTLS13Security(Dio dio) {
-    (dio.httpClientAdapter as IOHttpClientAdapter).onHttpClientCreate = (client) {
+    (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
       // Use system trusted roots to support automatic AWS certificate rotation
       // This validates the chain against standard CAs (Amazon Root CA) instead of pinning a specific leaf
       final context = SecurityContext(withTrustedRoots: true);

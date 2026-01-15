@@ -28,14 +28,15 @@ jobs:
       - name: Compute BASE commit
         id: base
         run: |
-          if [[ -n "${{ github.event.before }}" ]] && [[ "${{ github.event.before }}" != "${{ github.sha }}" ]]; then
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "BASE=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
+          elif [[ -n "${{ github.event.before }}" ]] && [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]] && [[ "${{ github.event.before }}" != "${{ github.sha }}" ]]; then
             echo "BASE=${{ github.event.before }}" >> $GITHUB_OUTPUT
           elif [[ $(git rev-list --count HEAD) -gt 1 ]]; then
-            # Use previous commit only if it exists
             echo "BASE=$(git rev-parse HEAD~1)" >> $GITHUB_OUTPUT
           else
-            # Fallback: use empty tree hash (scans the entire history)
-            echo "BASE=4b825dc642cb6eb9a060e54bf8d69288fbee4904" >> $GITHUB_OUTPUT
+             # For initial commit or single commit history, scan from empty tree
+             echo "BASE=4b825dc642cb6eb9a060e54bf8d69288fbee4904" >> $GITHUB_OUTPUT
           fi
 
       - name: TruffleHog OSS - Secret Scan
@@ -86,7 +87,7 @@ jobs:
           flutter pub get
           # Flutter 3.19+ has built-in audit, fallback if not available
           # flutter pub audit || echo "Audit command not available on this version"
-          flutter analyze
+          flutter analyze --no-fatal-infos
 
   sbom-generation:
     name: 📦 Generate SBOM

@@ -1,5 +1,4 @@
-import 'dart:convert';
-import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../../../shared/services/network_service.dart';
 
 /// Service for doctor-patient management operations
@@ -11,15 +10,15 @@ class DoctorPatientService {
   /// Get list of patients assigned to a doctor
   Future<List<Map<String, dynamic>>> getDoctorPatients(String doctorId) async {
     try {
-      print('Fetching patients for doctor: $doctorId');
+      debugPrint('Fetching patients for doctor: $doctorId');
 
       final response = await _networkService.get(
         '/doctor/patients',
         queryParameters: {'doctor_id': doctorId},
       );
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.data}');
+      debugPrint('Response status: ${response.statusCode}');
+      debugPrint('Response body: ${response.data}');
 
       if (response.statusCode == 200) {
         final data = response.data;
@@ -32,7 +31,7 @@ class DoctorPatientService {
         throw Exception('Failed to load patients: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching doctor patients: $e');
+      debugPrint('Error fetching doctor patients: $e');
       rethrow;
     }
   }
@@ -55,8 +54,8 @@ class DoctorPatientService {
         data: body,
       );
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.data}');
+      debugPrint('Response status: ${response.statusCode}');
+      debugPrint('Response body: ${response.data}');
 
       if (response.statusCode == 200) {
         final data = response.data;
@@ -70,7 +69,7 @@ class DoctorPatientService {
         throw Exception(data['error'] ?? 'Failed to assign patient');
       }
     } catch (e) {
-      print('Error assigning patient: $e');
+      debugPrint('Error assigning patient: $e');
       rethrow;
     }
   }
