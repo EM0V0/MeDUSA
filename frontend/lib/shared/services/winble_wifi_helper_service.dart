@@ -73,19 +73,19 @@ class WinBleWiFiHelperService extends ChangeNotifier {
   }
 
   // WiFi Helper GATT Service UUIDs
-  static const String SERVICE_UUID = 'c0de0000-7e1a-4f83-bf3a-0c0ffee0c0de';
-  static const String SSID_CHAR_UUID = 'c0de0001-7e1a-4f83-bf3a-0c0ffee0c0de';
-  static const String PSK_CHAR_UUID = 'c0de0002-7e1a-4f83-bf3a-0c0ffee0c0de';
-  static const String CONTROL_CHAR_UUID = 'c0de0003-7e1a-4f83-bf3a-0c0ffee0c0de';
-  static const String STATUS_CHAR_UUID = 'c0de0004-7e1a-4f83-bf3a-0c0ffee0c0de';
+  static const String serviceUuid = 'c0de0000-7e1a-4f83-bf3a-0c0ffee0c0de';
+  static const String ssidCharUuid = 'c0de0001-7e1a-4f83-bf3a-0c0ffee0c0de';
+  static const String pskCharUuid = 'c0de0002-7e1a-4f83-bf3a-0c0ffee0c0de';
+  static const String controlCharUuid = 'c0de0003-7e1a-4f83-bf3a-0c0ffee0c0de';
+  static const String statusCharUuid = 'c0de0004-7e1a-4f83-bf3a-0c0ffee0c0de';
 
   // Control commands
-  static const int CMD_CONNECT = 0x01;
-  static const int CMD_CLEAR = 0x02;
-  static const int CMD_FACTORY_RESET = 0x03;
+  static const int cmdConnect = 0x01;
+  static const int cmdClear = 0x02;
+  static const int cmdFactoryReset = 0x03;
 
   // Status codes
-  static const Map<int, String> STATUS_CODES = {
+  static const Map<int, String> statusCodes = {
     0x01: 'Idle',
     0x02: 'Pairing',
     0x03: 'Ready',
@@ -198,8 +198,8 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       }
       
       // Verify WiFi Helper service exists
-      final targetUuid = SERVICE_UUID.toLowerCase().replaceAll('-', '');
-      debugPrint('[WinBleWiFi] 🔍 Looking for service UUID: $SERVICE_UUID');
+      final targetUuid = serviceUuid.toLowerCase().replaceAll('-', '');
+      debugPrint('[WinBleWiFi] 🔍 Looking for service UUID: $serviceUuid');
       debugPrint('[WinBleWiFi] 🔍 Normalized UUID: $targetUuid');
       
       final hasWiFiService = services.any((service) {
@@ -218,7 +218,7 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       if (!hasWiFiService) {
         _lastError = 'WiFi Helper service not found';
         debugPrint('[WinBleWiFi] ❌ WiFi Helper service UUID not in discovered services!');
-        debugPrint('[WinBleWiFi] ❌ Expected: $SERVICE_UUID');
+        debugPrint('[WinBleWiFi] ❌ Expected: $serviceUuid');
         debugPrint('[WinBleWiFi] ❌ This likely means:');
         debugPrint('[WinBleWiFi]    1. Raspberry Pi GATT server is not running');
         debugPrint('[WinBleWiFi]    2. Service UUID mismatch');
@@ -304,8 +304,8 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       
       final ssidWritten = await _winBle.writeCharacteristic(
         deviceAddress: deviceAddress,
-        serviceId: SERVICE_UUID,
-        characteristicId: SSID_CHAR_UUID,
+        serviceId: serviceUuid,
+        characteristicId: ssidCharUuid,
         data: utf8.encode(ssid),
         writeWithResponse: true,
       );
@@ -323,8 +323,8 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       
       final pskWritten = await _winBle.writeCharacteristic(
         deviceAddress: deviceAddress,
-        serviceId: SERVICE_UUID,
-        characteristicId: PSK_CHAR_UUID,
+        serviceId: serviceUuid,
+        characteristicId: pskCharUuid,
         data: utf8.encode(password),
         writeWithResponse: true,
       );
@@ -342,9 +342,9 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       
       final commandSent = await _winBle.writeCharacteristic(
         deviceAddress: deviceAddress,
-        serviceId: SERVICE_UUID,
-        characteristicId: CONTROL_CHAR_UUID,
-        data: [CMD_CONNECT],
+        serviceId: serviceUuid,
+        characteristicId: controlCharUuid,
+        data: [cmdConnect],
         writeWithResponse: true,
       );
 
@@ -362,13 +362,13 @@ class WinBleWiFiHelperService extends ChangeNotifier {
         
         final statusData = await _winBle.readCharacteristic(
           deviceAddress: deviceAddress,
-          serviceId: SERVICE_UUID,
-          characteristicId: STATUS_CHAR_UUID,
+          serviceId: serviceUuid,
+          characteristicId: statusCharUuid,
         );
 
         if (statusData != null && statusData.isNotEmpty) {
           final statusCode = statusData[0];
-          final statusText = STATUS_CODES[statusCode] ?? 'Unknown (0x${statusCode.toRadixString(16)})';
+          final statusText = statusCodes[statusCode] ?? 'Unknown (0x${statusCode.toRadixString(16)})';
           
           debugPrint('[WinBleWiFi] Status: $statusText');
           _setStatus('Status: $statusText');
@@ -582,13 +582,13 @@ class WinBleWiFiHelperService extends ChangeNotifier {
     try {
       final statusData = await _winBle.readCharacteristic(
         deviceAddress: deviceAddress,
-        serviceId: SERVICE_UUID,
-        characteristicId: STATUS_CHAR_UUID,
+        serviceId: serviceUuid,
+        characteristicId: statusCharUuid,
       );
 
       if (statusData != null && statusData.isNotEmpty) {
         final statusCode = statusData[0];
-        return STATUS_CODES[statusCode] ?? 'Unknown (0x${statusCode.toRadixString(16)})';
+        return statusCodes[statusCode] ?? 'Unknown (0x${statusCode.toRadixString(16)})';
       }
 
       return null;
@@ -605,9 +605,9 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       
       final success = await _winBle.writeCharacteristic(
         deviceAddress: deviceAddress,
-        serviceId: SERVICE_UUID,
-        characteristicId: CONTROL_CHAR_UUID,
-        data: [CMD_CLEAR],
+        serviceId: serviceUuid,
+        characteristicId: controlCharUuid,
+        data: [cmdClear],
         writeWithResponse: true,
       );
 
