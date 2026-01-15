@@ -462,7 +462,7 @@ class WinBleWiFiHelperService extends ChangeNotifier {
           final uuid = (service as dynamic).uuid as String?;
           if (uuid == null) return false;
           return uuid.toLowerCase().replaceAll('-', '') == 
-                 SERVICE_UUID.toLowerCase().replaceAll('-', '');
+                 serviceUuid.toLowerCase().replaceAll('-', '');
         } catch (e) {
           return false;
         }
@@ -479,8 +479,8 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       
       final ssidWritten = await _winBle.writeCharacteristic(
         deviceAddress: deviceAddress,
-        serviceId: SERVICE_UUID,
-        characteristicId: SSID_CHAR_UUID,
+        serviceId: serviceUuid,
+        characteristicId: ssidCharUuid,
         data: utf8.encode(ssid),
         writeWithResponse: true,
       );
@@ -497,8 +497,8 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       
       final pskWritten = await _winBle.writeCharacteristic(
         deviceAddress: deviceAddress,
-        serviceId: SERVICE_UUID,
-        characteristicId: PSK_CHAR_UUID,
+        serviceId: serviceUuid,
+        characteristicId: pskCharUuid,
         data: utf8.encode(password),
         writeWithResponse: true,
       );
@@ -515,9 +515,9 @@ class WinBleWiFiHelperService extends ChangeNotifier {
       
       final commandSent = await _winBle.writeCharacteristic(
         deviceAddress: deviceAddress,
-        serviceId: SERVICE_UUID,
-        characteristicId: CONTROL_CHAR_UUID,
-        data: [CMD_CONNECT],
+        serviceId: serviceUuid,
+        characteristicId: controlCharUuid,
+        data: [cmdConnect],
         writeWithResponse: true,
       );
 
@@ -534,13 +534,13 @@ class WinBleWiFiHelperService extends ChangeNotifier {
         
         final statusData = await _winBle.readCharacteristic(
           deviceAddress: deviceAddress,
-          serviceId: SERVICE_UUID,
-          characteristicId: STATUS_CHAR_UUID,
+          serviceId: serviceUuid,
+          characteristicId: statusCharUuid,
         );
 
         if (statusData != null && statusData.isNotEmpty) {
           final statusCode = statusData[0];
-          final statusText = STATUS_CODES[statusCode] ?? 'Unknown (0x${statusCode.toRadixString(16)})';
+          final statusText = statusCodes[statusCode] ?? 'Unknown (0x${statusCode.toRadixString(16)})';
           
           debugPrint('[WinBleWiFi] Status: $statusText');
           _setStatus('Status: $statusText');
