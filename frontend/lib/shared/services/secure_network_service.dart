@@ -25,7 +25,7 @@ class SecureNetworkService {
   // Medical device API certificate fingerprints (update with actual certificates)
   static const List<String> _certificateFingerprints = [
     // AWS API Gateway certificate fingerprint (Verified 2025-12-11)
-    '33:00:7C:F6:C6:19:14:8A:D7:E4:E5:0F:2B:E1:42:71:54:27:06:A0:DF:D5:E0:47:16:E7:60:B8:D3:1B:62:CB',
+    '87:DC:D4:DC:74:64:0A:32:2C:D2:05:55:25:06:D1:BE:64:F1:25:96:25:80:96:54:49:86:B4:85:0B:C7:27:06',
   ];
 
   late Dio _dio;
@@ -68,9 +68,9 @@ class SecureNetworkService {
   /// Configure TLS 1.3 forced security and Certificate Pinning
   void _configureTLS13Security(Dio dio) {
     (dio.httpClientAdapter as IOHttpClientAdapter).onHttpClientCreate = (client) {
-      // Create a SecurityContext that trusts NO ONE by default
-      // This forces badCertificateCallback to be called for EVERY certificate
-      final context = SecurityContext(withTrustedRoots: false);
+      // Use system trusted roots to support automatic AWS certificate rotation
+      // This validates the chain against standard CAs (Amazon Root CA) instead of pinning a specific leaf
+      final context = SecurityContext(withTrustedRoots: true);
       final secureClient = HttpClient(context: context);
 
       // Force TLS 1.3 minimum version (if supported by platform)
@@ -78,36 +78,17 @@ class SecureNetworkService {
       // but we can check protocol version in callback if needed.
 
       secureClient.badCertificateCallback = (X509Certificate cert, String host, int port) {
-        debugPrint('$_tag: Verifying certificate for $host:$port');
+        debugPrint('$_tag: Verifying certificate for $host:$port (Validation Failed by OS)');
         
-        // 1. Validate Hostname
-        if (!host.contains('amazonaws.com') && !host.contains('localhost')) {
-          debugPrint('$_tag: Invalid host: $host');
-          return false;
+        // This callback is only reached if the OS trust verification failed.
+        // We can allow local development certificates here if needed.
+        if (host.contains('localhost') || host == '10.0.2.2') {
+             return true; 
         }
 
-        // 2. Certificate Pinning Implementation
-        // Calculate SHA-256 of the certificate
-        final bytes = cert.der;
-        final digest = sha256.convert(bytes);
-        // Format as AA:BB:CC...
-        final fingerprint = digest.bytes
-            .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-            .join(':');
-            
-        debugPrint('$_tag: Server Fingerprint: $fingerprint');
-        
-        // Check if fingerprint matches any pinned certificate
-        final isTrusted = _certificateFingerprints.contains(fingerprint);
-        
-        if (isTrusted) {
-          debugPrint('$_tag: Certificate PINNED and VERIFIED.');
-          return true; // Trust this specific certificate
-        } else {
-          debugPrint('$_tag: Certificate verification FAILED. Fingerprint mismatch.');
-          debugPrint('$_tag: Expected one of: $_certificateFingerprints');
-          return false; // Reject
-        }
+        // For production, if OS rejected it, we reject it too.
+        debugPrint('$_tag: Rejecting invalid certificate from $host');
+        return false;
       };
       
       return secureClient;
