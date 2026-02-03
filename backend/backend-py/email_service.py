@@ -236,3 +236,119 @@ class EmailService:
         </html>
         """
 
+    def send_welcome_with_mfa(self, email: str, mfa_secret: str, role: str = "patient") -> bool:
+        """
+        Send welcome email with MFA secret after successful registration.
+        
+        Args:
+            email: User's email address
+            mfa_secret: The MFA TOTP secret for the user
+            role: User's role (patient, doctor, admin)
+            
+        Returns:
+            True if email sent successfully, False otherwise
+        """
+        print(f"[EmailService] send_welcome_with_mfa called: email={email}, role={role}")
+        
+        subject = "Welcome to MeDUSA - Your MFA Setup Information"
+        message = self._generate_welcome_mfa_email(email, mfa_secret, role)
+        
+        if self.use_ses and self.ses_client:
+            return self._send_via_ses(email, subject, message)
+        else:
+            print(f"[EmailService] MFA Secret for {email}: {mfa_secret}")
+            return self._log_email(email, subject, mfa_secret)
+    
+    def _generate_welcome_mfa_email(self, email: str, mfa_secret: str, role: str) -> str:
+        """Generate HTML email for welcome with MFA setup instructions"""
+        # Generate otpauth URI for QR code (compatible with Google Authenticator, etc.)
+        otpauth_uri = f"otpauth://totp/MeDUSA:{email}?secret={mfa_secret}&issuer=MeDUSA"
+        
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: #4CAF50; color: white; padding: 20px; text-align: center; }}
+                .content {{ background: #f8f9fa; padding: 30px; border-radius: 5px; }}
+                .secret-box {{ font-size: 18px; font-weight: bold; color: #4CAF50; text-align: center; 
+                             padding: 20px; background: white; border-radius: 5px; margin: 20px 0; 
+                             letter-spacing: 3px; font-family: monospace; word-break: break-all; }}
+                .steps {{ background: white; padding: 20px; border-radius: 5px; margin: 20px 0; }}
+                .steps ol {{ padding-left: 20px; }}
+                .steps li {{ margin-bottom: 10px; }}
+                .warning {{ background: #fff3cd; border-left: 4px solid #ff9800; padding: 15px; 
+                           margin: 20px 0; }}
+                .security {{ background: #e8f5e9; border-left: 4px solid #4CAF50; padding: 15px; 
+                           margin: 20px 0; }}
+                .footer {{ text-align: center; margin-top: 20px; color: #666; font-size: 12px; }}
+                .role-badge {{ display: inline-block; background: #1976D2; color: white; 
+                              padding: 5px 15px; border-radius: 20px; font-size: 14px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🎉 Welcome to MeDUSA!</h1>
+                    <p>Your account has been created successfully</p>
+                </div>
+                <div class="content">
+                    <p>Hello! Your MeDUSA account has been created with the role: 
+                       <span class="role-badge">{role.upper()}</span></p>
+                    
+                    <h2>🔐 Two-Factor Authentication (MFA) Setup</h2>
+                    <p>For your security, MFA is <strong>required</strong> for all MeDUSA accounts. 
+                       Please set up your authenticator app using the secret below:</p>
+                    
+                    <div class="secret-box">{mfa_secret}</div>
+                    
+                    <div class="steps">
+                        <h3>Setup Instructions:</h3>
+                        <ol>
+                            <li>Download an authenticator app if you don't have one:
+                                <ul>
+                                    <li>Google Authenticator (iOS/Android)</li>
+                                    <li>Microsoft Authenticator (iOS/Android)</li>
+                                    <li>Authy (iOS/Android/Desktop)</li>
+                                </ul>
+                            </li>
+                            <li>Open the authenticator app and add a new account</li>
+                            <li>Choose "Enter setup key manually" or "Enter a provided key"</li>
+                            <li>Enter the following details:
+                                <ul>
+                                    <li><strong>Account name:</strong> {email}</li>
+                                    <li><strong>Secret key:</strong> {mfa_secret}</li>
+                                    <li><strong>Type:</strong> Time-based (TOTP)</li>
+                                </ul>
+                            </li>
+                            <li>The app will now generate 6-digit codes that refresh every 30 seconds</li>
+                            <li>Use this code along with your password to log in</li>
+                        </ol>
+                    </div>
+                    
+                    <div class="security">
+                        <strong>🛡️ Security Tips:</strong>
+                        <ul>
+                            <li>Save this secret key in a secure location as a backup</li>
+                            <li>Never share your MFA codes with anyone</li>
+                            <li>MeDUSA staff will never ask for your MFA code</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="warning">
+                        <strong>⚠️ Important:</strong> This email contains sensitive security information. 
+                        Please delete this email after saving your MFA secret in your authenticator app.
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>&copy; 2025 MeDUSA Health System. All rights reserved.</p>
+                    <p>This is an automated message, please do not reply.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+

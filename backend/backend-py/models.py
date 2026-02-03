@@ -48,6 +48,7 @@ class RegisterRes(BaseModel):
     userId: str
     accessJwt: str  # API v3 uses accessJwt (camelCase)
     refreshToken: str
+    mfaSecret: Optional[str] = None  # MFA secret for authenticator app setup
     
     class Config:
         # Allow both camelCase and snake_case input

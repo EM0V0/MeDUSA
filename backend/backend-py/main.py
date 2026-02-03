@@ -209,6 +209,9 @@ def register(req: RegisterReq):
     # API v3: role is required in request, default to patient if not provided
     role = req.role.lower() if req.role else "patient"
     
+    # Generate MFA secret at registration time (mandatory for medical system)
+    mfa_secret = generate_mfa_secret()
+    
     user = {
         "id": uid,
         "email": email,
@@ -216,9 +219,19 @@ def register(req: RegisterReq):
         "name": email.split('@')[0],  # Generate name from email
         "password": hash_pw(req.password),
         "emailVerified": True,  # Email is verified through the code
+        "mfaSecret": mfa_secret,  # MFA is enabled from the start
+        "mfaEnabled": True,
         "createdAt": datetime.now(timezone.utc).isoformat()
     }
     db.put_user(user)
+    
+    # Send welcome email with MFA secret
+    try:
+        email_service.send_welcome_with_mfa(email, mfa_secret, role)
+        print(f"[Register] Welcome email with MFA sent to {email}")
+    except Exception as e:
+        print(f"[Register] Warning: Failed to send welcome email: {e}")
+        # Don't fail registration if email fails - user can still use the MFA secret from response
     
     # Generate tokens
     tokens = issue_tokens(uid, user["role"])
@@ -231,18 +244,19 @@ def register(req: RegisterReq):
         }
     )
     
-    # Log successful registration
+    # Log successful registration with MFA enabled
     audit_service.log_event(
         event_type=AuditEventType.DATA_CREATE,
         user_id=uid,
-        details={"action": "user_registered", "email": email, "role": role}
+        details={"action": "user_registered", "email": email, "role": role, "mfa_enabled": True}
     )
     
-    # API v3: Return flat response with userId, accessJwt, refreshToken
+    # API v3: Return flat response with userId, accessJwt, refreshToken, and mfaSecret
     return RegisterRes(
         userId=uid,
         accessJwt=tokens["accessJwt"],
-        refreshToken=tokens["refreshToken"]
+        refreshToken=tokens["refreshToken"],
+        mfaSecret=mfa_secret  # Include MFA secret in response for immediate setup
     )
 
 @app.post("/api/v1/auth/login")
