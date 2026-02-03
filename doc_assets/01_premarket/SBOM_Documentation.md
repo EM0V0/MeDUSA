@@ -299,7 +299,7 @@ All licenses in use are permissive and compatible with commercial/medical device
 
 SBOMs are available:
 1. As GitHub Release attachments
-2. Upon request to security@medusa-project.example
+2. Upon request to security team *(replace `security@medusa-project.example` with actual contact)*
 3. In FDA premarket submission package
 
 ---

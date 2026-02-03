@@ -22,6 +22,8 @@ This document provides evidence that security controls implemented in the MeDUSA
 
 ## 2. Authentication Controls
 
+> ℹ️ **Note**: All test data below (emails, phone numbers, names) are fictional placeholder values for demonstration purposes.
+
 ### 2.1 Password Policy Enforcement
 
 **Control**: Passwords must meet complexity requirements

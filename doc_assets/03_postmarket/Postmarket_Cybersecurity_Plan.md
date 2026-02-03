@@ -96,6 +96,8 @@ This plan is developed in accordance with:
 
 ### 3.1 Organizational Structure
 
+> ⚠️ **Educational Template**: The contact information below uses placeholder email addresses for demonstration purposes. In a real medical device project, replace these with actual organizational contacts.
+
 | Role | Responsibilities | Contact |
 |------|------------------|---------|
 | **Product Security Officer** | Overall cybersecurity program management, regulatory liaison | security@medusa-edu.org |
@@ -381,6 +383,8 @@ MeDUSA maintains a Coordinated Vulnerability Disclosure policy to facilitate res
 
 ### 8.2 Reporting Channel
 
+> ⚠️ **Educational Template**: Replace placeholder contacts with actual security team information.
+
 | Method | Contact | Response Time |
 |--------|---------|---------------|
 | **Email** | security@medusa-edu.org | 48 hours |
@@ -569,6 +573,8 @@ All modifications to this plan require:
 ---
 
 ## Appendix B: Contact Information
+
+> ⚠️ **Educational Template**: The contact information below uses placeholder data for demonstration purposes.
 
 | Role | Email | Phone | Availability |
 |------|-------|-------|--------------|

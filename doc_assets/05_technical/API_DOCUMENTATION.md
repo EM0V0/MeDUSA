@@ -151,6 +151,8 @@ Content-Type: application/json
 
 ## Core APIs
 
+> ℹ️ **Note**: All names, email addresses, phone numbers, and other personal data shown in the API examples below (e.g., "John Smith", "jane.doe@email.com", "+1-555-0123") are **fictional placeholder data** for demonstration purposes only.
+
 ### Authentication & User Management
 
 #### POST /auth/register
@@ -802,6 +804,8 @@ Authorization: Bearer <access_token>
 
 ### Tremor Monitoring
 
+> ⚠️ **Note**: The API Gateway ID (`buektgcf8l`) below is deployment-specific. Replace with your actual Tremor API Gateway URL.
+
 **Base URL**: `https://buektgcf8l.execute-api.us-east-1.amazonaws.com/Prod`
 
 #### GET /api/v1/tremor/analysis
@@ -1146,6 +1150,8 @@ X-RateLimit-Reset: 1700000000
 
 ## Examples
 
+> ⚠️ **Note**: The API Gateway IDs shown in these examples (e.g., `zcrqexrdw1`, `buektgcf8l`) are deployment-specific and will change with each new deployment. Always refer to your actual API Gateway URL configured in the frontend application.
+
 ### Complete Authentication Flow
 
 ```javascript
@@ -1326,9 +1332,9 @@ SESSIONS_TABLE=medusa-sessions-prod
 TREMOR_TABLE=medusa-tremor-analysis
 SENSOR_TABLE=medusa-sensor-data
 
-# AWS SES
+# AWS SES (Example - replace with your verified email)
 AWS_REGION=us-east-1
-SES_FROM_EMAIL=noreply@medusa.com
+SES_FROM_EMAIL=noreply@your-domain.com
 SES_FROM_NAME=MeDUSA System
 
 # Feature Flags

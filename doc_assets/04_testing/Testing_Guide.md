@@ -153,6 +153,8 @@ flutter test
 
 **Test Account Credentials:**
 
+> ⚠️ **Note**: These are example test credentials for local development only. Never use these in production.
+
 | Role | Email | Password |
 |------|-------|----------|
 | Admin | `admin_test@medusa.local` | `Admin@Test123!` |
