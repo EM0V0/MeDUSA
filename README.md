@@ -1,4 +1,4 @@
-# MeDUSA - Medical Device Unified Security & Analytics
+# MeDUSA - Medical Device Universal Security Alignment
 
 <div align="center">
 
@@ -20,7 +20,7 @@
 
 ## Overview
 
-**MeDUSA** (Medical Device Unified Security & Analytics) is an open-source educational platform designed to teach medical device cybersecurity through hands-on experience. Built as a realistic Parkinson's disease tremor monitoring system, MeDUSA provides students with a safe, controlled environment to learn and practice security concepts critical to healthcare technology.
+**MeDUSA** (Medical Device Universal Security Alignment) is an open-source educational platform designed to teach medical device cybersecurity through hands-on experience. Built as a realistic Parkinson's disease tremor monitoring system, MeDUSA provides students with a safe, controlled environment to learn and practice security concepts critical to healthcare technology.
 
 ### Why MeDUSA?
 
