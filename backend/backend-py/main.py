@@ -85,6 +85,26 @@ async def options_handler(path: str):
 def health():
     return {"ok": True, "ts": int(time.time()), "security": {"replayProtection": True, "nonceEnabled": True}}
 
+@app.post("/api/v1/admin/test-email")
+def test_email(email: str):
+    """
+    Test email sending endpoint (for debugging)
+    Sends a test email to the specified address.
+    """
+    test_code = "123456"
+    result = email_service.send_verification_code(
+        email=email,
+        code=test_code,
+        code_type="registration"
+    )
+    return {
+        "success": result,
+        "email": email,
+        "code": test_code,
+        "use_ses": email_service.use_ses,
+        "has_ses_client": email_service.ses_client is not None
+    }
+
 # -------- Security - Nonce Endpoint
 @app.get("/api/v1/security/nonce")
 def get_nonce():

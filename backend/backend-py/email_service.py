@@ -42,6 +42,9 @@ class EmailService:
         Returns:
             True if email sent successfully, False otherwise
         """
+        print(f"[EmailService] send_verification_code called: email={email}, code_type={code_type}")
+        print(f"[EmailService] use_ses={self.use_ses}, ses_client={self.ses_client is not None}")
+        
         if code_type == "password_reset":
             subject = "Password Reset Verification Code - MeDUSA"
             message = self._generate_password_reset_email(code)
@@ -49,9 +52,15 @@ class EmailService:
             subject = "Email Verification Code - MeDUSA"
             message = self._generate_verification_email(code)
         
+        print(f"[EmailService] Generated email: subject={subject}, message_length={len(message)}")
+        
         if self.use_ses and self.ses_client:
-            return self._send_via_ses(email, subject, message)
+            print(f"[EmailService] Attempting to send via SES...")
+            result = self._send_via_ses(email, subject, message)
+            print(f"[EmailService] SES send result: {result}")
+            return result
         else:
+            print(f"[EmailService] Falling back to console logging (use_ses={self.use_ses}, ses_client={self.ses_client is not None})")
             # Fallback to console logging for development
             return self._log_email(email, subject, code)
     
@@ -97,7 +106,7 @@ class EmailService:
                 # Add configuration set for better tracking (optional)
                 # ConfigurationSetName='medusa-email-config'
             )
-            print(f"[EmailService] ✅ Email sent successfully to {recipient}")
+            print(f"[EmailService] SUCCESS: Email sent successfully to {recipient}")
             print(f"[EmailService] Message ID: {response['MessageId']}")
             print(f"[EmailService] From: {self.SENDER_EMAIL}")
             print(f"[EmailService] To: {recipient}")
@@ -106,7 +115,7 @@ class EmailService:
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
-            print(f"[EmailService] ❌ Failed to send email: {error_code} - {error_message}")
+            print(f"[EmailService] ERROR: Failed to send email: {error_code} - {error_message}")
             print(f"[EmailService] Recipient: {recipient}")
             print(f"[EmailService] Sender: {self.SENDER_EMAIL}")
             # Log full error for debugging
@@ -114,7 +123,7 @@ class EmailService:
             print(f"[EmailService] Traceback: {traceback.format_exc()}")
             return False
         except Exception as e:
-            print(f"[EmailService] ❌ Unexpected error sending email: {str(e)}")
+            print(f"[EmailService] ERROR: Unexpected error sending email: {str(e)}")
             import traceback
             print(f"[EmailService] Traceback: {traceback.format_exc()}")
             return False
