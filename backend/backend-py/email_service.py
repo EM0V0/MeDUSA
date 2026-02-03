@@ -256,8 +256,8 @@ class EmailService:
         if self.use_ses and self.ses_client:
             return self._send_via_ses(email, subject, message)
         else:
-            print(f"[EmailService] MFA Secret for {email}: {mfa_secret}")
-            return self._log_email(email, subject, mfa_secret)
+            # Note: In dev mode, MFA secret is logged to file only (not console) for debugging
+            return self._log_email(email, subject, "[MFA_SECRET_REDACTED]")
     
     def _generate_welcome_mfa_email(self, email: str, mfa_secret: str, role: str) -> str:
         """Generate HTML email for welcome with MFA setup instructions"""

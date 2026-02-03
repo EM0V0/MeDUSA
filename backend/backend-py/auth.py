@@ -5,7 +5,10 @@ from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret")
+# Security: JWT_SECRET must be set in environment - no fallback for production safety
+JWT_SECRET = os.environ.get("JWT_SECRET")
+if not JWT_SECRET:
+    raise ValueError("JWT_SECRET environment variable must be set")
 JWT_EXPIRE_SECONDS = int(os.environ.get("JWT_EXPIRE_SECONDS", "3600"))
 REFRESH_TTL_SECONDS = int(os.environ.get("REFRESH_TTL_SECONDS", str(7*24*3600)))
 MFA_TEMP_TOKEN_SECONDS = 300  # 5 minutes for MFA challenge

@@ -69,13 +69,7 @@ class ServiceLocator {
         AuthRemoteDataSourceMock(),
       );
       debugPrint('🧪 Using MOCK authentication (no backend required)');
-      debugPrint('   Available test accounts:');
-      debugPrint('   - demo@medusa.com (Patient)');
-      debugPrint('   - doctor@medusa.com (Doctor)');
-      debugPrint('   - patient@medusa.com (Patient)');
-      debugPrint('   - admin@medusa.com (Admin)');
-      debugPrint('   - nurse@medusa.com (Nurse)');
-      debugPrint('   Any password will work for testing!');
+      debugPrint('   Available test accounts: demo@medusa.com, doctor@medusa.com, patient@medusa.com');
     } else {
       // Use real backend authentication
       register<AuthRemoteDataSource>(

@@ -47,8 +47,14 @@ app = FastAPI(title="MeDUSA Python API (Single Lambda)")
 email_service = EmailService()
 
 # CORS - properly configured for web clients
-# Strict CORS: Allow specific origins from environment variable, default to * for dev
-allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+# Production: Set ALLOWED_ORIGINS env var to restrict origins (comma-separated)
+# Development: Defaults to * but logs a warning
+allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "")
+if not allowed_origins_env:
+    print("[WARNING] ALLOWED_ORIGINS not set - using * (not recommended for production)")
+    allowed_origins = ["*"]
+else:
+    allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
 
 app.add_middleware(
     CORSMiddleware,

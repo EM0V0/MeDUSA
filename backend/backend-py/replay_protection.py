@@ -27,7 +27,10 @@ from botocore.exceptions import ClientError
 # Configuration
 NONCE_TTL_SECONDS = int(os.environ.get("NONCE_TTL_SECONDS", "300"))  # 5 minutes
 NONCE_TABLE = os.environ.get("DDB_TABLE_NONCES", "medusa-nonces-prod")
-HMAC_SECRET = os.environ.get("HMAC_SECRET", os.environ.get("JWT_SECRET", "dev-secret"))
+# Security: HMAC_SECRET must be set - falls back to JWT_SECRET but never to hardcoded value
+HMAC_SECRET = os.environ.get("HMAC_SECRET") or os.environ.get("JWT_SECRET")
+if not HMAC_SECRET:
+    raise ValueError("HMAC_SECRET or JWT_SECRET environment variable must be set")
 USE_MEMORY = os.environ.get("USE_MEMORY", "false").lower() == "true"
 
 
