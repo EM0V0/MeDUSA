@@ -73,15 +73,35 @@ This document provides comprehensive testing procedures for the MeDUSA platform,
 
 ### 2.1 Prerequisites
 
+#### Development & Unit Testing
+
 | Requirement | Version | Purpose |
-|-------------|---------|---------|
+|-------------|---------|----------|
 | Python | 3.10+ | Backend testing |
 | Flutter | 3.x | Frontend testing |
 | AWS CLI | 2.x | Cloud deployment verification |
 | PowerShell | 7.x | Test script execution |
 | pytest | 7.x | Python unit testing |
-| Burp Suite | Latest | Security testing |
-| OWASP ZAP | Latest | Automated security scanning |
+
+#### Professional Penetration Testing Tools
+
+| Tool | Category | Purpose | Installation |
+|------|----------|---------|-------------|
+| **Burp Suite Pro** | Web Security | HTTP interception, scanning, exploitation | [portswigger.net](https://portswigger.net/burp) |
+| **OWASP ZAP** | DAST | Automated vulnerability scanning | `docker pull zaproxy/zap-stable` |
+| **Nmap** | Network | Port scanning, service detection | `apt install nmap` / `choco install nmap` |
+| **Nikto** | Web Server | Web server vulnerability scanner | `apt install nikto` |
+| **SQLMap** | Injection | Automated SQL injection testing | `pip install sqlmap` |
+| **Hydra** | Brute Force | Password cracking, auth testing | `apt install hydra` |
+| **Nessus** | Vulnerability | Enterprise vulnerability scanner | [tenable.com](https://www.tenable.com/products/nessus) |
+| **testssl.sh** | TLS/SSL | TLS configuration analysis | `git clone https://github.com/drwetter/testssl.sh` |
+| **Nuclei** | Vulnerability | Template-based vuln scanner | `go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest` |
+| **ffuf** | Fuzzing | Web fuzzer for directories/params | `go install github.com/ffuf/ffuf/v2@latest` |
+| **MobSF** | Mobile | Mobile app security testing | `docker pull opensecurity/mobile-security-framework-mobsf` |
+| **Wireshark** | Network | Packet capture and analysis | [wireshark.org](https://www.wireshark.org/) |
+| **Metasploit** | Exploitation | Penetration testing framework | `curl https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb > msfinstall && chmod 755 msfinstall && ./msfinstall` |
+| **Gobuster** | Enumeration | Directory/DNS brute forcing | `go install github.com/OJ/gobuster/v3@latest` |
+| **JWT_Tool** | JWT | JWT token testing & exploitation | `pip install jwt_tool` |
 
 ### 2.2 Environment Configuration
 
@@ -358,7 +378,7 @@ if ($response.userId -and $response.accessJwt) {
 |-----------|-------|
 | **Test ID** | ST-AUTH-001 |
 | **Priority** | Critical |
-| **Tools** | Manual, pytest |
+| **Tools** | pytest, Hydra, Burp Suite Intruder |
 
 **Test Cases:**
 
@@ -371,11 +391,27 @@ if ($response.userId -and $response.accessJwt) {
 | `NoSpecial123` | Reject | No special char |
 | `ValidPass123!` | Accept | All requirements met |
 
-**Test Script:**
+**Unit Test:**
 ```python
 # Located at: backend/backend-py/test_security_features.py
 python -m pytest test_security_features.py::TestPasswordValidator -v
 ```
+
+**Brute Force Testing with Hydra:**
+```bash
+# Test rate limiting and account lockout
+hydra -l admin_test@medusa.local -P /usr/share/wordlists/rockyou.txt \
+  <api-gateway-host> https-post-form \
+  "/api/v1/auth/login:email=^USER^&password=^PASS^:Invalid credentials"
+
+# Expected: Rate limiting should block after 5 attempts
+```
+
+**Burp Suite Intruder Test:**
+1. Capture login request in Burp Proxy
+2. Send to Intruder → Set password field as payload position
+3. Load weak password wordlist (top 1000 passwords)
+4. Start attack → Verify rate limiting triggers after 5 attempts
 
 ---
 
@@ -385,17 +421,44 @@ python -m pytest test_security_features.py::TestPasswordValidator -v
 |-----------|-------|
 | **Test ID** | ST-AUTH-002 |
 | **Priority** | Critical |
-| **Tools** | Burp Suite, jwt.io |
+| **Tools** | JWT_Tool, Burp Suite, jwt.io |
 
 **Test Steps:**
 
 | Step | Action | Expected Result |
-|------|--------|-----------------|
+|------|--------|------------------|
 | 1 | Decode JWT and verify algorithm is HS256 | Algorithm correct |
 | 2 | Attempt to change algorithm to "none" | Request rejected |
 | 3 | Modify payload and re-sign with wrong key | 401 Unauthorized |
 | 4 | Use token after expiration | 401 Unauthorized |
 | 5 | Verify sensitive data not in token | No PII in payload |
+
+**JWT_Tool Commands:**
+```bash
+# Install JWT_Tool
+pip install jwt_tool
+
+# Decode and analyze token
+jwt_tool <token>
+
+# Test algorithm confusion attack (alg:none)
+jwt_tool <token> -X a
+
+# Test key confusion attack (RS256 → HS256)
+jwt_tool <token> -X k -pk public_key.pem
+
+# Brute force weak secret
+jwt_tool <token> -C -d /usr/share/wordlists/rockyou.txt
+
+# Tamper claims and re-sign (if secret known)
+jwt_tool <token> -T -S hs256 -p "test-secret"
+```
+
+**Burp Suite JWT Testing:**
+1. Install "JWT Editor" extension from BApp Store
+2. Capture authenticated request
+3. In JWT Editor tab → try algorithm substitution attacks
+4. Verify server rejects tampered tokens
 
 ---
 
@@ -464,7 +527,7 @@ python -m pytest test_security_features.py::TestPasswordValidator -v
 
 ---
 
-### 4.3 Input Validation
+### 4.3 Input Validation & Injection Testing
 
 #### ST-INPUT-001: SQL/NoSQL Injection
 
@@ -472,20 +535,44 @@ python -m pytest test_security_features.py::TestPasswordValidator -v
 |-----------|-------|
 | **Test ID** | ST-INPUT-001 |
 | **Priority** | Critical |
-| **Tools** | OWASP ZAP, Burp Suite |
+| **Tools** | SQLMap, Burp Suite Pro, NoSQLMap |
 
-**Test Payloads:**
+**SQLMap Automated Testing:**
+```bash
+# Test login endpoint for SQL injection
+sqlmap -u "https://<api-url>/api/v1/auth/login" \
+  --data='{"email":"test@test.com","password":"test"}' \
+  --headers="Content-Type: application/json" \
+  --level=5 --risk=3 --batch
 
-```json
-// Test in email field
-{"email": "test@test.com' OR '1'='1", "password": "Test123!"}
+# Test patient endpoint with authenticated session
+sqlmap -u "https://<api-url>/api/v1/patients?id=1" \
+  --headers="Authorization: Bearer <token>" \
+  --level=5 --risk=3 --batch --dbs
 
-// Test in patient_id parameter
-GET /api/v1/patients/{"$gt":""}
-
-// Test in search fields
-{"name": {"$regex": ".*"}}
+# NoSQL injection specific payloads
+sqlmap -u "https://<api-url>/api/v1/patients" \
+  --data='{"patient_id":{"$gt":""}}' \
+  --headers="Content-Type: application/json" \
+  --tamper=between,randomcase --batch
 ```
+
+**Manual NoSQL Injection Payloads:**
+```json
+// MongoDB operator injection
+{"email": {"$gt": ""}, "password": {"$gt": ""}}
+{"email": {"$regex": ".*"}, "password": {"$regex": ".*"}}
+{"email": {"$ne": ""}, "password": {"$ne": ""}}
+
+// DynamoDB injection attempts
+{"patient_id": {"S": {"$or": [{}, {"a": "a"}]}}}
+```
+
+**Burp Suite Active Scan:**
+1. Configure target scope: `https://<api-url>/*`
+2. Spider the application with authenticated session
+3. Right-click → "Active scan" on API endpoints
+4. Review "Issues" tab for injection vulnerabilities
 
 **Expected Result:** All injection attempts rejected with 400 Bad Request
 
@@ -497,14 +584,35 @@ GET /api/v1/patients/{"$gt":""}
 |-----------|-------|
 | **Test ID** | ST-INPUT-002 |
 | **Priority** | High |
-| **Tools** | OWASP ZAP |
+| **Tools** | OWASP ZAP, Burp Suite, XSStrike |
 
-**Test Payloads:**
+**XSStrike Automated Testing:**
+```bash
+# Install XSStrike
+git clone https://github.com/s0md3v/XSStrike.git
+cd XSStrike
+pip install -r requirements.txt
 
+# Test patient name field
+python xsstrike.py -u "https://<api-url>/api/v1/patients" \
+  --data '{"first_name":"test"}' \
+  --headers "Authorization: Bearer <token>"
+```
+
+**Manual XSS Payloads (OWASP Cheat Sheet):**
 ```html
+<!-- Basic XSS -->
 <script>alert('XSS')</script>
 <img src=x onerror=alert('XSS')>
-javascript:alert('XSS')
+<svg onload=alert('XSS')>
+
+<!-- Encoded XSS -->
+%3Cscript%3Ealert('XSS')%3C/script%3E
+&#60;script&#62;alert('XSS')&#60;/script&#62;
+
+<!-- Event handlers -->
+<body onload=alert('XSS')>
+<input onfocus=alert('XSS') autofocus>
 ```
 
 **Expected Result:** Payloads sanitized or rejected, no script execution
@@ -519,23 +627,79 @@ javascript:alert('XSS')
 |-----------|-------|
 | **Test ID** | ST-CRYPTO-001 |
 | **Priority** | Critical |
-| **Tools** | testssl.sh, sslyze |
+| **Tools** | testssl.sh, sslyze, Nmap, OpenSSL |
 
-**Test Steps:**
-
+**testssl.sh Comprehensive Scan:**
 ```bash
-# Using testssl.sh
-./testssl.sh https://<api-gateway-url>
+# Clone and run testssl.sh
+git clone https://github.com/drwetter/testssl.sh.git
+cd testssl.sh
 
-# Expected results:
-# - TLS 1.2 or 1.3 only (no TLS 1.0/1.1)
-# - Strong cipher suites (AES-GCM, ChaCha20)
-# - No weak ciphers (RC4, 3DES, CBC with SHA1)
-# - Perfect Forward Secrecy (PFS) enabled
-# - Valid certificate chain
+# Full scan with all checks
+./testssl.sh --full https://<api-gateway-url>
+
+# Quick vulnerability check
+./testssl.sh --vulnerable https://<api-gateway-url>
+
+# Check specific vulnerabilities
+./testssl.sh --heartbleed --ccs --ticketbleed --robot \
+  --crime --breach --poodle --tls-fallback --sweet32 \
+  --freak --drown --logjam --beast https://<api-gateway-url>
+
+# Export results as JSON
+./testssl.sh --jsonfile results.json https://<api-gateway-url>
 ```
 
-**Test Script:**
+**sslyze Scan:**
+```bash
+# Install sslyze
+pip install sslyze
+
+# Run comprehensive scan
+sslyze --regular <api-gateway-host>:443
+
+# Check for specific issues
+sslyze --certinfo --compression --fallback --heartbleed \
+  --openssl_ccs --reneg --resum --robot <api-gateway-host>:443
+```
+
+**Nmap SSL/TLS Scripts:**
+```bash
+# Enumerate SSL/TLS ciphers
+nmap --script ssl-enum-ciphers -p 443 <api-gateway-host>
+
+# Check for vulnerabilities
+nmap --script ssl-heartbleed,ssl-poodle,ssl-ccs-injection \
+  -p 443 <api-gateway-host>
+
+# Certificate information
+nmap --script ssl-cert -p 443 <api-gateway-host>
+```
+
+**OpenSSL Manual Testing:**
+```bash
+# Test TLS 1.3 support
+openssl s_client -connect <api-gateway-host>:443 -tls1_3
+
+# Test TLS 1.2 (should work)
+openssl s_client -connect <api-gateway-host>:443 -tls1_2
+
+# Test TLS 1.1 (should fail)
+openssl s_client -connect <api-gateway-host>:443 -tls1_1
+
+# Check certificate chain
+openssl s_client -connect <api-gateway-host>:443 -showcerts
+```
+
+**Pass Criteria:**
+- TLS 1.2 or 1.3 only (no TLS 1.0/1.1)
+- Strong cipher suites (AES-GCM, ChaCha20-Poly1305)
+- No weak ciphers (RC4, 3DES, CBC with SHA1, EXPORT)
+- Perfect Forward Secrecy (ECDHE/DHE) enabled
+- Valid certificate chain with proper trust path
+- HSTS header present
+
+**MeDUSA Test Script:**
 ```python
 # Located at: tools/check_tls_version.py
 python tools/check_tls_version.py
@@ -588,7 +752,7 @@ python tools/check_tls_version.py
 |-----------|-------|
 | **Test ID** | ST-API-002 |
 | **Priority** | Medium |
-| **Tools** | OWASP ZAP, curl |
+| **Tools** | Nikto, OWASP ZAP, curl, SecurityHeaders.com |
 
 **Required Headers:**
 
@@ -599,10 +763,96 @@ python tools/check_tls_version.py
 | `X-Frame-Options` | `DENY` |
 | `Content-Security-Policy` | Defined policy |
 
-**Test Command:**
-```powershell
-curl -I https://<api-gateway-url>/api/v1/admin/health
+**Nikto Web Server Scan:**
+```bash
+# Install Nikto
+apt install nikto
+
+# Run scan against API
+nikto -h https://<api-gateway-url> -ssl -Format htm -output nikto_report.html
+
+# Scan with authentication
+nikto -h https://<api-gateway-url> -ssl \
+  -id "Authorization: Bearer <token>"
 ```
+
+**OWASP ZAP Header Analysis:**
+```bash
+# Run ZAP in daemon mode
+docker run -u zap -p 8080:8080 zaproxy/zap-stable zap.sh -daemon -port 8080
+
+# Run baseline scan
+docker run -t zaproxy/zap-stable zap-baseline.py \
+  -t https://<api-gateway-url> -r zap_report.html
+
+# Run full scan
+docker run -t zaproxy/zap-stable zap-full-scan.py \
+  -t https://<api-gateway-url> -r zap_full_report.html
+```
+
+**curl Header Check:**
+```bash
+curl -I -s https://<api-gateway-url>/api/v1/admin/health | grep -E "^(Strict|X-|Content-Security)"
+```
+
+---
+
+#### ST-API-003: Network & Infrastructure Scanning
+
+| Attribute | Value |
+|-----------|-------|
+| **Test ID** | ST-API-003 |
+| **Priority** | High |
+| **Tools** | Nmap, Nessus, Nuclei |
+
+**Nmap Service Discovery:**
+```bash
+# Basic port scan
+nmap -sV -sC -p- <api-gateway-host>
+
+# Aggressive scan with OS detection
+nmap -A -T4 <api-gateway-host>
+
+# Vulnerability scripts
+nmap --script vuln <api-gateway-host>
+
+# HTTP enumeration
+nmap --script http-enum,http-headers,http-methods \
+  -p 443 <api-gateway-host>
+```
+
+**Nuclei Vulnerability Scanning:**
+```bash
+# Install Nuclei
+go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+
+# Update templates
+nuclei -update-templates
+
+# Run all templates
+nuclei -u https://<api-gateway-url> -t ~/nuclei-templates/
+
+# Run specific categories
+nuclei -u https://<api-gateway-url> \
+  -t ~/nuclei-templates/cves/ \
+  -t ~/nuclei-templates/vulnerabilities/ \
+  -t ~/nuclei-templates/exposed-panels/
+
+# Run with severity filter
+nuclei -u https://<api-gateway-url> -s critical,high,medium
+```
+
+**Nessus Professional Scan:**
+1. Create new scan → "Web Application Tests"
+2. Enter target: `https://<api-gateway-url>`
+3. Configure credentials if needed
+4. Enable all plugins → Launch scan
+5. Review findings by severity
+
+**Pass Criteria:**
+- Only port 443 exposed
+- No high/critical Nessus findings
+- No CVEs detected by Nuclei
 
 ---
 
@@ -945,17 +1195,78 @@ python check_tls_version.py
 
 ---
 
-## Appendix A: Test Tools Reference
+## Appendix A: Professional Penetration Testing Tools Reference
 
-| Tool | Purpose | Installation |
-|------|---------|--------------|
-| pytest | Python unit testing | `pip install pytest` |
-| flutter test | Dart/Flutter testing | Built-in |
-| Burp Suite | Web security testing | [portswigger.net](https://portswigger.net/burp) |
-| OWASP ZAP | Automated security scanning | [zaproxy.org](https://www.zaproxy.org/) |
-| testssl.sh | TLS configuration testing | [testssl.sh](https://testssl.sh/) |
-| Baton | Load testing | `cargo install baton` |
-| k6 | Performance testing | [k6.io](https://k6.io/) |
+### A.1 Web Application Security
+
+| Tool | Purpose | Installation | Documentation |
+|------|---------|--------------|---------------|
+| **Burp Suite Pro** | HTTP proxy, scanner, intruder | [portswigger.net](https://portswigger.net/burp/pro) | [Documentation](https://portswigger.net/burp/documentation) |
+| **OWASP ZAP** | Automated DAST scanner | `docker pull zaproxy/zap-stable` | [zaproxy.org](https://www.zaproxy.org/docs/) |
+| **Nikto** | Web server scanner | `apt install nikto` | [GitHub](https://github.com/sullo/nikto) |
+| **Nuclei** | Template-based scanner | `go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest` | [nuclei.sh](https://nuclei.projectdiscovery.io/) |
+| **ffuf** | Web fuzzer | `go install github.com/ffuf/ffuf/v2@latest` | [GitHub](https://github.com/ffuf/ffuf) |
+| **Gobuster** | Directory brute forcing | `go install github.com/OJ/gobuster/v3@latest` | [GitHub](https://github.com/OJ/gobuster) |
+
+### A.2 Injection Testing
+
+| Tool | Purpose | Installation | Documentation |
+|------|---------|--------------|---------------|
+| **SQLMap** | SQL injection automation | `pip install sqlmap` | [sqlmap.org](https://sqlmap.org/) |
+| **NoSQLMap** | NoSQL injection | `git clone https://github.com/codingo/NoSQLMap` | [GitHub](https://github.com/codingo/NoSQLMap) |
+| **XSStrike** | XSS detection | `git clone https://github.com/s0md3v/XSStrike` | [GitHub](https://github.com/s0md3v/XSStrike) |
+| **Commix** | Command injection | `git clone https://github.com/commixproject/commix` | [GitHub](https://github.com/commixproject/commix) |
+
+### A.3 Authentication & Session Testing
+
+| Tool | Purpose | Installation | Documentation |
+|------|---------|--------------|---------------|
+| **JWT_Tool** | JWT exploitation | `pip install jwt_tool` | [GitHub](https://github.com/ticarpi/jwt_tool) |
+| **Hydra** | Brute force testing | `apt install hydra` | [GitHub](https://github.com/vanhauser-thc/thc-hydra) |
+| **John the Ripper** | Password cracking | `apt install john` | [openwall.com](https://www.openwall.com/john/) |
+| **Hashcat** | GPU password cracking | [hashcat.net](https://hashcat.net/hashcat/) | [Documentation](https://hashcat.net/wiki/) |
+
+### A.4 Network & Infrastructure
+
+| Tool | Purpose | Installation | Documentation |
+|------|---------|--------------|---------------|
+| **Nmap** | Port scanning | `apt install nmap` | [nmap.org](https://nmap.org/docs.html) |
+| **Nessus** | Vulnerability scanner | [tenable.com](https://www.tenable.com/products/nessus) | [Documentation](https://docs.tenable.com/nessus/) |
+| **Metasploit** | Exploitation framework | `curl https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb > msfinstall && chmod 755 msfinstall && ./msfinstall` | [metasploit.com](https://docs.metasploit.com/) |
+| **Wireshark** | Packet analysis | [wireshark.org](https://www.wireshark.org/) | [Documentation](https://www.wireshark.org/docs/) |
+
+### A.5 TLS/SSL Testing
+
+| Tool | Purpose | Installation | Documentation |
+|------|---------|--------------|---------------|
+| **testssl.sh** | TLS configuration | `git clone https://github.com/drwetter/testssl.sh` | [testssl.sh](https://testssl.sh/) |
+| **sslyze** | SSL/TLS scanner | `pip install sslyze` | [GitHub](https://github.com/nabla-c0d3/sslyze) |
+| **sslscan** | SSL cipher enumeration | `apt install sslscan` | [GitHub](https://github.com/rbsec/sslscan) |
+
+### A.6 Mobile Application Testing
+
+| Tool | Purpose | Installation | Documentation |
+|------|---------|--------------|---------------|
+| **MobSF** | Mobile security framework | `docker pull opensecurity/mobile-security-framework-mobsf` | [mobsf.github.io](https://mobsf.github.io/docs/) |
+| **Frida** | Dynamic instrumentation | `pip install frida-tools` | [frida.re](https://frida.re/docs/home/) |
+| **Objection** | Runtime mobile exploration | `pip install objection` | [GitHub](https://github.com/sensepost/objection) |
+
+### A.7 Performance & Load Testing
+
+| Tool | Purpose | Installation | Documentation |
+|------|---------|--------------|---------------|
+| **k6** | Load testing | [k6.io](https://k6.io/docs/getting-started/installation/) | [Documentation](https://k6.io/docs/) |
+| **Apache JMeter** | Load testing | [jmeter.apache.org](https://jmeter.apache.org/download_jmeter.cgi) | [User Manual](https://jmeter.apache.org/usermanual/index.html) |
+| **Locust** | Python load testing | `pip install locust` | [locust.io](https://docs.locust.io/) |
+| **Artillery** | Modern load testing | `npm install -g artillery` | [artillery.io](https://www.artillery.io/docs) |
+
+### A.8 Unit & Integration Testing
+
+| Tool | Purpose | Installation | Documentation |
+|------|---------|--------------|---------------|
+| **pytest** | Python unit testing | `pip install pytest pytest-cov` | [pytest.org](https://docs.pytest.org/) |
+| **flutter test** | Dart/Flutter testing | Built-in | [flutter.dev](https://docs.flutter.dev/testing) |
+| **Postman/Newman** | API testing | [postman.com](https://www.postman.com/downloads/) | [Documentation](https://learning.postman.com/docs/) |
 
 ---
 
