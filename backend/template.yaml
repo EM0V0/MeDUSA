@@ -33,7 +33,7 @@ Globals:
         
         # Email Configuration (AWS SES)
         USE_SES: 'true'  # Enable real email sending via AWS SES
-        SENDER_EMAIL: 'medusa000012@gmail.com'  # Verified email address
+        SENDER_EMAIL: 'zsun54@jh.edu'  # Verified email address
         SES_REGION: 'us-east-1'  # SES region (AWS_REGION is auto-provided by Lambda)
         
         # Environment
@@ -384,7 +384,7 @@ Resources:
         SensorDataStream:
           Type: DynamoDB
           Properties:
-            Stream: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/medusa-sensor-data/stream/2025-11-20T22:20:04.644"
+            Stream: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/medusa-sensor-data/stream/2026-02-03T02:51:28.000"
             StartingPosition: LATEST
             BatchSize: 100
             MaximumBatchingWindowInSeconds: 10
@@ -431,6 +431,7 @@ Resources:
   # WAF Association
   MedusaWebACLAssociation:
     Type: AWS::WAFv2::WebACLAssociation
+    DependsOn: MedusaAPIProdStage
     Properties:
       ResourceArn: !Sub "arn:aws:apigateway:${AWS::Region}::/restapis/${MedusaAPI}/stages/Prod"
       WebACLArn: !GetAtt MedusaWebACL.Arn
