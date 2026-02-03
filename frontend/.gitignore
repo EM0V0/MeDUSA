@@ -129,6 +129,8 @@ lib/**/*.chopper.dart
 lib/**/*.mocks.dart
 
 # Platform-specific builds and artifacts
+# Note: windows/runner/windows_ble_pairing_plugin.* are custom BLE plugins
+# They should be tracked separately using 'git add -f' if needed
 windows/
 linux/
 macos/

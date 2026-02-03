@@ -6,8 +6,21 @@ A professional Parkinson's disease tremor monitoring system with real-time data 
 
 ## 📚 Documentation
 
+### Core Documentation
 - **[API Documentation](doc_assets/API_DOCUMENTATION.md)** - Complete backend API reference
 - **[Reproducibility Guide](doc_assets/Reproducibility_Guide.md)** - Guide for running the simulation and backend
+
+### Regulatory Compliance (FDA Premarket)
+- **[FDA Premarket Checklist](doc_assets/FDA_Premarket_Cybersecurity_Checklist.md)** - FDA cybersecurity expectations mapping
+- **[Threat Model](doc_assets/Threat_Model.md)** - STRIDE threat analysis document
+- **[ISO 14971 Risk Assessment](doc_assets/ISO14971_Risk_Assessment.md)** - Medical device risk management
+- **[Security Traceability Matrix](doc_assets/Security_Traceability_Matrix.md)** - Requirements to controls mapping
+- **[Security Controls Verification](doc_assets/Security_Controls_Verification.md)** - Control verification evidence
+- **[SBOM Documentation](doc_assets/SBOM_Documentation.md)** - Software Bill of Materials
+
+### Educational Resources
+- **[Cybersecurity Risk Assessment Worksheet](doc_assets/Cybersecurity_Risk_Assessment_Worksheet.md)** - Student exercise worksheet
+- **[Security Audit Report](SECURITY_AUDIT.md)** - System security audit results
 
 ## 🔐 Test Accounts
 

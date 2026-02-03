@@ -30,6 +30,7 @@ from auth import auth_middleware, issue_tokens, verify_pw, hash_pw
 from password_validator import PasswordValidator
 from email_service import EmailService
 from rbac import require_role, get_user_id, get_user_role
+from audit_service import audit_service, AuditEventType
 import db
 import storage
 
@@ -124,13 +125,24 @@ def register(req: RegisterReq):
     )
 
 @app.post("/api/v1/auth/login", response_model=LoginRes)
-def login(req: LoginReq):
+def login(req: LoginReq, request: Request):
     """
     Login user - API v3 compliant
     Returns flat response with accessJwt, refreshToken, expiresIn, and user info
     """
+    # Extract client info for audit logging
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    
     u = db.get_user_by_email(req.email)
     if not u or not verify_pw(req.password, u["password"]):
+        # Log failed login attempt
+        audit_service.log_login_failure(
+            email=req.email,
+            reason="invalid_credentials",
+            ip_address=client_ip,
+            user_agent=user_agent
+        )
         raise HTTPException(401, detail={"code":"AUTH_INVALID","message":"invalid credentials"})
     
     # Generate tokens
@@ -142,6 +154,14 @@ def login(req: LoginReq):
             "role": u["role"], 
             "expiresAt": int(time.time()) + int(os.environ.get("REFRESH_TTL_SECONDS","604800"))
         }
+    )
+    
+    # Log successful login
+    audit_service.log_login_success(
+        user_id=u["id"],
+        user_role=u["role"],
+        ip_address=client_ip,
+        user_agent=user_agent
     )
     
     # API v3: Return flat response with accessJwt, refreshToken, expiresIn, and user info
@@ -840,6 +860,17 @@ async def create_measurement_session(body: SessionCreateReq, request: Request):
         "updatedAt": now.isoformat()
     })
     
+    # Audit log: session creation
+    audit_service.log_session_event(
+        event_type=AuditEventType.SESSION_CREATE,
+        user_id=doctor_id,
+        user_role=user_role,
+        session_id=session_id,
+        device_id=body.deviceId,
+        patient_id=body.patientId,
+        action="create_measurement_session"
+    )
+    
     return Session(
         sessionId=session_data["sessionId"],
         deviceId=session_data["deviceId"],
@@ -1136,9 +1167,26 @@ def get_tremor_analysis(
     # Access control
     # Patients can only access their own data
     if role == 'patient' and user_id != patient_id:
+        # Log access denied
+        audit_service.log_access_denied(
+            user_id=user_id,
+            user_role=role,
+            resource_type="tremor_data",
+            resource_id=patient_id,
+            required_role="patient (self) or doctor/admin"
+        )
         raise HTTPException(403, detail="Access denied")
-        
+    
     items, count = db.get_tremor_analysis(patient_id, start_time, end_time, limit)
+    
+    # Log patient data access
+    audit_service.log_patient_data_access(
+        user_id=user_id,
+        user_role=role,
+        patient_id=patient_id,
+        data_type="tremor_analysis",
+        action="query"
+    )
     
     return {
         "success": True,
