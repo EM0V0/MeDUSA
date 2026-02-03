@@ -33,7 +33,7 @@ Globals:
         
         # Email Configuration (AWS SES)
         USE_SES: 'true'  # Enable real email sending via AWS SES
-        SENDER_EMAIL: 'zsun54@jh.edu'  # Verified email address
+        SENDER_EMAIL: 'medusa000012@gmail.com'  # Verified Gmail address (better deliverability)
         SES_REGION: 'us-east-1'  # SES region (AWS_REGION is auto-provided by Lambda)
         
         # Environment
