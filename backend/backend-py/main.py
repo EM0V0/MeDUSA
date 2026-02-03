@@ -31,6 +31,7 @@ from password_validator import PasswordValidator
 from email_service import EmailService
 from rbac import require_role, get_user_id, get_user_role
 from audit_service import audit_service, AuditEventType
+from replay_protection import nonce_service, require_nonce, get_nonce_endpoint
 import db
 import storage
 
@@ -54,7 +55,10 @@ app.add_middleware(
         "Origin",
         "X-Requested-With",
         "Access-Control-Request-Method",
-        "Access-Control-Request-Headers"
+        "Access-Control-Request-Headers",
+        "X-Request-Nonce",
+        "X-Request-Timestamp",
+        "X-Request-Signature"
     ],
     allow_credentials=True, # Allow cookies/auth headers
     max_age=600  # Cache preflight for 10 minutes
@@ -73,7 +77,18 @@ async def options_handler(path: str):
 # -------- Admin
 @app.get("/api/v1/admin/health")
 def health():
-    return {"ok": True, "ts": int(time.time())}
+    return {"ok": True, "ts": int(time.time()), "security": {"replayProtection": True, "nonceEnabled": True}}
+
+# -------- Security - Nonce Endpoint
+@app.get("/api/v1/security/nonce")
+def get_nonce():
+    """
+    Get a fresh nonce for replay protection.
+    
+    Clients should include this nonce in the X-Request-Nonce header
+    for endpoints that require replay protection.
+    """
+    return get_nonce_endpoint()
 
 # -------- Auth
 @app.post("/api/v1/auth/register", response_model=RegisterRes, status_code=201)

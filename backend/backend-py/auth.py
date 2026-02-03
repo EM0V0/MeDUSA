@@ -59,7 +59,8 @@ OPEN_PATH_SUFFIXES = [
     "/auth/reset-password",
     "/auth/send-verification-code",
     "/auth/send-password-reset-code",
-    "/current-session"  # Allow Pi devices to poll for current session
+    "/current-session",  # Allow Pi devices to poll for current session
+    "/security/nonce"    # Nonce endpoint for replay protection
 ]
 
 async def auth_middleware(request: Request, call_next):
