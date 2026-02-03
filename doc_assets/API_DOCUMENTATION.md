@@ -3,7 +3,7 @@
 **Version**: 3.0  
 **Base URL**: `https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod`  
 **Tremor API Base URL**: `https://buektgcf8l.execute-api.us-east-1.amazonaws.com/Prod`  
-**Last Updated**: November 18, 2025  
+**Last Updated**: February 2, 2026  
 **Status**: Production
 
 ---
@@ -1376,5 +1376,5 @@ For API support or bug reports:
 
 ---
 
-**Last Updated**: November 18, 2025  
+**Last Updated**: February 2, 2026  
 **Maintained by**: Zhicheng Sun
