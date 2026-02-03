@@ -55,12 +55,14 @@ The medical device industry faces a critical shortage of cybersecurity professio
 | **Replay Protection** | Nonce-based request validation |
 
 ### Platform Support
-- Web Application (Primary)
-- Windows Desktop *(Full BLE support)*
-- Android Mobile
-- iOS Mobile (requires Mac for build)
+| Platform | BLE Support | Notes |
+|----------|-------------|-------|
+| **Web** | ✅ Web Bluetooth | Chrome/Edge/Opera, requires HTTPS |
+| **Windows** | ✅ Full BLE | Scan, pair, WiFi provision |
+| **Android** | ✅ FlutterBluePlus | Standard mobile BLE |
+| **iOS** | ✅ FlutterBluePlus | Requires Mac for build |
 
-> **Note on Bluetooth:** Currently, only the **Windows desktop** version has fully implemented Bluetooth Low Energy (BLE) connectivity for medical device pairing. The Windows BLE implementation includes device scanning, pairing, WiFi provisioning, and real-time data collection. Other platforms use simulated data or require additional development.
+> **Note on Web Bluetooth:** Web platform uses the Web Bluetooth API which requires user interaction to select devices (no background scanning). Only Chromium-based browsers are supported.
 
 ---
 

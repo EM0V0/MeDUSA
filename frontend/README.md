@@ -9,6 +9,20 @@ The patient and doctor mobile interface for the MeDUSA (Medical Data Unified Sys
 - **Doctor Portal**: Dashboard for doctors to view assigned patients and their telemetry.
 - **Secure Networking**: Certificate handling via System Trust Store (`secure_network_service.dart`).
 
+## 🔵 Bluetooth Support
+
+| Platform | Implementation | Notes |
+|----------|---------------|-------|
+| **Windows** | WinBLE + FlutterBluePlus | Full support: scan, pair, provision |
+| **Web** | Web Bluetooth API | Chrome/Edge/Opera only, requires HTTPS |
+| **Android/iOS** | FlutterBluePlus | Standard mobile BLE |
+
+### Web Bluetooth Limitations
+- Requires **HTTPS** or **localhost** (secure context)
+- Only supported in **Chrome, Edge, Opera** (Chromium-based)
+- **User interaction required** - no background scanning
+- Safari and Firefox are NOT supported
+
 ## 🛠 Prerequisites
 
 - Flutter SDK (3.0+)
