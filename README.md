@@ -1,138 +1,365 @@
-# MeDUSA - Medical Data Unified System & Analytics
+# 🏥 MeDUSA - Medical Device Unified Security & Analytics
 
-A professional Parkinson's disease tremor monitoring system with real-time data analysis, patient management, and device integration.
+<div align="center">
+
+![MeDUSA Logo](https://img.shields.io/badge/MeDUSA-Medical%20Device%20Security-blue?style=for-the-badge&logo=shield)
+![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=flat-square&logo=flutter)
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python)
+![AWS](https://img.shields.io/badge/AWS-Lambda%20%7C%20DynamoDB-FF9900?style=flat-square&logo=amazonaws)
+![License](https://img.shields.io/badge/License-Educational-green?style=flat-square)
+
+**A Hands-On Platform for Medical Device Cybersecurity Education**
+
+*Bridging the Gap Between Theory and Practice in Healthcare Security*
+
+[Features](#-features) • [Quick Start](#-quick-start) • [Learning Modules](#-learning-modules) • [Deployment](#-deployment) • [Documentation](#-documentation)
+
+</div>
 
 ---
 
-## 🚀 One-Command Setup
+## 📖 Overview
+
+**MeDUSA** (Medical Device Unified Security & Analytics) is an open-source educational platform designed to teach medical device cybersecurity through hands-on experience. Built as a realistic Parkinson's disease tremor monitoring system, MeDUSA provides students with a safe, controlled environment to learn and practice security concepts critical to healthcare technology.
+
+### Why MeDUSA?
+
+The medical device industry faces a critical shortage of cybersecurity professionals who understand both healthcare requirements and security principles. Traditional classroom instruction often fails to provide the practical experience needed to develop real-world skills. MeDUSA addresses this gap by offering:
+
+- 🎯 **Real-World Simulation**: A fully functional medical device ecosystem
+- 🔐 **Security-First Design**: Implementations following FDA guidance and industry standards  
+- 📚 **Comprehensive Curriculum**: From basic concepts to advanced penetration testing
+- 🛠️ **Practical Labs**: Hands-on exercises with intentional vulnerabilities to discover and fix
+
+---
+
+## ✨ Features
+
+### 🏥 Clinical Features
+| Feature | Description |
+|---------|-------------|
+| **Real-time Tremor Monitoring** | Live visualization of Parkinsonian tremor data with Demo Mode |
+| **Patient Management** | Complete CRUD operations for patient records |
+| **Device Integration** | BLE-based medical device pairing and data collection |
+| **Data Analytics** | Statistical analysis with frequency domain processing |
+| **Multi-Role Access** | Patient, Doctor, and Administrator interfaces |
+
+### 🔒 Security Features
+| Feature | Implementation |
+|---------|----------------|
+| **Authentication** | JWT-based auth with mandatory MFA (TOTP) |
+| **Password Security** | Argon2id hashing with NIST-compliant validation |
+| **Encryption** | TLS 1.3 for all communications |
+| **Access Control** | Role-Based Access Control (RBAC) |
+| **Audit Logging** | Comprehensive security event tracking |
+| **Replay Protection** | Nonce-based request validation |
+
+### 📱 Platform Support
+- ✅ Web Application (Primary)
+- ✅ Windows Desktop
+- ✅ Android Mobile
+- ✅ iOS Mobile (requires Mac for build)
+
+---
+
+## 🎓 Learning Modules
+
+MeDUSA supports a progressive learning path for medical device security:
+
+### Module 1: Foundations
+- Understanding medical device regulations (FDA, IEC 62443)
+- Introduction to the STRIDE threat model
+- Basic authentication and authorization concepts
+
+### Module 2: Secure Development
+- Implementing secure authentication flows
+- Password policy enforcement
+- Session management best practices
+
+### Module 3: Threat Modeling
+- Performing STRIDE analysis on MeDUSA
+- Identifying attack surfaces in medical devices
+- Creating threat model documentation
+
+### Module 4: Vulnerability Assessment
+- Discovering intentional vulnerabilities
+- API security testing
+- Bluetooth security analysis
+
+### Module 5: Penetration Testing
+- Conducting authorized security tests
+- Exploiting common vulnerabilities
+- Writing professional security reports
+
+### Module 6: Compliance & Documentation
+- FDA premarket cybersecurity requirements
+- Creating Software Bill of Materials (SBOM)
+- Risk assessment documentation (ISO 14971)
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- [Flutter SDK](https://flutter.dev/docs/get-started/install) 3.x or later
+- [Python](https://www.python.org/downloads/) 3.10+
+- [AWS CLI](https://aws.amazon.com/cli/) (for backend deployment)
+- [Git](https://git-scm.com/)
+
+### One-Command Setup (Windows)
 
 ```powershell
-# Development mode (local backend, quick login)
-.\scripts\quick_start.ps1 -Mode dev
+# Clone the repository
+git clone https://github.com/EM0V0/MeDUSA.git
+cd MeDUSA
 
-# Production mode (AWS deployment, full security)
-.\scripts\quick_start.ps1 -Mode prod -GenerateData
+# Quick start with demo mode
+.\scripts\quick_start.ps1 -Mode dev
 ```
 
-See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for detailed instructions.
+### Manual Setup
+
+#### Frontend (Flutter App)
+```powershell
+cd frontend
+flutter pub get
+flutter run -d chrome    # For web
+flutter run -d windows   # For Windows desktop
+```
+
+#### Backend (Local Development)
+```powershell
+cd backend/backend-py
+pip install -r requirements.txt
+.\start_local.ps1
+```
+
+### 🎮 Demo Mode
+No hardware device? No problem! MeDUSA includes a **Demo Mode** that generates realistic simulated tremor data:
+
+1. Log in to the dashboard
+2. Click the **"Demo Mode"** button
+3. Watch real-time simulated tremor visualization
+4. Click **"Trigger Episode"** to simulate a Parkinsonian tremor event
+
+This is perfect for demonstrations, training sessions, and learning without physical devices.
+
+---
+
+## 🛠️ Deployment
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Frontend (Flutter)                        │
+│              Web │ Windows │ Android │ iOS                       │
+└─────────────────────────────────┬───────────────────────────────┘
+                                  │ HTTPS/TLS 1.3
+                                  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     AWS API Gateway                              │
+│                    (REST API + JWT Auth)                         │
+└─────────────────────────────────┬───────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      AWS Lambda (Python)                         │
+│        Authentication │ RBAC │ Business Logic │ Audit           │
+└──────────┬──────────────────────┬───────────────────┬───────────┘
+           │                      │                   │
+           ▼                      ▼                   ▼
+    ┌──────────────┐      ┌──────────────┐    ┌──────────────┐
+    │  DynamoDB    │      │     S3       │    │   AWS SES    │
+    │  (Users,     │      │  (Firmware,  │    │   (Email     │
+    │   Devices,   │      │   Reports)   │    │   Service)   │
+    │   Sessions)  │      │              │    │              │
+    └──────────────┘      └──────────────┘    └──────────────┘
+```
+
+### AWS Deployment
+
+#### Step 1: Configure AWS Credentials
+```powershell
+aws configure
+# Enter your AWS Access Key ID, Secret, and region (us-east-1 recommended)
+```
+
+#### Step 2: Deploy Backend
+```powershell
+cd backend
+
+# Build and deploy with SAM
+sam build
+sam deploy --guided
+
+# Or use the deployment script
+.\deploy.ps1
+```
+
+#### Step 3: Configure Email Service (AWS SES)
+```powershell
+# Verify sender email address
+.\configure-ses.ps1 -Email "your-verified-email@domain.com"
+```
+
+#### Step 4: Update Frontend Configuration
+Edit `frontend/lib/core/constants/app_constants.dart` with your API Gateway URL.
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `JWT_SECRET` | Secret key for JWT signing | Yes |
+| `USERS_TABLE` | DynamoDB users table name | Yes |
+| `SENDER_EMAIL` | Verified SES email address | Yes |
+| `USE_SES` | Enable AWS SES (`true`/`false`) | Yes |
+
+See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for comprehensive deployment instructions.
 
 ---
 
 ## 📚 Documentation
 
 ### Core Documentation
-- **[API Documentation](doc_assets/API_DOCUMENTATION.md)** - Complete backend API reference
-- **[Reproducibility Guide](doc_assets/Reproducibility_Guide.md)** - Guide for running the simulation and backend
+| Document | Description |
+|----------|-------------|
+| [API Documentation](doc_assets/API_DOCUMENTATION.md) | Complete REST API reference |
+| [Deployment Guide](DEPLOYMENT_GUIDE.md) | Detailed deployment instructions |
+| [Reproducibility Guide](doc_assets/Reproducibility_Guide.md) | Setup and simulation guide |
 
-### Regulatory Compliance (FDA Premarket)
-- **[FDA Premarket Checklist](doc_assets/FDA_Premarket_Cybersecurity_Checklist.md)** - FDA cybersecurity expectations mapping
-- **[Threat Model](doc_assets/Threat_Model.md)** - STRIDE threat analysis document
-- **[ISO 14971 Risk Assessment](doc_assets/ISO14971_Risk_Assessment.md)** - Medical device risk management
-- **[Security Traceability Matrix](doc_assets/Security_Traceability_Matrix.md)** - Requirements to controls mapping
-- **[Security Controls Verification](doc_assets/Security_Controls_Verification.md)** - Control verification evidence
-- **[SBOM Documentation](doc_assets/SBOM_Documentation.md)** - Software Bill of Materials
-
-### Security Implementation
-- **[Security Implementation Summary](doc_assets/Security_Implementation_Summary.md)** - Comprehensive overview of all security measures
+### Security & Compliance
+| Document | Description |
+|----------|-------------|
+| [FDA Premarket Checklist](doc_assets/FDA_Premarket_Cybersecurity_Checklist.md) | FDA cybersecurity requirements mapping |
+| [Threat Model (STRIDE)](doc_assets/Threat_Model.md) | Comprehensive threat analysis |
+| [ISO 14971 Risk Assessment](doc_assets/ISO14971_Risk_Assessment.md) | Medical device risk management |
+| [Security Traceability Matrix](doc_assets/Security_Traceability_Matrix.md) | Requirements to controls mapping |
+| [SBOM Documentation](doc_assets/SBOM_Documentation.md) | Software Bill of Materials |
 
 ### Educational Resources
-- **[Cybersecurity Risk Assessment Worksheet](doc_assets/Cybersecurity_Risk_Assessment_Worksheet.md)** - Student exercise worksheet
-- **[Security Audit Report](SECURITY_AUDIT.md)** - System security audit results
-
-## 🔐 Test Accounts
-
-Use these credentials to test the application immediately:
-
-| Role | Email | Password | Status |
-| :--- | :--- | :--- | :--- |
-| **Patient/Doctor** | `zsun54@jh.edu` | `Testhnp123!` | Active (MFA Enabled) |
-| **Patient/Doctor** | `andysun12@outlook.com` | `Testhnp123!` | Active (MFA Enabled) |
+| Document | Description |
+|----------|-------------|
+| [Cybersecurity Risk Worksheet](doc_assets/Cybersecurity_Risk_Assessment_Worksheet.md) | Hands-on student exercise |
+| [Security Audit Report](SECURITY_AUDIT.md) | Example security audit findings |
+| [Security Controls Verification](doc_assets/Security_Controls_Verification.md) | Control verification evidence |
 
 ---
 
-## 🚀 Quick Start
+## 🎯 Skills You'll Develop
 
-### Frontend (Flutter App)
+By working with MeDUSA, students will gain practical skills in:
 
-```powershell
-cd frontend
-flutter pub get
-flutter run
+### Technical Skills
+- 🔧 Full-stack development (Flutter + Python + AWS)
+- 🔐 Implementing secure authentication systems
+- 📡 Bluetooth Low Energy (BLE) communication
+- ☁️ Cloud deployment (AWS Lambda, DynamoDB, S3)
+- 🔍 Security testing and vulnerability assessment
+
+### Domain Knowledge
+- 🏥 Medical device regulatory requirements
+- 📋 FDA premarket cybersecurity guidance
+- 📊 Healthcare data protection principles
+- 🛡️ STRIDE threat modeling methodology
+- 📝 Security documentation standards
+
+### Professional Skills
+- 📄 Writing security assessment reports
+- 🎯 Conducting risk analysis
+- 🤝 Communicating security findings to stakeholders
+- 📈 Prioritizing remediation efforts
+
+---
+
+## 🏗️ Project Structure
+
+```
+MeDUSA/
+├── frontend/                 # Flutter application
+│   ├── lib/
+│   │   ├── core/            # Constants, theme, routing
+│   │   ├── features/        # Feature modules
+│   │   │   ├── auth/        # Authentication
+│   │   │   ├── dashboard/   # Dashboard views
+│   │   │   ├── devices/     # Device management
+│   │   │   └── patients/    # Patient management
+│   │   └── shared/          # Shared services & widgets
+│   └── test/                # Unit & widget tests
+│
+├── backend/
+│   ├── backend-py/          # Python Lambda functions
+│   │   ├── main.py          # API endpoints
+│   │   ├── auth.py          # Authentication logic
+│   │   ├── db.py            # Database operations
+│   │   └── models.py        # Data models
+│   ├── template.yaml        # SAM template
+│   └── deploy.ps1           # Deployment script
+│
+├── doc_assets/              # Documentation & compliance
+├── tools/                   # Utility & testing scripts
+└── scripts/                 # Setup & automation scripts
 ```
 
-**Automatically configured to connect to production APIs** ✅
+---
 
-### Backend API
+## 🤝 Contributing
 
-**Production (AWS Lambda)**
-- API URL: `https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod/api/v1`
-- Status: ✅ Deployed & Running
-- Test Coverage: 100% Passing (8/8)
+MeDUSA welcomes contributions from educators and students:
 
-**Local Testing (Optional)**
-```powershell
-cd backend/backend-py
-.\start_local.ps1
-```
-
-**Deploy Updates**
-```powershell
-cd backend
-.\deploy.ps1
-```
+1. **Report Issues**: Found a bug or have a suggestion? Open an issue!
+2. **Add Features**: Fork the repo and submit a pull request
+3. **Improve Documentation**: Help make learning materials clearer
+4. **Create Labs**: Design new educational exercises
 
 ---
 
-## 📋 System Architecture
+## ⚠️ Disclaimer
 
-### Backend APIs
+**MeDUSA is designed for educational purposes only.**
 
-Production APIs are deployed on AWS:
-- **General API**: `https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod`
-- **Tremor API**: `https://buektgcf8l.execute-api.us-east-1.amazonaws.com/Prod`
-
-See **[API Documentation](doc_assets/API_DOCUMENTATION.md)** for complete endpoint reference.
-
----
-
-## 🏗️ System Architecture
-
-### Frontend (Flutter)
-- **Framework**: Flutter 3.x
-- **Platforms**: Web, Windows, Android, iOS
-- **UI**: Material Design 3
-- **State Management**: Riverpod + BLoC
-- **Network**: Dio with TLS 1.3
-- **Bluetooth**: flutter_blue_plus, win_ble
-
-### Backend (Python)
-- **Runtime**: AWS Lambda (Python 3.10, 3.11)
-- **API Gateway**: REST API with JWT authentication
-- **Database**: DynamoDB (on-demand billing)
-- **Email**: AWS SES
-- **Storage**: S3
-- **Authentication**: JWT (PyJWT) with Argon2id for password hashing. Access tokens are signed with HS256 using a secret configured via the `JWT_SECRET` environment variable (production values are injected from AWS Secrets Manager; local/dev scripts provide a dev fallback). Refresh tokens are issued and short access token lifetimes are enforced.
-
-### Key Features
-- ✅ Role-based access control (Admin, Doctor, Patient)
-- ✅ Real-time tremor data processing
-- ✅ Device-patient dynamic binding
-- ✅ Statistical analysis and aggregation
-- ✅ Secure password reset via email
-- ✅ Bluetooth device integration
+- ❌ This is NOT a certified medical device
+- ❌ Do NOT use for actual patient care
+- ⚠️ Some features intentionally include vulnerabilities for learning
+- ✅ Always conduct security testing in authorized environments only
 
 ---
 
-### Implementation Notes (Security & Device Onboarding)
+## 📜 License
 
-- **Authorizer / JWT verification**: The API uses application-layer JWT middleware (see `backend/backend-py/auth.py`) which extracts the bearer token from the Authorization header, removes the `Bearer ` prefix if present, and verifies the token using the `JWT_SECRET` and HS256. The middleware relies on application-level `role` claims for finer-grained access control. In production, `JWT_SECRET` should be stored and rotated in Secrets Manager (see `backend/template.yaml`), and the dev fallback must never be used for production deployments.
+This project is released for **educational and research purposes**.
 
-- **Device Onboarding / Registration**: The repo contains a simple demonstration script `tools/register_device.py` which writes a device item directly to the DynamoDB table `medusa-devices-prod` for testing. This is intended as a quick binding helper for development. Production device provisioning should rely on managed IoT provisioning (X.509 certs / Just-in-Time provisioning or a secure registration API), authenticated device identity, and TLS-protected channels rather than hard-coded scripts.
+---
 
-## 🔵 Bluetooth Capabilities
+## 👨‍💻 Author
 
-### Pages
-- Device scanning (`device_scan_page.dart`)
-- Device connection (`device_connection_page.dart`)
-- WiFi provisioning (`wifi_provision_page.dart`)
-- Windows BLE testing (`winble_test_page.dart`)
+<div align="center">
+
+**Independently Developed by Zhicheng Sun**
+
+MeDUSA was designed and built as a comprehensive educational platform to address the critical need for hands-on medical device cybersecurity training in academic settings.
+
+</div>
+
+---
+
+## 🙏 Acknowledgments
+
+- Flutter and Dart teams for the excellent cross-platform framework
+- AWS for cloud infrastructure services
+- The medical device security research community
+- Educators and students who provide valuable feedback
+
+---
+
+<div align="center">
+
+**Ready to start your medical device security journey?**
+
+[🚀 Get Started](#-quick-start) | [📚 Documentation](#-documentation) | [🐛 Report Issue](https://github.com/EM0V0/MeDUSA/issues)
+
+---
+
+*MeDUSA - Empowering the Next Generation of Medical Device Security Professionals*
+
+</div>
