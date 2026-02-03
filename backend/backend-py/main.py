@@ -130,9 +130,10 @@ def request_verification(req: RequestVerificationReq):
     else:
         raise HTTPException(400, detail={"code": "INVALID_TYPE", "message": "Type must be 'registration' or 'password_reset'"})
     
-    # Check for rate limiting (don't send too many codes)
-    if db.has_pending_verification(email, code_type):
-        raise HTTPException(429, detail={"code": "TOO_MANY_REQUESTS", "message": "Please wait before requesting another code"})
+    # Check for rate limiting (don't send too many codes within 60 seconds)
+    # Allow new request if previous code expired or is older than 60 seconds
+    if db.has_pending_verification(email, code_type, min_age_seconds=60):
+        raise HTTPException(429, detail={"code": "TOO_MANY_REQUESTS", "message": "Please wait 60 seconds before requesting another code"})
     
     # Generate and store verification code
     code = db.generate_verification_code()

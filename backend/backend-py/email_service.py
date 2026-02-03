@@ -68,6 +68,11 @@ class EmailService:
             True if successful, False otherwise
         """
         try:
+            # Extract plain text from HTML for better deliverability
+            import re
+            text_body = re.sub(r'<[^>]+>', '', html_body)  # Strip HTML tags
+            text_body = re.sub(r'\s+', ' ', text_body).strip()  # Clean whitespace
+            
             response = self.ses_client.send_email(
                 Source=f"{self.SENDER_NAME} <{self.SENDER_EMAIL}>",
                 Destination={
@@ -82,20 +87,36 @@ class EmailService:
                         'Html': {
                             'Data': html_body,
                             'Charset': 'UTF-8'
+                        },
+                        'Text': {
+                            'Data': text_body,
+                            'Charset': 'UTF-8'
                         }
                     }
-                }
+                },
+                # Add configuration set for better tracking (optional)
+                # ConfigurationSetName='medusa-email-config'
             )
-            print(f"[EmailService] Email sent successfully to {recipient}")
+            print(f"[EmailService] ✅ Email sent successfully to {recipient}")
             print(f"[EmailService] Message ID: {response['MessageId']}")
+            print(f"[EmailService] From: {self.SENDER_EMAIL}")
+            print(f"[EmailService] To: {recipient}")
+            print(f"[EmailService] Subject: {subject}")
             return True
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
-            print(f"[EmailService] Failed to send email: {error_code} - {error_message}")
+            print(f"[EmailService] ❌ Failed to send email: {error_code} - {error_message}")
+            print(f"[EmailService] Recipient: {recipient}")
+            print(f"[EmailService] Sender: {self.SENDER_EMAIL}")
+            # Log full error for debugging
+            import traceback
+            print(f"[EmailService] Traceback: {traceback.format_exc()}")
             return False
         except Exception as e:
-            print(f"[EmailService] Unexpected error sending email: {str(e)}")
+            print(f"[EmailService] ❌ Unexpected error sending email: {str(e)}")
+            import traceback
+            print(f"[EmailService] Traceback: {traceback.format_exc()}")
             return False
     
     def _log_email(self, recipient: str, subject: str, code: str) -> bool:

@@ -281,22 +281,44 @@ def verify_and_consume_code(email: str, code: str, code_type: str = "registratio
         print(f"[db] Error verifying code: {e}")
         return False
 
-def has_pending_verification(email: str, code_type: str = "registration") -> bool:
-    """Check if there's a pending verification code for this email"""
+def has_pending_verification(email: str, code_type: str = "registration", min_age_seconds: int = 60) -> bool:
+    """
+    Check if there's a pending verification code for this email.
+    
+    Args:
+        email: Email address
+        code_type: Type of verification code
+        min_age_seconds: Minimum age of existing code before allowing new request (rate limiting)
+    
+    Returns:
+        True if there's a valid pending code that's less than min_age_seconds old
+    """
     if USE_MEMORY:
         stored = _verification_codes.get(email)
-        return stored is not None and stored["type"] == code_type and stored["expires_at"] > int(time.time())
+        if not stored or stored["type"] != code_type:
+            return False
+        # Check if code exists and is not expired
+        if stored["expires_at"] <= int(time.time()):
+            return False  # Expired, can request new one
+        # Check rate limiting: only block if code is very recent (less than min_age_seconds old)
+        code_age = int(time.time()) - stored["created_at"]
+        return code_age < min_age_seconds
     
     try:
         nonces_table = ddb.Table(os.environ.get("DDB_TABLE_NONCES", "medusa-nonces-prod"))
         key = {"nonce": f"VERIFY#{email}#{code_type}"}
         resp = nonces_table.get_item(Key=key)
         item = resp.get("Item")
-        return item is not None and item.get("ttl", 0) > int(time.time())
+        if not item:
+            return False  # No code, can request
+        # Check if expired
+        if item.get("ttl", 0) <= int(time.time()):
+            return False  # Expired, can request new one
+        # Check rate limiting: only block if code is very recent
+        code_age = int(time.time()) - item.get("created_at", 0)
+        return code_age < min_age_seconds
     except Exception:
         return False
-    item = resp.get("Item")
-    if item:
         T_REFRESH.delete_item(Key=key)
     return item
 
