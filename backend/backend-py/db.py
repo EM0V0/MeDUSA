@@ -114,6 +114,64 @@ def get_user(user_id: str) -> Optional[Dict[str,Any]]:
     resp = T_USERS.get_item(Key=_user_key(user_id))
     return resp.get("Item")
 
+def update_user(user_id: str, updates: Dict[str,Any]) -> bool:
+    """
+    Update user attributes. Supports partial updates.
+    Handles None values by removing attributes.
+    """
+    if USE_MEMORY:
+        if user_id in _users:
+            for k, v in updates.items():
+                if v is None:
+                    _users[user_id].pop(k, None)
+                else:
+                    _users[user_id][k] = v
+            return True
+        return False
+    
+    # Build update expression for DynamoDB
+    update_parts = []
+    remove_parts = []
+    expr_attr_names = {}
+    expr_attr_values = {}
+    
+    for i, (key, value) in enumerate(updates.items()):
+        attr_name = f"#attr{i}"
+        expr_attr_names[attr_name] = key
+        
+        if value is None:
+            remove_parts.append(attr_name)
+        else:
+            attr_value = f":val{i}"
+            update_parts.append(f"{attr_name} = {attr_value}")
+            expr_attr_values[attr_value] = value
+    
+    update_expression = ""
+    if update_parts:
+        update_expression += "SET " + ", ".join(update_parts)
+    if remove_parts:
+        if update_expression:
+            update_expression += " "
+        update_expression += "REMOVE " + ", ".join(remove_parts)
+    
+    if not update_expression:
+        return True
+    
+    try:
+        update_kwargs = {
+            "Key": _user_key(user_id),
+            "UpdateExpression": update_expression,
+            "ExpressionAttributeNames": expr_attr_names
+        }
+        if expr_attr_values:
+            update_kwargs["ExpressionAttributeValues"] = expr_attr_values
+            
+        T_USERS.update_item(**update_kwargs)
+        return True
+    except Exception as e:
+        print(f"[db] Error updating user {user_id}: {e}")
+        return False
+
 def save_refresh(token: str, sess: Dict[str,Any]):
     if USE_MEMORY:
         _refresh[token] = sess

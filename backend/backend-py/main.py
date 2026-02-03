@@ -15,6 +15,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from mangum import Mangum
+from pydantic import BaseModel
 
 from models import (
     LoginReq, LoginRes, RegisterReq, RegisterRes, 
@@ -26,7 +27,11 @@ from models import (
     SessionCreateReq, SessionUpdateReq, Session, SessionWithDetails, SessionPage,
     TremorResponse, AssignPatientReq, DoctorPatientsRes
 )
-from auth import auth_middleware, issue_tokens, verify_pw, hash_pw
+from auth import (
+    auth_middleware, issue_tokens, verify_pw, hash_pw,
+    generate_mfa_secret, verify_mfa_code, get_mfa_provisioning_uri,
+    issue_temp_token, verify_temp_token
+)
 from password_validator import PasswordValidator
 from email_service import EmailService
 from rbac import require_role, get_user_id, get_user_role
@@ -139,11 +144,13 @@ def register(req: RegisterReq):
         refreshToken=tokens["refreshToken"]
     )
 
-@app.post("/api/v1/auth/login", response_model=LoginRes)
+@app.post("/api/v1/auth/login")
 def login(req: LoginReq, request: Request):
     """
     Login user - API v3 compliant
-    Returns flat response with accessJwt, refreshToken, expiresIn, and user info
+    
+    If MFA is enabled, returns mfaRequired=true with tempToken.
+    Otherwise, returns flat response with accessJwt, refreshToken, expiresIn, and user info.
     """
     # Extract client info for audit logging
     client_ip = request.client.host if request.client else None
@@ -160,7 +167,25 @@ def login(req: LoginReq, request: Request):
         )
         raise HTTPException(401, detail={"code":"AUTH_INVALID","message":"invalid credentials"})
     
-    # Generate tokens
+    # Check if MFA is enabled for this user
+    if u.get("mfaEnabled") and u.get("mfaSecret"):
+        # Generate temporary token for MFA challenge
+        temp_token = issue_temp_token(u["id"], u["role"])
+        
+        # Log MFA challenge issued
+        audit_service.log_event(
+            event_type=AuditEventType.MFA_CHALLENGE,
+            user_id=u["id"],
+            details={"ip_address": client_ip}
+        )
+        
+        return {
+            "mfaRequired": True,
+            "tempToken": temp_token,
+            "message": "MFA verification required"
+        }
+    
+    # No MFA - generate tokens directly
     tokens = issue_tokens(u["id"], u["role"])
     db.save_refresh(
         tokens["refreshToken"],  # API v3 uses camelCase
@@ -191,6 +216,214 @@ def login(req: LoginReq, request: Request):
             "name": u.get("name", u["email"].split("@")[0])
         }
     )
+
+
+# ========== MFA Endpoints ==========
+
+class MfaLoginReq(BaseModel):
+    tempToken: str
+    code: str
+
+class MfaSetupRes(BaseModel):
+    secret: str
+    provisioningUri: str
+    message: str
+
+class MfaVerifyReq(BaseModel):
+    code: str
+
+@app.post("/api/v1/auth/mfa/login", response_model=LoginRes)
+def mfa_login(req: MfaLoginReq, request: Request):
+    """
+    Complete MFA login with TOTP code.
+    
+    Requires tempToken from initial login and the 6-digit code from authenticator app.
+    """
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    
+    # Verify temp token
+    claims = verify_temp_token(req.tempToken)
+    user_id = claims["sub"]
+    
+    # Get user and verify MFA code
+    u = db.get_user(user_id)
+    if not u:
+        raise HTTPException(401, detail={"code": "AUTH_INVALID", "message": "user not found"})
+    
+    mfa_secret = u.get("mfaSecret")
+    if not mfa_secret:
+        raise HTTPException(400, detail={"code": "MFA_NOT_ENABLED", "message": "MFA not enabled for this user"})
+    
+    if not verify_mfa_code(mfa_secret, req.code):
+        # Log failed MFA attempt
+        audit_service.log_event(
+            event_type=AuditEventType.MFA_FAILURE,
+            user_id=user_id,
+            details={"ip_address": client_ip, "reason": "invalid_code"}
+        )
+        raise HTTPException(401, detail={"code": "MFA_INVALID", "message": "invalid MFA code"})
+    
+    # MFA verified - issue full tokens
+    tokens = issue_tokens(u["id"], u["role"])
+    db.save_refresh(
+        tokens["refreshToken"],
+        {
+            "userId": u["id"], 
+            "role": u["role"], 
+            "expiresAt": int(time.time()) + int(os.environ.get("REFRESH_TTL_SECONDS","604800"))
+        }
+    )
+    
+    # Log successful MFA login
+    audit_service.log_event(
+        event_type=AuditEventType.MFA_SUCCESS,
+        user_id=u["id"],
+        details={"ip_address": client_ip}
+    )
+    audit_service.log_login_success(
+        user_id=u["id"],
+        user_role=u["role"],
+        ip_address=client_ip,
+        user_agent=user_agent
+    )
+    
+    return LoginRes(
+        accessJwt=tokens["accessJwt"],
+        refreshToken=tokens["refreshToken"],
+        expiresIn=tokens["expiresIn"],
+        user={
+            "id": u["id"],
+            "email": u["email"],
+            "role": u["role"],
+            "name": u.get("name", u["email"].split("@")[0])
+        }
+    )
+
+
+@app.post("/api/v1/auth/mfa/setup", response_model=MfaSetupRes)
+def mfa_setup(request: Request):
+    """
+    Initialize MFA setup for the current user.
+    
+    Returns a secret and provisioning URI for QR code generation.
+    User must verify with a code before MFA is fully enabled.
+    """
+    user_id = get_user_id(request)
+    u = db.get_user(user_id)
+    if not u:
+        raise HTTPException(404, detail={"code": "USER_NOT_FOUND", "message": "user not found"})
+    
+    # Check if MFA is already enabled
+    if u.get("mfaEnabled"):
+        raise HTTPException(400, detail={"code": "MFA_ALREADY_ENABLED", "message": "MFA is already enabled"})
+    
+    # Generate new MFA secret
+    secret = generate_mfa_secret()
+    
+    # Store pending secret (not enabled yet)
+    db.update_user(user_id, {"mfaPendingSecret": secret})
+    
+    # Generate provisioning URI for QR code
+    provisioning_uri = get_mfa_provisioning_uri(u["email"], secret)
+    
+    # Log MFA setup initiated
+    audit_service.log_event(
+        event_type=AuditEventType.MFA_SETUP_INITIATED,
+        user_id=user_id,
+        details={}
+    )
+    
+    return MfaSetupRes(
+        secret=secret,
+        provisioningUri=provisioning_uri,
+        message="Scan QR code with authenticator app, then verify with a code"
+    )
+
+
+@app.post("/api/v1/auth/mfa/verify")
+def mfa_verify(req: MfaVerifyReq, request: Request):
+    """
+    Verify and enable MFA for the current user.
+    
+    Requires the 6-digit code from authenticator app to confirm setup.
+    """
+    user_id = get_user_id(request)
+    u = db.get_user(user_id)
+    if not u:
+        raise HTTPException(404, detail={"code": "USER_NOT_FOUND", "message": "user not found"})
+    
+    pending_secret = u.get("mfaPendingSecret")
+    if not pending_secret:
+        raise HTTPException(400, detail={"code": "MFA_NOT_SETUP", "message": "MFA setup not initiated"})
+    
+    # Verify the code
+    if not verify_mfa_code(pending_secret, req.code):
+        raise HTTPException(400, detail={"code": "MFA_INVALID", "message": "invalid MFA code"})
+    
+    # Enable MFA - move pending secret to active secret
+    db.update_user(user_id, {
+        "mfaSecret": pending_secret,
+        "mfaEnabled": True,
+        "mfaPendingSecret": None  # Clear pending
+    })
+    
+    # Log MFA enabled
+    audit_service.log_event(
+        event_type=AuditEventType.MFA_ENABLED,
+        user_id=user_id,
+        details={}
+    )
+    
+    return {"success": True, "message": "MFA enabled successfully"}
+
+
+@app.delete("/api/v1/auth/mfa")
+def mfa_disable(request: Request):
+    """
+    Disable MFA for the current user.
+    
+    Requires authentication. For security, consider requiring password re-entry.
+    """
+    user_id = get_user_id(request)
+    u = db.get_user(user_id)
+    if not u:
+        raise HTTPException(404, detail={"code": "USER_NOT_FOUND", "message": "user not found"})
+    
+    if not u.get("mfaEnabled"):
+        raise HTTPException(400, detail={"code": "MFA_NOT_ENABLED", "message": "MFA is not enabled"})
+    
+    # Disable MFA
+    db.update_user(user_id, {
+        "mfaSecret": None,
+        "mfaEnabled": False,
+        "mfaPendingSecret": None
+    })
+    
+    # Log MFA disabled
+    audit_service.log_event(
+        event_type=AuditEventType.MFA_DISABLED,
+        user_id=user_id,
+        details={}
+    )
+    
+    return {"success": True, "message": "MFA disabled successfully"}
+
+
+@app.get("/api/v1/auth/mfa/status")
+def mfa_status(request: Request):
+    """
+    Get MFA status for the current user.
+    """
+    user_id = get_user_id(request)
+    u = db.get_user(user_id)
+    if not u:
+        raise HTTPException(404, detail={"code": "USER_NOT_FOUND", "message": "user not found"})
+    
+    return {
+        "mfaEnabled": u.get("mfaEnabled", False),
+        "hasPendingSetup": bool(u.get("mfaPendingSecret"))
+    }
 
 @app.post("/api/v1/auth/refresh", response_model=RefreshRes)
 def refresh(req: RefreshReq):
