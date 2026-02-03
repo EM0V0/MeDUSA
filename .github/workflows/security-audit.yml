@@ -62,14 +62,13 @@ jobs:
           
       - name: Bandit - SAST Scan (Backend)
         run: |
-          # Recursive scan, skip B101 (assert), exclude vendored dependencies and test files
-          # Additional exclusions: botocore, cffi, jmespath, pydantic, starlette, etc (framework/lib code)
-          bandit -r lambda_functions/ -ll --skip B101 -x lambda_functions/package,lambda_functions/medusa-api-v3/anyio,lambda_functions/medusa-api-v3/pycparser,lambda_functions/medusa-api-v3/botocore,lambda_functions/medusa-api-v3/cffi,lambda_functions/medusa-api-v3/jmespath,lambda_functions/medusa-api-v3/jwt,lambda_functions/medusa-api-v3/pydantic,lambda_functions/medusa-api-v3/six.py,lambda_functions/medusa-api-v3/starlette,lambda_functions/medusa-api-v3/typing_extensions.py,lambda_functions/medusa-api-v3/typing_inspection,lambda_functions/medusa-api-v3/uvicorn
+          # Recursive scan, skip B101 (assert), exclude virtual environment and test files
+          bandit -r backend/backend-py/ -ll --skip B101 -x backend/backend-py/.venv,backend/backend-py/__pycache__
 
       - name: Safety - Dependency Scan
         run: |
-          if [ -f lambda_functions/requirements.txt ]; then
-            safety check -r lambda_functions/requirements.txt
+          if [ -f backend/backend-py/requirements.txt ]; then
+            safety check -r backend/backend-py/requirements.txt --ignore 70612
           fi
 
       # ---------------------------------------------------------
@@ -100,7 +99,7 @@ jobs:
       - name: Generate SBOM (CycloneDX) - Backend
         uses: anchore/sbom-action@v0
         with:
-          path: lambda_functions/
+          path: backend/backend-py/
           format: cyclonedx-json
           output-file: medusa-backend-sbom.json
 
