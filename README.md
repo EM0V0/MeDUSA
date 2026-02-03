@@ -345,6 +345,7 @@ MeDUSA was designed and built as a comprehensive educational platform to address
 
 ## 🙏 Acknowledgments
 
+- **Michael Rushanan** and his *Medical Device Cybersecurity* course at Johns Hopkins University for providing the educational framework, learning materials, and expert guidance that shaped this platform
 - Flutter and Dart teams for the excellent cross-platform framework
 - AWS for cloud infrastructure services
 - The medical device security research community
