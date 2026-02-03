@@ -160,7 +160,7 @@ Data Tampered  Display Error  Sync Failure  Device Error
 | RC1.1 | Strong password policy | `password_validator.py` |
 | RC1.2 | Multi-factor authentication | TOTP in `verification_service.dart` |
 | RC1.3 | JWT token authentication | `auth.py:issue_tokens()` |
-| RC1.4 | Short token expiration | 30-minute access tokens |
+| RC1.4 | Short token expiration | 1-hour access tokens |
 | RC1.5 | Rate limiting | API Gateway: 5 auth/min |
 
 **Post-Control Assessment:**

@@ -42,7 +42,7 @@ This document maps MeDUSA platform capabilities to FDA premarket cybersecurity e
 |---------|----------------------|---------------------|
 | **Password Policy** | Minimum 8 chars, uppercase, lowercase, number, special char | `password_validator.py` |
 | **Password Storage** | Argon2id hashing | `auth.py:hash_pw()` |
-| **Session Management** | JWT with 30-min access tokens, 7-day refresh tokens | `auth.py:issue_tokens()` |
+| **Session Management** | JWT with 1-hour access tokens, 7-day refresh tokens | `auth.py:issue_tokens()` |
 | **MFA Support** | TOTP-based multi-factor authentication | `verification_service.dart` |
 | **Account Lockout** | Rate limiting on authentication endpoints | API Gateway configuration |
 

@@ -1,10 +1,12 @@
 # MeDUSA Backend API Documentation
 
 **Version**: 3.0  
-**Base URL**: `https://zcrqexrdw1.execute-api.us-east-1.amazonaws.com/Prod`  
-**Tremor API Base URL**: `https://buektgcf8l.execute-api.us-east-1.amazonaws.com/Prod`  
+**Base URL**: `https://<API-GATEWAY-ID>.execute-api.us-east-1.amazonaws.com/Prod`  
+**Tremor API Base URL**: `https://<API-GATEWAY-ID>.execute-api.us-east-1.amazonaws.com/Prod`  
 **Last Updated**: February 2, 2026  
 **Status**: Production
+
+> **Note**: The actual API Gateway ID changes with each deployment. The current production API endpoint is configured in `frontend/lib/core/constants/app_constants.dart`. Update the Flutter app configuration to match your deployed API Gateway URL.
 
 ---
 
@@ -49,7 +51,7 @@ The MeDUSA (Medical Data Fusion and Analysis) backend provides RESTful APIs for 
 
 ```
 1. User Login → JWT Access Token + Refresh Token
-2. Access Token (30 min TTL) used for API requests
+2. Access Token (1 hour / 3600s TTL) used for API requests
 3. Refresh Token (7 days TTL) used to obtain new access tokens
 4. Token stored in HTTP-only cookies (production) or returned in response
 ```
@@ -88,7 +90,7 @@ Content-Type: application/json
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    API Gateway v3                       │
-│            (zcrqexrdw1.execute-api.us-east-1)          │
+│            (<API-ID>.execute-api.us-east-1)            │
 └──────────────────┬──────────────────────────────────────┘
                    │
                    ↓
@@ -113,7 +115,7 @@ Content-Type: application/json
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                MeDUSA Tremor API                        │
-│            (buektgcf8l.execute-api.us-east-1)          │
+│            (<API-ID>.execute-api.us-east-1)            │
 └──────────┬──────────────────────────────┬───────────────┘
            │                              │
            ↓                              ↓

@@ -110,10 +110,11 @@ cyclonedx-py -r requirements.txt -o sbom-backend.json
 | fastapi | 0.115.2 | MIT | Web framework | **Yes** |
 | mangum | 0.17.0 | MIT | AWS Lambda adapter | Yes |
 | pyjwt | 2.9.0 | MIT | JWT handling | **Yes** |
-| argon2-cffi | 23.1.0 | MIT | Password hashing | **Yes** |
+| argon2-cffi | 21.3.0 | MIT | Password hashing | **Yes** |
 | boto3 | 1.35.36 | Apache-2.0 | AWS SDK | Yes |
-| pydantic | 2.x (bundled) | MIT | Data validation | **Yes** |
+| pydantic | 2.9.2 | MIT | Data validation | **Yes** |
 | uvicorn | 0.32.0 | BSD-3 | ASGI server | No |
+| pyotp | 2.9.0 | MIT | TOTP MFA support | **Yes** |
 
 ### 3.3 Infrastructure Components
 
@@ -219,8 +220,8 @@ For critical vulnerabilities:
     {
       "type": "library",
       "name": "pyjwt",
-      "version": "2.8.0",
-      "purl": "pkg:pypi/pyjwt@2.8.0",
+      "version": "2.9.0",
+      "purl": "pkg:pypi/pyjwt@2.9.0",
       "licenses": [
         {
           "license": {

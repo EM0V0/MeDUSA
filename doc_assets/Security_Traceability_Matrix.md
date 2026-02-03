@@ -29,7 +29,7 @@ This Security Traceability Matrix (STM) demonstrates compliance with FDA cyberse
 |---------|----------------|--------------|----------|
 | Password-based authentication | `backend/backend-py/auth.py:verify_pw()` | Unit tests, manual testing | `test_medusa_api_v3.py` |
 | JWT token issuance | `backend/backend-py/auth.py:issue_tokens()` | API testing | API response validation |
-| Token expiration | 30-min access, 7-day refresh | Configuration review | `main.py:JWT_EXPIRE_SECONDS` |
+| Token expiration | 1-hour access, 7-day refresh | Configuration review | `auth.py:JWT_EXPIRE_SECONDS` |
 
 ### REQ-AUTH-002: Password Strength
 
