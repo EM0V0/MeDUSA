@@ -12,18 +12,25 @@ class LoginReq(BaseModel):
     password: str
 
 class RegisterReq(BaseModel):
-    """Register request - API v3"""
+    """Register request - API v3 with email verification"""
     email: str
     password: str
+    verificationCode: str  # Required: 6-digit code from email
     role: str = "patient"  # API v3 requires role field
+
+class RequestVerificationReq(BaseModel):
+    """Request verification code - backend generates and sends code"""
+    email: str
+    type: str = "registration"  # 'registration' or 'password_reset'
 
 class RefreshReq(BaseModel):
     """Refresh request - API v3 uses camelCase"""
     refreshToken: str = Field(alias="refreshToken")
 
 class ResetPasswordReq(BaseModel):
-    """Reset password request"""
+    """Reset password request - requires verification code"""
     email: str
+    verificationCode: str  # Required: 6-digit code from email
     newPassword: str
 
 class SendVerificationCodeReq(BaseModel):

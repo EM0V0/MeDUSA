@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from models import (
     LoginReq, LoginRes, RegisterReq, RegisterRes, 
     RefreshReq, RefreshRes, ResetPasswordReq, SendVerificationCodeReq,
+    RequestVerificationReq,
     UserOut, PoseCreateReq, PresignReq, PresignRes,
     Pose, PosePage, Report, ReportPage,
     DeviceRegisterReq, DeviceUpdateReq, Device, DevicePage, DeviceBindReq,
@@ -96,20 +97,91 @@ def get_nonce():
     return get_nonce_endpoint()
 
 # -------- Auth
+
+@app.post("/api/v1/auth/request-verification", status_code=200)
+def request_verification(req: RequestVerificationReq):
+    """
+    Request a verification code to be sent to the email.
+    
+    For registration: checks that email is not already registered.
+    For password_reset: checks that email exists.
+    
+    The backend generates the code and sends it via email.
+    """
+    email = req.email.lower().strip()
+    code_type = req.type.lower()
+    
+    if code_type == "registration":
+        # Check if email is already registered
+        existing = db.get_user_by_email(email)
+        if existing:
+            raise HTTPException(409, detail={"code": "EMAIL_TAKEN", "message": "Email is already registered"})
+    elif code_type == "password_reset":
+        # Check if email exists for password reset
+        existing = db.get_user_by_email(email)
+        if not existing:
+            # Don't reveal if email exists - just return success
+            # But log internally for security monitoring
+            audit_service.log_event(
+                event_type=AuditEventType.AUTH_PASSWORD_RESET,
+                details={"email": email, "status": "email_not_found"}
+            )
+            return {"success": True, "message": "If the email exists, a verification code has been sent"}
+    else:
+        raise HTTPException(400, detail={"code": "INVALID_TYPE", "message": "Type must be 'registration' or 'password_reset'"})
+    
+    # Check for rate limiting (don't send too many codes)
+    if db.has_pending_verification(email, code_type):
+        raise HTTPException(429, detail={"code": "TOO_MANY_REQUESTS", "message": "Please wait before requesting another code"})
+    
+    # Generate and store verification code
+    code = db.generate_verification_code()
+    if not db.save_verification_code(email, code, code_type):
+        raise HTTPException(500, detail={"code": "INTERNAL_ERROR", "message": "Failed to generate verification code"})
+    
+    # Send email with verification code
+    email_sent = email_service.send_verification_code(
+        email=email,
+        code=code,
+        code_type=code_type
+    )
+    
+    if not email_sent:
+        raise HTTPException(500, detail={"code": "EMAIL_FAILED", "message": "Failed to send verification email"})
+    
+    # Log verification code request
+    audit_service.log_event(
+        event_type=AuditEventType.DATA_CREATE,
+        details={"action": "verification_code_sent", "email": email, "type": code_type}
+    )
+    
+    return {"success": True, "message": "Verification code sent to email", "expiresIn": 600}
+
+
 @app.post("/api/v1/auth/register", response_model=RegisterRes, status_code=201)
 def register(req: RegisterReq):
     """
-    Register new user - API v3 compliant
-    Returns flat response with userId only (no data wrapper)
+    Register new user - requires email verification code.
+    
+    Flow:
+    1. Call /auth/request-verification first to receive code via email
+    2. Submit registration with the verification code
     """
-    existing = db.get_user_by_email(req.email)
+    email = req.email.lower().strip()
+    
+    # Verify the email verification code
+    if not db.verify_and_consume_code(email, req.verificationCode, "registration"):
+        raise HTTPException(400, detail={"code": "INVALID_CODE", "message": "Invalid or expired verification code"})
+    
+    # Double-check email is not taken (race condition protection)
+    existing = db.get_user_by_email(email)
     if existing:
-        raise HTTPException(409, detail={"code":"EMAIL_TAKEN","message":"email already registered"})
+        raise HTTPException(409, detail={"code": "EMAIL_TAKEN", "message": "Email is already registered"})
     
     # Validate password strength
     is_valid, error_msg = PasswordValidator.validate(req.password)
     if not is_valid:
-        raise HTTPException(400, detail={"code":"INVALID_PASSWORD","message":error_msg})
+        raise HTTPException(400, detail={"code": "INVALID_PASSWORD", "message": error_msg})
     
     uid = f"usr_{uuid.uuid4().hex[:8]}"
     
@@ -118,10 +190,11 @@ def register(req: RegisterReq):
     
     user = {
         "id": uid,
-        "email": req.email,
+        "email": email,
         "role": role,
-        "name": req.email.split('@')[0],  # Generate name from email
+        "name": email.split('@')[0],  # Generate name from email
         "password": hash_pw(req.password),
+        "emailVerified": True,  # Email is verified through the code
         "createdAt": datetime.now(timezone.utc).isoformat()
     }
     db.put_user(user)
@@ -133,8 +206,15 @@ def register(req: RegisterReq):
         {
             "userId": uid, 
             "role": user["role"], 
-            "expiresAt": int(time.time()) + int(os.environ.get("REFRESH_TTL_SECONDS","604800"))
+            "expiresAt": int(time.time()) + int(os.environ.get("REFRESH_TTL_SECONDS", "604800"))
         }
+    )
+    
+    # Log successful registration
+    audit_service.log_event(
+        event_type=AuditEventType.DATA_CREATE,
+        user_id=uid,
+        details={"action": "user_registered", "email": email, "role": role}
     )
     
     # API v3: Return flat response with userId, accessJwt, refreshToken
@@ -468,22 +548,39 @@ def logout(req: RefreshReq):
 @app.post("/api/v1/auth/reset-password", status_code=200)
 def reset_password(req: ResetPasswordReq):
     """
-    Reset user password
-    Updates password for the given email
+    Reset user password - requires verification code.
+    
+    Flow:
+    1. Call /auth/request-verification with type="password_reset"
+    2. Receive code via email
+    3. Submit new password with the verification code
     """
+    email = req.email.lower().strip()
+    
+    # Verify the password reset code
+    if not db.verify_and_consume_code(email, req.verificationCode, "password_reset"):
+        raise HTTPException(400, detail={"code": "INVALID_CODE", "message": "Invalid or expired verification code"})
+    
     # Find user by email
-    user = db.get_user_by_email(req.email)
+    user = db.get_user_by_email(email)
     if not user:
-        raise HTTPException(404, detail={"code":"USER_NOT_FOUND","message":"Account not found"})
+        raise HTTPException(404, detail={"code": "USER_NOT_FOUND", "message": "Account not found"})
     
     # Validate password strength (enhanced validation)
     is_valid, error_msg = PasswordValidator.validate(req.newPassword)
     if not is_valid:
-        raise HTTPException(400, detail={"code":"INVALID_PASSWORD","message":error_msg})
+        raise HTTPException(400, detail={"code": "INVALID_PASSWORD", "message": error_msg})
     
     # Update password
     user["password"] = hash_pw(req.newPassword)
     db.put_user(user)
+    
+    # Log password reset
+    audit_service.log_event(
+        event_type=AuditEventType.AUTH_PASSWORD_RESET,
+        user_id=user["id"],
+        details={"email": email, "status": "success"}
+    )
     
     return {"success": True, "message": "Password reset successful"}
 

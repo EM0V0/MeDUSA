@@ -1,4 +1,6 @@
 import os
+import time
+import secrets
 from typing import Optional, Dict, Any, List, Tuple
 from decimal import Decimal
 import boto3
@@ -11,6 +13,10 @@ def _pose_sk(pose_id: str) -> str:
     return f"POSE#{pose_id}"
 
 USE_MEMORY = os.environ.get("USE_MEMORY", "false").lower() == "true"
+VERIFICATION_CODE_TTL = 600  # 10 minutes
+
+# In-memory store for verification codes (development)
+_verification_codes: Dict[str, Dict[str, Any]] = {}
 
 if not USE_MEMORY:
     ddb = boto3.resource("dynamodb")
@@ -186,6 +192,109 @@ def take_refresh(token: str) -> Optional[Dict[str,Any]]:
         return _refresh.pop(token, None)
     key = _refresh_key(token)
     resp = T_REFRESH.get_item(Key=key)
+
+
+# ========== Verification Code Functions ==========
+
+def generate_verification_code() -> str:
+    """Generate a 6-digit verification code"""
+    return ''.join([str(secrets.randbelow(10)) for _ in range(6)])
+
+def save_verification_code(email: str, code: str, code_type: str = "registration") -> bool:
+    """
+    Save verification code with TTL.
+    Uses the nonces table for storage with automatic expiration.
+    """
+    if USE_MEMORY:
+        _verification_codes[email] = {
+            "code": code,
+            "type": code_type,
+            "created_at": int(time.time()),
+            "expires_at": int(time.time()) + VERIFICATION_CODE_TTL
+        }
+        return True
+    
+    try:
+        nonces_table = ddb.Table(os.environ.get("DDB_TABLE_NONCES", "medusa-nonces-prod"))
+        nonces_table.put_item(Item={
+            "nonce": f"VERIFY#{email}#{code_type}",  # Unique key per email+type
+            "code": code,
+            "email": email,
+            "type": code_type,
+            "created_at": int(time.time()),
+            "ttl": int(time.time()) + VERIFICATION_CODE_TTL  # Auto-delete after 10 min
+        })
+        return True
+    except Exception as e:
+        print(f"[db] Error saving verification code: {e}")
+        return False
+
+def verify_and_consume_code(email: str, code: str, code_type: str = "registration") -> bool:
+    """
+    Verify a code and consume it (delete after verification).
+    Returns True if code is valid and not expired.
+    """
+    if USE_MEMORY:
+        stored = _verification_codes.get(email)
+        if not stored:
+            return False
+        if stored["type"] != code_type:
+            return False
+        if stored["expires_at"] < int(time.time()):
+            del _verification_codes[email]
+            return False
+        if stored["code"] != code:
+            return False
+        # Code is valid - consume it
+        del _verification_codes[email]
+        return True
+    
+    try:
+        nonces_table = ddb.Table(os.environ.get("DDB_TABLE_NONCES", "medusa-nonces-prod"))
+        key = {"nonce": f"VERIFY#{email}#{code_type}"}
+        
+        # Get the stored code
+        resp = nonces_table.get_item(Key=key)
+        item = resp.get("Item")
+        
+        if not item:
+            print(f"[db] No verification code found for {email}")
+            return False
+        
+        # Check if expired (extra safety, TTL should handle this)
+        if item.get("ttl", 0) < int(time.time()):
+            nonces_table.delete_item(Key=key)
+            print(f"[db] Verification code expired for {email}")
+            return False
+        
+        # Check code match
+        if item.get("code") != code:
+            print(f"[db] Verification code mismatch for {email}")
+            return False
+        
+        # Code is valid - consume it (delete)
+        nonces_table.delete_item(Key=key)
+        print(f"[db] Verification code consumed for {email}")
+        return True
+        
+    except Exception as e:
+        print(f"[db] Error verifying code: {e}")
+        return False
+
+def has_pending_verification(email: str, code_type: str = "registration") -> bool:
+    """Check if there's a pending verification code for this email"""
+    if USE_MEMORY:
+        stored = _verification_codes.get(email)
+        return stored is not None and stored["type"] == code_type and stored["expires_at"] > int(time.time())
+    
+    try:
+        nonces_table = ddb.Table(os.environ.get("DDB_TABLE_NONCES", "medusa-nonces-prod"))
+        key = {"nonce": f"VERIFY#{email}#{code_type}"}
+        resp = nonces_table.get_item(Key=key)
+        item = resp.get("Item")
+        return item is not None and item.get("ttl", 0) > int(time.time())
+    except Exception:
+        return False
     item = resp.get("Item")
     if item:
         T_REFRESH.delete_item(Key=key)

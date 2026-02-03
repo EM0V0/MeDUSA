@@ -101,8 +101,9 @@ OPEN_PATH_SUFFIXES = [
     "/auth/refresh", 
     "/auth/logout", 
     "/auth/reset-password",
-    "/auth/send-verification-code",
-    "/auth/send-password-reset-code",
+    "/auth/request-verification",  # Request verification code
+    "/auth/send-verification-code",  # Legacy - keep for compatibility
+    "/auth/send-password-reset-code",  # Legacy
     "/current-session",  # Allow Pi devices to poll for current session
     "/security/nonce"    # Nonce endpoint for replay protection
 ]
