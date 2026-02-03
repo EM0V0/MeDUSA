@@ -79,7 +79,7 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
         }
       });
     } catch (e) {
-      print('Error loading patients: $e');
+      debugPrint('Error loading patients: $e');
       setState(() {
         _isLoadingPatients = false;
         _error = 'Failed to load patient list: $e';
@@ -279,7 +279,7 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
               setState(() {
                 _doctorId = authState.user.id;
               });
-              print('Doctor Dashboard - Doctor ID: $_doctorId');
+              debugPrint('Doctor Dashboard - Doctor ID: $_doctorId');
               _loadPatientsList();
             });
           }

@@ -84,7 +84,7 @@ class ServiceLocator {
           encryptionService: get<EncryptionService>(),
         ),
       );
-      print('🌐 Using REAL backend authentication');
+      debugPrint('🌐 Using REAL backend authentication');
     }
     
     // For now, create a simple local data source without storage service dependency

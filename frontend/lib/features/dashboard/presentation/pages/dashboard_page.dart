@@ -136,7 +136,7 @@ class _DashboardPageState extends State<DashboardPage> {
         });
       }
     } catch (e) {
-      print('Error polling realtime data: $e');
+      debugPrint('Error polling realtime data: $e');
     }
   }
 
@@ -156,7 +156,7 @@ class _DashboardPageState extends State<DashboardPage> {
     });
 
     try {
-      print('Loading data for patient_id: $_patientId');
+      debugPrint('Loading data for patient_id: $_patientId');
       final now = DateTime.now();
       DateTime startTime;
       switch (_selectedTimeRange) {
@@ -192,7 +192,7 @@ class _DashboardPageState extends State<DashboardPage> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading data for patient $_patientId: $e');
+      debugPrint('Error loading data for patient $_patientId: $e');
       setState(() {
         if (e.toString().contains('400')) {
           _error = 'No tremor data found for this patient.\n\nThis could mean:\n• No device is paired with your account\n• The device hasn\'t collected data yet\n• Data collection is not active\n\nPlease pair a device and ensure it\'s collecting data.';
@@ -238,7 +238,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 _patientId = authState.user.patientId ?? authState.user.id;
                 _patientName = authState.user.name;
               });
-              print('Patient Dashboard - User: ${authState.user.email}, Patient ID: $_patientId, Has patientId field: ${authState.user.patientId != null}');
+              debugPrint('Patient Dashboard - User: ${authState.user.email}, Patient ID: $_patientId');
               _initDataLoad();
             });
           }

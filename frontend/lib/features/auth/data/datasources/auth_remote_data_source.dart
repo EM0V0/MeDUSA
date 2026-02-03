@@ -38,7 +38,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       // API v3: Flat response with accessJwt, refreshToken, expiresIn, user
       final responseData = response.data;
       
-      print('Login full response: $responseData');
+      // Debug logging removed for production
 
       // Check for MFA requirement
       if (responseData['mfaRequired'] == true) {
@@ -62,7 +62,6 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       }
       
       final userData = responseData['user'] as Map<String, dynamic>;
-      print('Extracted user data: $userData');
       
       // Create user object and attach token
       final user = User.fromJson(userData);

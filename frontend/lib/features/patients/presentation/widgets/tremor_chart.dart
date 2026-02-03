@@ -33,8 +33,8 @@ class TremorChart extends StatefulWidget {
 }
 
 class _TremorChartState extends State<TremorChart> {
-  double _minY = 0;
-  double _maxY = 100;
+  final double _minY = 0;
+  final double _maxY = 100;
   Timer? _ticker;
 
   @override

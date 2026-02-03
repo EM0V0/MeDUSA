@@ -47,7 +47,7 @@ class DoctorPatientService {
         'patient_email': patientEmail,
       };
 
-      print('Assigning patient $patientEmail to doctor $doctorId');
+      debugPrint('Assigning patient $patientEmail to doctor $doctorId');
 
       final response = await _networkService.post(
         '/doctor/assign-patient',

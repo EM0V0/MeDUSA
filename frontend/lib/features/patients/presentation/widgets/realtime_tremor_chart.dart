@@ -32,7 +32,7 @@ class _RealtimeTremorChartState extends State<RealtimeTremorChart> {
   final TremorApiService _apiService = TremorApiService();
   List<TremorDataPoint> _dataPoints = [];
   Timer? _timer;
-  bool _isPaused = false;
+  final bool _isPaused = false;
   TimeRange _selectedRange = TimeRange.oneMinute;
   static const int _maxDataPoints = 80;
 
