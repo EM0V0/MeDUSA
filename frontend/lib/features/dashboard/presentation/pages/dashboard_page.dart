@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
+import '../../../../shared/services/tremor_simulation_service.dart';
 import '../../../patients/data/datasources/tremor_api_service.dart';
 import '../../../patients/data/models/tremor_analysis.dart';
 import '../../../patients/presentation/widgets/tremor_chart.dart';
@@ -21,6 +22,7 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   final TremorApiService _tremorApi = TremorApiService();
+  final TremorSimulationService _simulationService = TremorSimulationService();
   
   String? _patientId;  // Will be set from authenticated user
   String _patientName = 'Patient';  // Will be updated from authenticated user
@@ -31,6 +33,11 @@ class _DashboardPageState extends State<DashboardPage> {
   List<TremorAnalysis> _tremorData = [];
   Map<String, dynamic>? _statistics;
   Timer? _pollingTimer;
+  
+  // Simulation mode
+  bool _isSimulationMode = false;
+  List<TremorDataPoint> _simulatedDataPoints = [];
+  StreamSubscription<List<TremorDataPoint>>? _simulationSubscription;
 
   final List<String> _timeRanges = ['1m', '1h', '24h', '7d'];
 
@@ -44,6 +51,8 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _simulationSubscription?.cancel();
+    _simulationService.stopSimulation();
     super.dispose();
   }
 
@@ -205,6 +214,14 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _onTimeRangeChanged(String range) {
+    if (_isSimulationMode) {
+      // In simulation mode, just update the display range
+      setState(() {
+        _selectedTimeRange = range;
+      });
+      return;
+    }
+    
     setState(() {
       _selectedTimeRange = range;
       _tremorData = []; // Clear data to show loading/empty state or fresh start
@@ -218,7 +235,74 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  // ========== Simulation Mode Methods ==========
+  
+  void _toggleSimulationMode() {
+    if (_isSimulationMode) {
+      _stopSimulation();
+    } else {
+      _startSimulation();
+    }
+  }
+
+  void _startSimulation() {
+    // Stop real data polling
+    _pollingTimer?.cancel();
+    
+    setState(() {
+      _isSimulationMode = true;
+      _selectedTimeRange = '1m';  // Best for real-time simulation
+      _error = null;
+      _isLoading = false;
+    });
+    
+    // Subscribe to simulation data stream
+    _simulationSubscription = _simulationService.dataStream.listen((data) {
+      if (mounted) {
+        setState(() {
+          _simulatedDataPoints = data;
+          _statistics = _simulationService.getSimulatedStatistics();
+        });
+      }
+    });
+    
+    // Start the simulation
+    _simulationService.startSimulation(intervalMs: 1000);
+  }
+
+  void _stopSimulation() {
+    _simulationSubscription?.cancel();
+    _simulationSubscription = null;
+    _simulationService.stopSimulation();
+    
+    setState(() {
+      _isSimulationMode = false;
+      _simulatedDataPoints = [];
+    });
+    
+    // Resume real data loading if patient ID available
+    if (_patientId != null) {
+      _initDataLoad();
+    }
+  }
+
+  void _triggerParkinsonianEpisode() {
+    if (_isSimulationMode) {
+      _simulationService.triggerParkinsonianEpisode();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('🔴 Parkinsonian episode triggered!'),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   String _getActualTimeRangeTitle() {
+    if (_isSimulationMode) {
+      return 'Simulated Tremor Activity - Live';
+    }
     if (_tremorData.isEmpty) return 'Tremor Activity';
     
     // Just show the selected time range
@@ -281,39 +365,154 @@ class _DashboardPageState extends State<DashboardPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12.r),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'My Health Dashboard',
+                          style: FontUtils.title(
+                            context: context,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.lightOnSurface,
+                          ),
+                        ),
+                        if (_isSimulationMode) ...[
+                          SizedBox(width: 12.w),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                            decoration: BoxDecoration(
+                              color: AppColors.warning.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(20.r),
+                              border: Border.all(color: AppColors.warning, width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.science, size: 14.sp, color: AppColors.warning),
+                                SizedBox(width: 4.w),
+                                Text(
+                                  'SIMULATION',
+                                  style: TextStyle(
+                                    fontSize: 10.sp,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.warning,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    SizedBox(height: 8.h),
+                    Text(
+                      'Welcome back, $_patientName',
+                      style: FontUtils.body(
+                        context: context,
+                        color: AppColors.lightOnSurfaceVariant,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Simulation Toggle Button
+                  _buildSimulationButton(),
+                  if (!_isSimulationMode && ResponsiveBreakpoints.of(context).largerThan(MOBILE)) ...[
+                    SizedBox(width: 8.w),
+                    IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: _initDataLoad,
+                      tooltip: 'Refresh data',
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+          // Show trigger episode button when in simulation mode
+          if (_isSimulationMode) ...[
+            SizedBox(height: 16.h),
+            _buildSimulationControls(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimulationButton() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      child: ElevatedButton.icon(
+        onPressed: _toggleSimulationMode,
+        icon: Icon(
+          _isSimulationMode ? Icons.stop : Icons.play_arrow,
+          size: 18.sp,
+        ),
+        label: Text(
+          _isSimulationMode ? 'Stop Demo' : 'Demo Mode',
+          style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _isSimulationMode ? AppColors.error : AppColors.primary,
+          foregroundColor: Colors.white,
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8.r),
+          ),
+          elevation: _isSimulationMode ? 4 : 2,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSimulationControls() {
+    return Container(
+      padding: EdgeInsets.all(16.w),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8.r),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: AppColors.warning, size: 20.sp),
+          SizedBox(width: 12.w),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'My Health Dashboard',
-                  style: FontUtils.title(
-                    context: context,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.lightOnSurface,
-                  ),
-                ),
-                SizedBox(height: 8.h),
-                Text(
-                  'Welcome back, $_patientName',
-                  style: FontUtils.body(
-                    context: context,
-                    color: AppColors.lightOnSurfaceVariant,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
+            child: Text(
+              'Viewing simulated tremor data for demonstration purposes.',
+              style: FontUtils.caption(
+                context: context,
+                color: AppColors.textSecondary,
+              ),
             ),
           ),
-          if (ResponsiveBreakpoints.of(context).largerThan(MOBILE))
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _initDataLoad,
-              tooltip: 'Refresh data',
+          SizedBox(width: 12.w),
+          ElevatedButton.icon(
+            onPressed: _triggerParkinsonianEpisode,
+            icon: Icon(Icons.flash_on, size: 16.sp),
+            label: Text('Trigger Episode', style: TextStyle(fontSize: 11.sp)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6.r),
+              ),
             ),
+          ),
         ],
       ),
     );
@@ -530,10 +729,26 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildChartSection() {
+    // Determine which data to display
+    final bool hasData = _isSimulationMode 
+        ? _simulatedDataPoints.isNotEmpty 
+        : _tremorData.isNotEmpty;
+    
+    final List<TremorDataPoint> displayData = _isSimulationMode
+        ? _simulatedDataPoints
+        : _tremorData.map((t) => TremorDataPoint(
+            timestamp: t.analysisTimestamp,
+            tremorScore: t.tremorScore,
+            isParkinsonian: t.isParkinsonian,
+          )).toList();
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12.r),
+        border: _isSimulationMode 
+            ? Border.all(color: AppColors.warning.withValues(alpha: 0.5), width: 2)
+            : null,
       ),
       child: Padding(
         padding: EdgeInsets.all(20.w),
@@ -544,38 +759,49 @@ class _DashboardPageState extends State<DashboardPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    'Tremor Activity - $_selectedTimeRange',
-                    style: FontUtils.title(
-                      context: context,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.lightOnSurface,
-                    ),
+                  child: Row(
+                    children: [
+                      Text(
+                        _isSimulationMode 
+                            ? 'Simulated Tremor Activity' 
+                            : 'Tremor Activity - $_selectedTimeRange',
+                        style: FontUtils.title(
+                          context: context,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.lightOnSurface,
+                        ),
+                      ),
+                      if (_isSimulationMode) ...[
+                        SizedBox(width: 8.w),
+                        _buildLiveIndicator(),
+                      ],
+                    ],
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: _timeRanges.map((range) {
-                    final isSelected = _selectedTimeRange == range;
-                    return Padding(
-                      padding: EdgeInsets.only(left: 8.w),
-                      child: ChoiceChip(
-                        label: Text(range.toUpperCase()),
-                        selected: isSelected,
-                        onSelected: (_) => _onTimeRangeChanged(range),
-                      ),
-                    );
-                  }).toList(),
-                ),
+                if (!_isSimulationMode)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _timeRanges.map((range) {
+                      final isSelected = _selectedTimeRange == range;
+                      return Padding(
+                        padding: EdgeInsets.only(left: 8.w),
+                        child: ChoiceChip(
+                          label: Text(range.toUpperCase()),
+                          selected: isSelected,
+                          onSelected: (_) => _onTimeRangeChanged(range),
+                        ),
+                      );
+                    }).toList(),
+                  ),
               ],
             ),
             SizedBox(height: 20.h),
-            if (_isLoading)
+            if (!_isSimulationMode && _isLoading)
               SizedBox(
                 height: 250.h,
                 child: const Center(child: CircularProgressIndicator()),
               )
-            else if (_error != null)
+            else if (!_isSimulationMode && _error != null)
               SizedBox(
                 height: 250.h,
                 child: Center(
@@ -585,17 +811,49 @@ class _DashboardPageState extends State<DashboardPage> {
                       Icon(Icons.error_outline, size: 48.sp, color: AppColors.error),
                       SizedBox(height: 16.h),
                       Text('Error loading chart data', style: FontUtils.body(context: context)),
+                      SizedBox(height: 16.h),
+                      ElevatedButton.icon(
+                        onPressed: _startSimulation,
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Try Demo Mode'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               )
-            else if (_tremorData.isEmpty)
+            else if (!hasData)
               SizedBox(
                 height: 250.h,
                 child: Center(
-                  child: Text(
-                    'No data available for selected time range',
-                    style: FontUtils.body(context: context, color: AppColors.textSecondary),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.show_chart, size: 48.sp, color: AppColors.textSecondary),
+                      SizedBox(height: 16.h),
+                      Text(
+                        'No data available',
+                        style: FontUtils.body(context: context, color: AppColors.textSecondary),
+                      ),
+                      SizedBox(height: 8.h),
+                      Text(
+                        'Try Demo Mode to see how the chart works',
+                        style: FontUtils.caption(context: context, color: AppColors.textSecondary),
+                      ),
+                      SizedBox(height: 16.h),
+                      ElevatedButton.icon(
+                        onPressed: _startSimulation,
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Start Demo'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               )
@@ -603,17 +861,52 @@ class _DashboardPageState extends State<DashboardPage> {
               SizedBox(
                 height: 290.h,
                 child: TremorChart(
-                  dataPoints: _tremorData.map((t) => TremorDataPoint(
-                    timestamp: t.analysisTimestamp,
-                    tremorScore: t.tremorScore,
-                    isParkinsonian: t.isParkinsonian,
-                  )).toList(),
+                  dataPoints: displayData,
                   title: _getActualTimeRangeTitle(),
-                  fixedXRangeMs: _getFixedRangeMs(),
+                  fixedXRangeMs: _isSimulationMode ? 60 * 1000 : _getFixedRangeMs(),
                 ),
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildLiveIndicator() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12.r),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8.w,
+            height: 8.w,
+            decoration: BoxDecoration(
+              color: AppColors.error,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.error.withValues(alpha: 0.5),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 6.w),
+          Text(
+            'LIVE',
+            style: TextStyle(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.bold,
+              color: AppColors.error,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -629,6 +922,11 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildRecentActivity() {
+    // Get recent data from either simulation or real data
+    final List<dynamic> recentData = _isSimulationMode
+        ? _simulatedDataPoints.reversed.take(5).toList()
+        : _tremorData.take(5).toList();
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -639,69 +937,146 @@ class _DashboardPageState extends State<DashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Recent Tremor Readings',
-              style: FontUtils.title(
-                context: context,
-                fontWeight: FontWeight.w600,
-                color: AppColors.lightOnSurface,
-              ),
+            Row(
+              children: [
+                Text(
+                  'Recent Tremor Readings',
+                  style: FontUtils.title(
+                    context: context,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.lightOnSurface,
+                  ),
+                ),
+                if (_isSimulationMode) ...[
+                  SizedBox(width: 8.w),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4.r),
+                    ),
+                    child: Text(
+                      'Simulated',
+                      style: TextStyle(
+                        fontSize: 10.sp,
+                        color: AppColors.warning,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
             SizedBox(height: 16.h),
-            if (_tremorData.isNotEmpty) ...[
-              ...(_tremorData.take(5).map((data) => Padding(
-                padding: EdgeInsets.only(bottom: 12.h),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(8.w),
-                      decoration: BoxDecoration(
-                        color: data.isParkinsonian 
-                            ? AppColors.warning.withValues(alpha: 0.1)
-                            : AppColors.success.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8.r),
+            if (recentData.isNotEmpty) ...[
+              ...(recentData.map((data) {
+                final double score;
+                final bool isParkinsonian;
+                final DateTime timestamp;
+                
+                if (data is TremorDataPoint) {
+                  score = data.tremorScore;
+                  isParkinsonian = data.isParkinsonian;
+                  timestamp = data.timestamp;
+                } else if (data is TremorAnalysis) {
+                  score = data.tremorScore;
+                  isParkinsonian = data.isParkinsonian;
+                  timestamp = data.analysisTimestamp;
+                } else {
+                  return const SizedBox.shrink();
+                }
+                
+                return Padding(
+                  padding: EdgeInsets.only(bottom: 12.h),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(8.w),
+                        decoration: BoxDecoration(
+                          color: isParkinsonian 
+                              ? AppColors.warning.withValues(alpha: 0.1)
+                              : AppColors.success.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8.r),
+                        ),
+                        child: Icon(
+                          isParkinsonian ? Icons.warning_amber : Icons.check_circle,
+                          color: isParkinsonian ? AppColors.warning : AppColors.success,
+                          size: 20.sp,
+                        ),
                       ),
-                      child: Icon(
-                        data.isParkinsonian ? Icons.warning_amber : Icons.check_circle,
-                        color: data.isParkinsonian ? AppColors.warning : AppColors.success,
-                        size: 20.sp,
+                      SizedBox(width: 12.w),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Tremor Score: ${score.toStringAsFixed(1)}',
+                              style: FontUtils.body(
+                                context: context,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              timestamp.toString().substring(0, 19),
+                              style: FontUtils.caption(
+                                context: context,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    SizedBox(width: 12.w),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Tremor Score: ${data.tremorScore.toStringAsFixed(1)}',
-                            style: FontUtils.body(
-                              context: context,
-                              fontWeight: FontWeight.w600,
+                      // Score indicator bar
+                      Container(
+                        width: 60.w,
+                        height: 6.h,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(3.r),
+                        ),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: (score / 100).clamp(0.0, 1.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: _getScoreColor(score),
+                              borderRadius: BorderRadius.circular(3.r),
                             ),
                           ),
-                          Text(
-                            data.analysisTimestamp.toString().substring(0, 19),
-                            style: FontUtils.caption(
-                              context: context,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ))),
+                    ],
+                  ),
+                );
+              })),
             ] else ...[
               Center(
                 child: Padding(
                   padding: EdgeInsets.all(20.h),
-                  child: Text(
-                    'No recent activity',
-                    style: FontUtils.body(
-                      context: context,
-                      color: AppColors.textSecondary,
-                    ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.inbox_outlined,
+                        size: 40.sp,
+                        color: AppColors.textSecondary,
+                      ),
+                      SizedBox(height: 8.h),
+                      Text(
+                        'No recent activity',
+                        style: FontUtils.body(
+                          context: context,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      if (!_isSimulationMode) ...[
+                        SizedBox(height: 8.h),
+                        TextButton.icon(
+                          onPressed: _startSimulation,
+                          icon: Icon(Icons.play_arrow, size: 16.sp),
+                          label: const Text('Try Demo Mode'),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
@@ -710,5 +1085,11 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
       ),
     );
+  }
+
+  Color _getScoreColor(double score) {
+    if (score < 30) return AppColors.success;
+    if (score < 50) return AppColors.warning;
+    return AppColors.error;
   }
 }

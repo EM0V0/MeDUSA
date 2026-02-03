@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -10,6 +11,7 @@ import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
 import '../../../../shared/services/network_service.dart';
 import '../../../../shared/services/role_service.dart';
+import '../../../../shared/services/tremor_simulation_service.dart';
 import '../../../patients/data/datasources/tremor_api_service.dart';
 import '../../../patients/data/models/tremor_analysis.dart';
 import '../../../patients/presentation/widgets/tremor_chart.dart';
@@ -28,6 +30,7 @@ class DoctorDashboardPage extends StatefulWidget {
 class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
   final RoleService _roleService = RoleService();
   final TremorApiService _tremorApi = TremorApiService();
+  final TremorSimulationService _simulationService = TremorSimulationService();
   late final DoctorPatientService _doctorPatientService;
   
   String? _doctorId;
@@ -43,6 +46,11 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
   List<TremorAnalysis> _tremorData = [];
   Map<String, dynamic>? _statistics;
 
+  // Simulation mode
+  bool _isSimulationMode = false;
+  List<TremorDataPoint> _simulatedDataPoints = [];
+  StreamSubscription<List<TremorDataPoint>>? _simulationSubscription;
+
   final List<String> _timeRanges = ['1h', '24h', '7d'];
   final TextEditingController _patientEmailController = TextEditingController();
 
@@ -55,6 +63,8 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
   @override
   void dispose() {
     _patientEmailController.dispose();
+    _simulationSubscription?.cancel();
+    _simulationService.stopSimulation();
     super.dispose();
   }
 
@@ -148,6 +158,8 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
   }
 
   void _onPatientChanged(String? patientId) {
+    if (_isSimulationMode) return; // Ignore in simulation mode
+    
     if (patientId != null) {
       final patient = _availablePatients.firstWhere(
         (p) => p['patient_id'] == patientId,
@@ -158,6 +170,69 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
         _selectedPatientName = patient['name'] ?? patient['email'];
       });
       _loadData();
+    }
+  }
+
+  // ========== Simulation Mode Methods ==========
+  
+  void _toggleSimulationMode() {
+    if (_isSimulationMode) {
+      _stopSimulation();
+    } else {
+      _startSimulation();
+    }
+  }
+
+  void _startSimulation() {
+    setState(() {
+      _isSimulationMode = true;
+      _selectedPatientName = 'Demo Patient';
+      _error = null;
+      _isLoading = false;
+    });
+    
+    _simulationSubscription = _simulationService.dataStream.listen((data) {
+      if (mounted) {
+        setState(() {
+          _simulatedDataPoints = data;
+          _statistics = _simulationService.getSimulatedStatistics();
+        });
+      }
+    });
+    
+    _simulationService.startSimulation(intervalMs: 1000);
+  }
+
+  void _stopSimulation() {
+    _simulationSubscription?.cancel();
+    _simulationSubscription = null;
+    _simulationService.stopSimulation();
+    
+    setState(() {
+      _isSimulationMode = false;
+      _simulatedDataPoints = [];
+      if (_availablePatients.isNotEmpty) {
+        _selectedPatientName = _availablePatients.first['name'] ?? _availablePatients.first['email'];
+      } else {
+        _selectedPatientName = 'Select a patient';
+      }
+    });
+    
+    if (_selectedPatientId != null) {
+      _loadData();
+    }
+  }
+
+  void _triggerParkinsonianEpisode() {
+    if (_isSimulationMode) {
+      _simulationService.triggerParkinsonianEpisode();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('🔴 Parkinsonian episode triggered!'),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -338,76 +413,184 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
           ],
         ),
         borderRadius: BorderRadius.circular(16.r),
-        border: Border.all(
-          color: AppColors.lightDivider.withValues(alpha: 0.5),
-          width: 1,
+        border: _isSimulationMode
+            ? Border.all(color: AppColors.warning.withValues(alpha: 0.5), width: 2)
+            : Border.all(color: AppColors.lightDivider.withValues(alpha: 0.5), width: 1),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(12.w),
+                decoration: BoxDecoration(
+                  color: _isSimulationMode 
+                      ? AppColors.warning.withValues(alpha: 0.1)
+                      : AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                child: Icon(
+                  _isSimulationMode ? Icons.science : Icons.dashboard_rounded,
+                  color: _isSimulationMode ? AppColors.warning : AppColors.primary,
+                  size: IconUtils.getResponsiveIconSize(IconSizeType.large, context),
+                ),
+              ),
+              SizedBox(width: 16.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Medical Dashboard',
+                          style: FontUtils.headline(
+                            context: context,
+                            color: AppColors.lightOnSurface,
+                          ),
+                        ),
+                        if (_isSimulationMode) ...[
+                          SizedBox(width: 12.w),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                            decoration: BoxDecoration(
+                              color: AppColors.warning.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(20.r),
+                              border: Border.all(color: AppColors.warning, width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.science, size: 14.sp, color: AppColors.warning),
+                                SizedBox(width: 4.w),
+                                Text(
+                                  'SIMULATION',
+                                  style: TextStyle(
+                                    fontSize: 10.sp,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.warning,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    SizedBox(height: 4.h),
+                    Text(
+                      _isSimulationMode 
+                          ? 'Viewing simulated patient data for demonstration'
+                          : 'Monitor and analyze your patients\' health data',
+                      style: FontUtils.body(
+                        context: context,
+                        color: AppColors.lightOnSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Demo Mode Button
+              _buildSimulationButton(),
+              SizedBox(width: 12.w),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20.r),
+                  border: Border.all(
+                    color: AppColors.success.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.local_hospital_rounded,
+                      color: AppColors.success,
+                      size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
+                    ),
+                    SizedBox(width: 6.w),
+                    Text(
+                      'Dr. ${_roleService.currentUser?.name ?? 'Doctor'}',
+                      style: FontUtils.label(
+                        context: context,
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          // Show simulation controls when in simulation mode
+          if (_isSimulationMode) ...[
+            SizedBox(height: 16.h),
+            _buildSimulationControls(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimulationButton() {
+    return ElevatedButton.icon(
+      onPressed: _toggleSimulationMode,
+      icon: Icon(
+        _isSimulationMode ? Icons.stop : Icons.play_arrow,
+        size: 18.sp,
+      ),
+      label: Text(
+        _isSimulationMode ? 'Stop Demo' : 'Demo Mode',
+        style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _isSimulationMode ? AppColors.error : AppColors.primary,
+        foregroundColor: Colors.white,
+        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.r),
         ),
+        elevation: _isSimulationMode ? 4 : 2,
+      ),
+    );
+  }
+
+  Widget _buildSimulationControls() {
+    return Container(
+      padding: EdgeInsets.all(12.w),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8.r),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          Container(
-            padding: EdgeInsets.all(12.w),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12.r),
-            ),
-            child: Icon(
-              Icons.dashboard_rounded,
-              color: AppColors.primary,
-              size: IconUtils.getResponsiveIconSize(IconSizeType.large, context),
-            ),
-          ),
-          SizedBox(width: 16.w),
+          Icon(Icons.info_outline, color: AppColors.warning, size: 20.sp),
+          SizedBox(width: 12.w),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Medical Dashboard',
-                  style: FontUtils.headline(
-                    context: context,
-                    color: AppColors.lightOnSurface,
-                  ),
-                ),
-                SizedBox(height: 4.h),
-                Text(
-                  'Monitor and analyze your patients\' health data',
-                  style: FontUtils.body(
-                    context: context,
-                    color: AppColors.lightOnSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
-            decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20.r),
-              border: Border.all(
-                color: AppColors.success.withValues(alpha: 0.2),
-                width: 1,
+            child: Text(
+              'Simulated data is being displayed. This is for demonstration purposes only.',
+              style: FontUtils.caption(
+                context: context,
+                color: AppColors.textSecondary,
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.local_hospital_rounded,
-                  color: AppColors.success,
-                  size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
-                ),
-                SizedBox(width: 6.w),
-                Text(
-                  'Dr. ${_roleService.currentUser?.name ?? 'Doctor'}',
-                  style: FontUtils.label(
-                    context: context,
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+          ),
+          SizedBox(width: 12.w),
+          ElevatedButton.icon(
+            onPressed: _triggerParkinsonianEpisode,
+            icon: Icon(Icons.flash_on, size: 16.sp),
+            label: Text('Trigger Episode', style: TextStyle(fontSize: 11.sp)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6.r),
+              ),
             ),
           ),
         ],
@@ -791,18 +974,67 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
   }
 
   Widget _buildDataVisualizationSection(bool isMobile) {
-    if (_isLoading) {
+    // Determine which data to display
+    final bool hasData = _isSimulationMode 
+        ? _simulatedDataPoints.isNotEmpty 
+        : _tremorData.isNotEmpty;
+    
+    final List<TremorDataPoint> displayData = _isSimulationMode
+        ? _simulatedDataPoints
+        : _tremorData.map((t) => TremorDataPoint(
+            timestamp: t.analysisTimestamp,
+            tremorScore: t.tremorScore,
+            isParkinsonian: t.isParkinsonian,
+          )).toList();
+
+    if (!_isSimulationMode && _isLoading) {
       return const SizedBox.shrink();
     }
 
-    if (_tremorData.isEmpty) {
-      return const SizedBox.shrink();
+    if (!hasData && !_isSimulationMode) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16.r),
+        ),
+        padding: EdgeInsets.all(40.w),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.show_chart, size: 48.sp, color: AppColors.textSecondary),
+              SizedBox(height: 16.h),
+              Text(
+                'No patient data available',
+                style: FontUtils.body(context: context, color: AppColors.textSecondary),
+              ),
+              SizedBox(height: 8.h),
+              Text(
+                'Try Demo Mode to see how the chart works',
+                style: FontUtils.caption(context: context, color: AppColors.textSecondary),
+              ),
+              SizedBox(height: 16.h),
+              ElevatedButton.icon(
+                onPressed: _startSimulation,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Start Demo'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16.r),
+        border: _isSimulationMode 
+            ? Border.all(color: AppColors.warning.withValues(alpha: 0.5), width: 2)
+            : null,
       ),
       padding: EdgeInsets.all(20.w),
       child: Column(
@@ -812,31 +1044,80 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text(
-                  'Tremor Activity - $_selectedTimeRange',
-                  style: FontUtils.headline(
-                    context: context,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Row(
+                  children: [
+                    Text(
+                      _isSimulationMode 
+                          ? 'Simulated Tremor Activity' 
+                          : 'Tremor Activity - $_selectedTimeRange',
+                      style: FontUtils.headline(
+                        context: context,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (_isSimulationMode) ...[
+                      SizedBox(width: 8.w),
+                      _buildLiveIndicator(),
+                    ],
+                  ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: _loadData,
-                tooltip: 'Refresh data',
-              ),
+              if (!_isSimulationMode)
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loadData,
+                  tooltip: 'Refresh data',
+                ),
             ],
           ),
           SizedBox(height: 20.h),
           SizedBox(
             height: 350.h,
             child: TremorChart(
-              dataPoints: _tremorData.map((t) => TremorDataPoint(
-                timestamp: t.analysisTimestamp,
-                tremorScore: t.tremorScore,
-                isParkinsonian: t.isParkinsonian,
-              )).toList(),
-              title: 'Tremor Activity - $_selectedPatientName',
+              dataPoints: displayData,
+              title: _isSimulationMode 
+                  ? 'Demo Patient - Live Simulation' 
+                  : 'Tremor Activity - $_selectedPatientName',
+              fixedXRangeMs: _isSimulationMode ? 60 * 1000 : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLiveIndicator() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12.r),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8.w,
+            height: 8.w,
+            decoration: BoxDecoration(
+              color: AppColors.error,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.error.withValues(alpha: 0.5),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 6.w),
+          Text(
+            'LIVE',
+            style: TextStyle(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.bold,
+              color: AppColors.error,
             ),
           ),
         ],
