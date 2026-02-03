@@ -459,9 +459,12 @@ static const Duration lockoutDuration = Duration(minutes: 15);
 | Audit Logging | 4 | 4 | ✅ |
 | Input Validation | 2 | 2 | ✅ |
 | Infrastructure | 4 | 4 | ✅ |
-| Device Security | 2 | 2 | ✅ |
+| Device Security | 4 | 4 | ✅ |
 | Rate Limiting | 2 | 2 | ✅ |
-| **Total** | **32** | **32** | ✅ |
+| Replay Protection | 2 | 2 | ✅ |
+| Firmware Verification | 3 | 3 | ✅ |
+| Device Integrity | 3 | 3 | ✅ |
+| **Total** | **42** | **42** | ✅ |
 
 ### 11.2 Security Compliance Matrix
 
@@ -474,17 +477,63 @@ static const Duration lockoutDuration = Duration(minutes: 15);
 
 ---
 
-## 12. Known Limitations & Future Improvements
+## 12. Additional Security Features (Newly Implemented)
 
-### 12.1 Current Limitations
+### 12.1 Request Replay Protection
 
-| Feature | Current Status | Future Plan |
-|---------|---------------|-------------|
-| Certificate Pinning Verification | Not fully implemented in `security_service.dart` | Implement production-grade pinning |
-| Device Integrity Check | `UnimplementedError` thrown | Add root detection, tampering checks |
-| TLS Connection Info | `UnimplementedError` thrown | Implement detailed TLS inspection |
+**Implementation**: `backend/backend-py/replay_protection.py`
 
-### 12.2 Recommended Enhancements
+| Feature | Description |
+|---------|-------------|
+| Nonce Format | `timestamp.randomHex.signature` |
+| Signature Algorithm | HMAC-SHA256 |
+| Validity Window | 5 minutes (configurable) |
+| Storage | DynamoDB with TTL / In-memory |
+| Tamper Protection | Cryptographic signature verification |
+
+**Usage**:
+```python
+from replay_protection import require_nonce
+
+@require_nonce
+async def sensitive_endpoint(request: Request):
+    # Nonce automatically validated
+    ...
+```
+
+### 12.2 Firmware Update Verification
+
+**Implementation**: `backend/backend-py/firmware_service.py`
+
+| Check | Implementation |
+|-------|---------------|
+| Signature Verification | RSA-PSS or ECDSA-P384 |
+| Hash Verification | SHA-256 |
+| Version Rollback | Semantic version comparison |
+| Certificate Validation | Trusted fingerprint check |
+| Manifest Parsing | JSON schema validation |
+
+### 12.3 Device Integrity Verification (Frontend)
+
+**Implementation**: `frontend/lib/shared/services/security_service.dart`
+
+| Platform | Checks Performed |
+|----------|-----------------|
+| Android | Root indicators, Su binaries, Magisk, Emulator detection |
+| iOS | Jailbreak paths, Cydia, Sileo, Simulator detection |
+| Windows | Debug mode, Authenticode signature |
+
+### 12.4 Certificate Pinning Verification (Frontend)
+
+| Feature | Status |
+|---------|--------|
+| SHA-256 Fingerprint Calculation | ✅ Implemented |
+| Trusted Fingerprint Matching | ✅ Implemented |
+| Connection Testing | ✅ Implemented |
+
+---
+
+## 13. Recommended Future Enhancements
 
 1. **Multi-Factor Authentication (MFA)**: Add TOTP-based MFA for high-risk operations
 2. **Anomaly Detection**: Implement behavioral analytics for suspicious activity detection
@@ -494,7 +543,7 @@ static const Duration lockoutDuration = Duration(minutes: 15);
 
 ---
 
-## 13. References
+## 14. References
 
 - [FDA Premarket Cybersecurity Guidance 2025](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/cybersecurity-medical-devices-quality-system-considerations-and-content-premarket-submissions)
 - [NIST Cybersecurity Framework](https://www.nist.gov/cyberframework)
