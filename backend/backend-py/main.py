@@ -215,6 +215,29 @@ def register(req: RegisterReq):
     # API v3: role is required in request, default to patient if not provided
     role = req.role.lower() if req.role else "patient"
     
+    # Security: Restrict admin role registration
+    # Admin accounts can only be created by existing admins via separate endpoint
+    # or the first admin is seeded during initial deployment
+    if role == "admin":
+        raise HTTPException(
+            403, 
+            detail={
+                "code": "ADMIN_RESTRICTED", 
+                "message": "Admin accounts cannot be self-registered. Contact system administrator."
+            }
+        )
+    
+    # Validate role is one of the allowed values
+    allowed_roles = ["patient", "doctor"]
+    if role not in allowed_roles:
+        raise HTTPException(
+            400, 
+            detail={
+                "code": "INVALID_ROLE", 
+                "message": f"Role must be one of: {', '.join(allowed_roles)}"
+            }
+        )
+    
     # Generate MFA secret at registration time (mandatory for medical system)
     mfa_secret = generate_mfa_secret()
     
@@ -666,6 +689,121 @@ def send_password_reset_code(req: SendVerificationCodeReq):
             raise HTTPException(500, detail={"code":"EMAIL_SEND_FAILED","message":"Failed to send password reset code"})
     except Exception as e:
         raise HTTPException(500, detail={"code":"EMAIL_SEND_FAILED","message":str(e)})
+
+
+# -------- Admin User Management (Admin-only)
+
+class CreateAdminReq(BaseModel):
+    """Request to create an admin account (admin-only)"""
+    email: str
+    password: str
+    name: Optional[str] = None
+
+class CreateAdminRes(BaseModel):
+    """Response for admin creation"""
+    userId: str
+    email: str
+    role: str
+    mfaSecret: str
+    message: str
+
+@app.post("/api/v1/admin/users", response_model=CreateAdminRes, status_code=201)
+@require_role("admin")
+async def create_admin_user(req: CreateAdminReq, request: Request):
+    """
+    Create a new admin or doctor account (Admin only).
+    
+    This is the only way to create admin accounts.
+    Regular users cannot self-register as admin.
+    
+    Flow:
+    1. Existing admin calls this endpoint
+    2. New user receives welcome email with MFA setup
+    3. New user logs in with provided credentials
+    """
+    email = req.email.lower().strip()
+    
+    # Check if email is already registered
+    existing = db.get_user_by_email(email)
+    if existing:
+        raise HTTPException(409, detail={"code": "EMAIL_TAKEN", "message": "Email is already registered"})
+    
+    # Validate password strength
+    is_valid, error_msg = PasswordValidator.validate(req.password)
+    if not is_valid:
+        raise HTTPException(400, detail={"code": "INVALID_PASSWORD", "message": error_msg})
+    
+    uid = f"usr_{uuid.uuid4().hex[:8]}"
+    mfa_secret = generate_mfa_secret()
+    
+    user = {
+        "id": uid,
+        "email": email,
+        "role": "admin",
+        "name": req.name or email.split('@')[0],
+        "password": hash_pw(req.password),
+        "emailVerified": True,
+        "mfaSecret": mfa_secret,
+        "mfaEnabled": True,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "createdBy": get_user_id(request)  # Track who created this admin
+    }
+    db.put_user(user)
+    
+    # Send welcome email with MFA secret
+    try:
+        email_service.send_welcome_with_mfa(email, mfa_secret, "admin")
+    except Exception as e:
+        print(f"[CreateAdmin] Warning: Failed to send welcome email: {e}")
+    
+    # Audit log
+    audit_service.log_event(
+        event_type=AuditEventType.DATA_CREATE,
+        user_id=get_user_id(request),
+        details={
+            "action": "admin_user_created",
+            "new_user_id": uid,
+            "new_user_email": email,
+            "created_by": get_user_id(request)
+        }
+    )
+    
+    return CreateAdminRes(
+        userId=uid,
+        email=email,
+        role="admin",
+        mfaSecret=mfa_secret,
+        message="Admin account created successfully. MFA setup required on first login."
+    )
+
+@app.get("/api/v1/admin/users")
+@require_role("admin")
+async def list_users(request: Request, role: Optional[str] = None, limit: int = 50, nextToken: Optional[str] = None):
+    """
+    List all users (Admin only).
+    
+    Optional filter by role: admin, doctor, patient
+    """
+    try:
+        users, next_token = db.list_users(role=role, limit=limit, next_token=nextToken)
+        return {
+            "items": [
+                {
+                    "id": u["id"],
+                    "email": u["email"],
+                    "role": u["role"],
+                    "name": u.get("name"),
+                    "emailVerified": u.get("emailVerified", False),
+                    "mfaEnabled": u.get("mfaEnabled", False),
+                    "createdAt": u.get("createdAt")
+                }
+                for u in users
+            ],
+            "nextToken": next_token
+        }
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "LIST_USERS_FAILED", "message": str(e)})
+
 
 # -------- Me
 @app.get("/api/v1/me", response_model=UserOut)

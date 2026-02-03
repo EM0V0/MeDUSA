@@ -998,7 +998,7 @@ dart run cyclonedx:cyclonedx -o sbom-frontend.json
 - [ ] STRIDE analysis completed for all components
 - [ ] All identified threats have mitigations
 - [ ] Residual risks documented and accepted
-- [ ] Threat model document current (`doc_assets/Threat_Model.md`)
+- [ ] Threat model document current (`doc_assets/01_premarket/Threat_Model.md`)
 
 ---
 
@@ -1016,7 +1016,7 @@ dart run cyclonedx:cyclonedx -o sbom-frontend.json
 - [ ] Risk levels assigned (Severity × Probability)
 - [ ] Controls implemented for unacceptable risks
 - [ ] Residual risk evaluation completed
-- [ ] Document current (`doc_assets/ISO14971_Risk_Assessment.md`)
+- [ ] Document current (`doc_assets/01_premarket/ISO14971_Risk_Assessment.md`)
 
 ---
 
@@ -1274,12 +1274,12 @@ python check_tls_version.py
 
 | Document | Location |
 |----------|----------|
-| API Documentation | `doc_assets/API_DOCUMENTATION.md` |
-| Security Implementation | `doc_assets/Security_Implementation_Summary.md` |
-| Threat Model | `doc_assets/Threat_Model.md` |
-| Risk Assessment | `doc_assets/ISO14971_Risk_Assessment.md` |
-| Security Traceability | `doc_assets/Security_Traceability_Matrix.md` |
-| SBOM Documentation | `doc_assets/SBOM_Documentation.md` |
+| API Documentation | `doc_assets/05_technical/API_DOCUMENTATION.md` |
+| Security Implementation | `doc_assets/02_security/Security_Implementation_Summary.md` |
+| Threat Model | `doc_assets/01_premarket/Threat_Model.md` |
+| Risk Assessment | `doc_assets/01_premarket/ISO14971_Risk_Assessment.md` |
+| Security Traceability | `doc_assets/02_security/Security_Traceability_Matrix.md` |
+| SBOM Documentation | `doc_assets/01_premarket/SBOM_Documentation.md` |
 
 ---
 

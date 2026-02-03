@@ -18,10 +18,10 @@ This document maps MeDUSA platform capabilities to FDA premarket cybersecurity e
 
 | Requirement | MeDUSA Implementation | Evidence Location | Status |
 |-------------|----------------------|-------------------|--------|
-| Identify cybersecurity risks | Threat model document | `doc_assets/Threat_Model.md` | ✅ |
-| Risk assessment methodology | STRIDE + ISO 14971 | `doc_assets/Risk_Assessment.md` | ✅ |
-| Risk control measures | Security controls matrix | `doc_assets/Security_Traceability_Matrix.md` | ✅ |
-| Residual risk acceptance | Risk acceptance documentation | `doc_assets/Risk_Assessment.md` | ✅ |
+| Identify cybersecurity risks | Threat model document | `doc_assets/01_premarket/Threat_Model.md` | ✅ |
+| Risk assessment methodology | STRIDE + ISO 14971 | `doc_assets/01_premarket/ISO14971_Risk_Assessment.md` | ✅ |
+| Risk control measures | Security controls matrix | `doc_assets/02_security/Security_Traceability_Matrix.md` | ✅ |
+| Residual risk acceptance | Risk acceptance documentation | `doc_assets/01_premarket/ISO14971_Risk_Assessment.md` | ✅ |
 
 ### 1.2 Security Architecture
 
@@ -180,12 +180,12 @@ Automated SBOM generation configured in GitHub Actions:
 
 | Document | Purpose | Location |
 |----------|---------|----------|
-| Threat Model | Risk identification | `doc_assets/Threat_Model.md` |
-| Risk Assessment | Risk analysis and mitigation | `doc_assets/Risk_Assessment.md` |
-| Security Traceability Matrix | Requirements tracking | `doc_assets/Security_Traceability_Matrix.md` |
+| Threat Model | Risk identification | `doc_assets/01_premarket/Threat_Model.md` |
+| Risk Assessment | Risk analysis and mitigation | `doc_assets/01_premarket/ISO14971_Risk_Assessment.md` |
+| Security Traceability Matrix | Requirements tracking | `doc_assets/02_security/Security_Traceability_Matrix.md` |
 | SBOM | Component inventory | GitHub Actions artifacts |
 | Security Audit | Control verification | `SECURITY_AUDIT.md` |
-| API Documentation | Interface specification | `doc_assets/API_DOCUMENTATION.md` |
+| API Documentation | Interface specification | `doc_assets/05_technical/API_DOCUMENTATION.md` |
 
 ### 8.2 Compliance Attestation
 

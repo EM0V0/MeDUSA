@@ -120,6 +120,52 @@ def get_user(user_id: str) -> Optional[Dict[str,Any]]:
     resp = T_USERS.get_item(Key=_user_key(user_id))
     return resp.get("Item")
 
+def list_users(role: Optional[str] = None, limit: int = 50, next_token: Optional[str] = None) -> Tuple[List[Dict[str,Any]], Optional[str]]:
+    """
+    List users with optional role filter.
+    Returns (users_list, next_token)
+    """
+    if USE_MEMORY:
+        users = list(_users.values())
+        if role:
+            users = [u for u in users if u.get("role") == role]
+        # Simple pagination for in-memory
+        start_idx = 0
+        if next_token:
+            for i, u in enumerate(users):
+                if u["id"] == next_token:
+                    start_idx = i + 1
+                    break
+        end_idx = start_idx + limit
+        result = users[start_idx:end_idx]
+        new_token = result[-1]["id"] if len(result) == limit and end_idx < len(users) else None
+        return result, new_token
+    
+    # DynamoDB scan with optional filter
+    scan_kwargs = {"Limit": limit}
+    
+    if role:
+        scan_kwargs["FilterExpression"] = Attr("role").eq(role)
+    
+    if next_token:
+        scan_kwargs["ExclusiveStartKey"] = _user_key(next_token)
+    
+    resp = T_USERS.scan(**scan_kwargs)
+    items = resp.get("Items", [])
+    
+    # Get next token from LastEvaluatedKey
+    last_key = resp.get("LastEvaluatedKey")
+    new_next_token = None
+    if last_key:
+        # Extract the user id from the key
+        if USERS_SINGLE_TABLE:
+            pk_value = last_key.get(USERS_PK_ATTR, "")
+            new_next_token = pk_value.replace("USER#", "") if pk_value.startswith("USER#") else pk_value
+        else:
+            new_next_token = last_key.get(USERS_PK_ATTR)
+    
+    return items, new_next_token
+
 def update_user(user_id: str, updates: Dict[str,Any]) -> bool:
     """
     Update user attributes. Supports partial updates.

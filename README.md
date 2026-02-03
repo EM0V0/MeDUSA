@@ -226,25 +226,28 @@ See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for comprehensive deployment 
 ### Core Documentation
 | Document | Description |
 |----------|-------------|
-| [API Documentation](doc_assets/API_DOCUMENTATION.md) | Complete REST API reference |
+| [API Documentation](doc_assets/05_technical/API_DOCUMENTATION.md) | Complete REST API reference |
 | [Deployment Guide](DEPLOYMENT_GUIDE.md) | Detailed deployment instructions |
-| [Reproducibility Guide](doc_assets/Reproducibility_Guide.md) | Setup and simulation guide |
+| [Reproducibility Guide](doc_assets/04_testing/Reproducibility_Guide.md) | Setup and simulation guide |
 
 ### Security and Compliance
 | Document | Description |
 |----------|-------------|
-| [FDA Premarket Checklist](doc_assets/FDA_Premarket_Cybersecurity_Checklist.md) | FDA cybersecurity requirements mapping |
-| [Threat Model (STRIDE)](doc_assets/Threat_Model.md) | Comprehensive threat analysis |
-| [ISO 14971 Risk Assessment](doc_assets/ISO14971_Risk_Assessment.md) | Medical device risk management |
-| [Security Traceability Matrix](doc_assets/Security_Traceability_Matrix.md) | Requirements to controls mapping |
-| [SBOM Documentation](doc_assets/SBOM_Documentation.md) | Software Bill of Materials |
+| [FDA Premarket Checklist](doc_assets/01_premarket/FDA_Premarket_Cybersecurity_Checklist.md) | FDA cybersecurity requirements mapping |
+| [Postmarket Cybersecurity Plan](doc_assets/03_postmarket/Postmarket_Cybersecurity_Plan.md) | TPLC postmarket management plan |
+| [Preliminary Hazard Analysis](doc_assets/01_premarket/Preliminary_Hazard_Analysis.md) | PHA with STRIDE-based hazard identification |
+| [Threat Model (STRIDE)](doc_assets/01_premarket/Threat_Model.md) | Comprehensive threat analysis |
+| [ISO 14971 Risk Assessment](doc_assets/01_premarket/ISO14971_Risk_Assessment.md) | Medical device risk management |
+| [Security Traceability Matrix](doc_assets/02_security/Security_Traceability_Matrix.md) | Requirements to controls mapping |
+| [SBOM Documentation](doc_assets/01_premarket/SBOM_Documentation.md) | Software Bill of Materials |
 
 ### Educational Resources
 | Document | Description |
 |----------|-------------|
-| [Cybersecurity Risk Worksheet](doc_assets/Cybersecurity_Risk_Assessment_Worksheet.md) | Hands-on student exercise |
+| [Cybersecurity Risk Worksheet](doc_assets/06_educational/Cybersecurity_Risk_Assessment_Worksheet.md) | Hands-on student exercise |
 | [Security Audit Report](SECURITY_AUDIT.md) | Example security audit findings |
-| [Security Controls Verification](doc_assets/Security_Controls_Verification.md) | Control verification evidence |
+| [Security Controls Verification](doc_assets/02_security/Security_Controls_Verification.md) | Control verification evidence |
+| [Testing Guide](doc_assets/04_testing/Testing_Guide.md) | Comprehensive testing procedures |
 
 ---
 
