@@ -4,6 +4,20 @@ A professional Parkinson's disease tremor monitoring system with real-time data 
 
 ---
 
+## 🚀 One-Command Setup
+
+```powershell
+# Development mode (local backend, quick login)
+.\scripts\quick_start.ps1 -Mode dev
+
+# Production mode (AWS deployment, full security)
+.\scripts\quick_start.ps1 -Mode prod -GenerateData
+```
+
+See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for detailed instructions.
+
+---
+
 ## 📚 Documentation
 
 ### Core Documentation
