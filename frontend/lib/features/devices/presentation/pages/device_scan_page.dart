@@ -526,7 +526,7 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.bluetooth_searching_rounded,
                             size: 48,
                             color: AppColors.lightOnSurfaceVariant,

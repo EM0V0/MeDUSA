@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../domain/entities/user.dart';
 import 'auth_remote_data_source.dart';
 
@@ -150,7 +152,7 @@ class AuthRemoteDataSourceMock implements AuthRemoteDataSource {
     
     // In mock mode, password reset is always successful
     // In real implementation, this would update the password in the database
-    print('[Mock] Password reset successful for: $email');
+    debugPrint('[Mock] Password reset successful for: $email');
     return;
   }
 }

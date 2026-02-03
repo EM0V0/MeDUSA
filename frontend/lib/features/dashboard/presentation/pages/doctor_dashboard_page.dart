@@ -227,10 +227,10 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
     if (_isSimulationMode) {
       _simulationService.triggerParkinsonianEpisode();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('🔴 Parkinsonian episode triggered!'),
+        const SnackBar(
+          content: Text('Parkinsonian episode triggered!'),
           backgroundColor: AppColors.error,
-          duration: const Duration(seconds: 2),
+          duration: Duration(seconds: 2),
         ),
       );
     }
@@ -636,10 +636,10 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
             ),
             SizedBox(height: 16.h),
             if (_isLoadingPatients)
-              Center(
+              const Center(
                 child: Padding(
-                  padding: EdgeInsets.all(20.h),
-                  child: const CircularProgressIndicator(),
+                  padding: EdgeInsets.all(20),
+                  child: CircularProgressIndicator(),
                 ),
               )
             else if (_availablePatients.isEmpty)

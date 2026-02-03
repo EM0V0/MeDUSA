@@ -290,10 +290,10 @@ class _DashboardPageState extends State<DashboardPage> {
     if (_isSimulationMode) {
       _simulationService.triggerParkinsonianEpisode();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('🔴 Parkinsonian episode triggered!'),
+        const SnackBar(
+          content: Text('Parkinsonian episode triggered!'),
           backgroundColor: AppColors.error,
-          duration: const Duration(seconds: 2),
+          duration: Duration(seconds: 2),
         ),
       );
     }

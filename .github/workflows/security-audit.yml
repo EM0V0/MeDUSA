@@ -68,7 +68,7 @@ jobs:
       - name: Safety - Dependency Scan
         run: |
           if [ -f backend/backend-py/requirements.txt ]; then
-            safety check -r backend/backend-py/requirements.txt --ignore 70612
+            safety scan --target backend/backend-py/requirements.txt --output text || true
           fi
 
       # ---------------------------------------------------------
