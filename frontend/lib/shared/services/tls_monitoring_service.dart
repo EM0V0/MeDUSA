@@ -39,19 +39,30 @@ class TLSMonitoringService {
     final startTime = DateTime.now();
     
     try {
-      // Get TLS connection info
-      final tlsInfo = await _securityService.getTLSConnectionInfo();
+      // Get TLS connection info - pass the endpoint URL
+      final tlsInfo = await _securityService.getTLSConnectionInfo(endpoint);
+      
+      // Determine TLS version from protocol
+      final protocol = tlsInfo.protocol ?? 'Unknown';
+      final isTls13 = protocol.contains('1.3');
+      
+      // Check certificate validity
+      final now = DateTime.now();
+      final isValid = tlsInfo.certificateValidFrom != null && 
+                      tlsInfo.certificateValidTo != null &&
+                      now.isAfter(tlsInfo.certificateValidFrom!) &&
+                      now.isBefore(tlsInfo.certificateValidTo!);
       
       // Create connection report
       final report = TLSConnectionReport(
         endpoint: endpoint,
         timestamp: startTime,
-        tlsVersion: tlsInfo['tls_version'] ?? 'Unknown',
-        isTLS13: tlsInfo['is_tls_13'] ?? false,
-        certificateValid: tlsInfo['is_certificate_valid'] ?? false,
+        tlsVersion: protocol,
+        isTLS13: isTls13,
+        certificateValid: isValid,
         connectionTime: DateTime.now().difference(startTime),
-        securityScore: _calculateSecurityScore(tlsInfo),
-        issues: _identifySecurityIssues(tlsInfo),
+        securityScore: _calculateSecurityScoreFromInfo(tlsInfo),
+        issues: _identifySecurityIssuesFromInfo(tlsInfo),
       );
       
       // Log audit event
@@ -101,83 +112,76 @@ class TLSMonitoringService {
     return reports;
   }
 
-  /// Calculate security score (0-100)
-  int _calculateSecurityScore(Map<String, dynamic> tlsInfo) {
+  /// Calculate security score from TLSConnectionInfo (0-100)
+  int _calculateSecurityScoreFromInfo(TLSConnectionInfo tlsInfo) {
     int score = 0;
     
     // TLS version score (40 points)
-    final tlsVersion = tlsInfo['tls_version']?.toString().toLowerCase() ?? '';
-    if (tlsVersion.contains('1.3')) {
+    final protocol = tlsInfo.protocol?.toLowerCase() ?? '';
+    if (protocol.contains('1.3')) {
       score += 40;
-    } else if (tlsVersion.contains('1.2')) {
+    } else if (protocol.contains('1.2')) {
       score += 30;
-    } else if (tlsVersion.contains('1.1')) {
+    } else if (protocol.contains('1.1')) {
       score += 10;
     }
-    // TLS 1.0 and below get 0 points
     
     // Certificate validity (30 points)
-    if (tlsInfo['is_certificate_valid'] == true) {
+    final now = DateTime.now();
+    if (tlsInfo.certificateValidFrom != null && 
+        tlsInfo.certificateValidTo != null &&
+        now.isAfter(tlsInfo.certificateValidFrom!) &&
+        now.isBefore(tlsInfo.certificateValidTo!)) {
       score += 30;
     }
     
-    // Connection success (20 points)
-    if (tlsInfo['error'] == null) {
-      score += 20;
-    }
+    // Connection success (20 points) - if we got here, connection succeeded
+    score += 20;
     
     // Certificate expiration check (10 points)
-    final endValidity = tlsInfo['certificate_end_validity'];
-    if (endValidity != null) {
-      final expiry = DateTime.parse(endValidity);
-      final daysToExpiry = expiry.difference(DateTime.now()).inDays;
-      
+    if (tlsInfo.certificateValidTo != null) {
+      final daysToExpiry = tlsInfo.certificateValidTo!.difference(now).inDays;
       if (daysToExpiry > 30) {
         score += 10;
       } else if (daysToExpiry > 7) {
         score += 5;
       }
-      // Expires within 7 days gets 0 points
     }
     
     return score.clamp(0, 100);
   }
 
-  /// Identify security issues
-  List<String> _identifySecurityIssues(Map<String, dynamic> tlsInfo) {
+  /// Identify security issues from TLSConnectionInfo
+  List<String> _identifySecurityIssuesFromInfo(TLSConnectionInfo tlsInfo) {
     final issues = <String>[];
     
     // TLS version check
-    final tlsVersion = tlsInfo['tls_version']?.toString().toLowerCase() ?? '';
-    if (!tlsVersion.contains('1.3') && !tlsVersion.contains('1.2')) {
-      issues.add('Insecure TLS version: $tlsVersion');
+    final protocol = tlsInfo.protocol?.toLowerCase() ?? '';
+    if (!protocol.contains('1.3') && !protocol.contains('1.2')) {
+      issues.add('Insecure TLS version: ${tlsInfo.protocol ?? "Unknown"}');
     }
     
-    if (!tlsVersion.contains('1.3')) {
+    if (!protocol.contains('1.3')) {
       issues.add('TLS 1.3 not used - medical devices require latest TLS');
     }
     
-    // Certificate check
-    if (tlsInfo['is_certificate_valid'] != true) {
-      issues.add('Invalid or untrusted certificate');
+    // Certificate validity check
+    final now = DateTime.now();
+    if (tlsInfo.certificateValidFrom == null || tlsInfo.certificateValidTo == null) {
+      issues.add('Certificate validity dates not available');
+    } else if (now.isBefore(tlsInfo.certificateValidFrom!) || now.isAfter(tlsInfo.certificateValidTo!)) {
+      issues.add('Invalid or expired certificate');
     }
     
-    // Certificate expiration check
-    final endValidity = tlsInfo['certificate_end_validity'];
-    if (endValidity != null) {
-      final expiry = DateTime.parse(endValidity);
-      final daysToExpiry = expiry.difference(DateTime.now()).inDays;
+    // Certificate expiration warning
+    if (tlsInfo.certificateValidTo != null) {
+      final daysToExpiry = tlsInfo.certificateValidTo!.difference(now).inDays;
       
       if (daysToExpiry <= 7) {
         issues.add('Certificate expires in $daysToExpiry days - immediate action required');
       } else if (daysToExpiry <= 30) {
         issues.add('Certificate expires in $daysToExpiry days - renewal needed');
       }
-    }
-    
-    // Connection error check
-    if (tlsInfo['error'] != null) {
-      issues.add('Connection error: ${tlsInfo['error']}');
     }
     
     return issues;
