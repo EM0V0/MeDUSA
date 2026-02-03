@@ -43,7 +43,7 @@ Globals:
       - x86_64
 
 Resources:
-  # Lambda 函数
+  # Lambda Function
   MedusaAPIFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -52,7 +52,7 @@ Resources:
       Handler: main.handler
       Description: MeDUSA API v3 - 100% Tested
       Policies:
-        # DynamoDB 访问权限
+        # DynamoDB Access Permissions
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
         - DynamoDBCrudPolicy:
@@ -74,10 +74,10 @@ Resources:
               Resource:
                 - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/medusa-tremor-analysis"
                 - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/medusa-tremor-analysis/index/*"
-        # S3 访问权限
+        # S3 Access Permissions
         - S3CrudPolicy:
             BucketName: !Ref DataBucket
-        # AWS SES 邮件发送权限
+        # AWS SES Email Sending Permissions
         - Statement:
           - Effect: Allow
             Action:
@@ -85,7 +85,7 @@ Resources:
               - ses:SendRawEmail
             Resource: '*'
       Events:
-        # API Gateway 事件
+        # API Gateway Events
         ApiEvent:
           Type: Api
           Properties:
@@ -106,17 +106,17 @@ Resources:
       Cors:
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS,PATCH'"
         AllowHeaders: "'Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers'"
-        AllowOrigin: "'*'"  # 生产环境改为具体域名
+        AllowOrigin: "'*'"  # Replace with specific domain in production
         MaxAge: "'600'"
         AllowCredentials: false
       Auth:
-        DefaultAuthorizer: NONE  # 使用应用层中间件认证
+        DefaultAuthorizer: NONE  # Using application-layer middleware authentication
       TracingEnabled: true
       Tags:
         Project: MeDUSA
         Version: v3
 
-  # DynamoDB 表 - 用户
+  # DynamoDB Table - Users
   UsersTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -149,7 +149,7 @@ Resources:
         - Key: DataType
           Value: Users
 
-  # DynamoDB 表 - Poses
+  # DynamoDB Table - Poses
   PosesTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -177,7 +177,7 @@ Resources:
         - Key: DataType
           Value: Poses
 
-  # DynamoDB 表 - Refresh Tokens
+  # DynamoDB Table - Refresh Tokens
   RefreshTokensTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -202,7 +202,7 @@ Resources:
         - Key: DataType
           Value: RefreshTokens
 
-  # DynamoDB 表 - Devices
+  # DynamoDB Table - Devices
   DevicesTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -235,7 +235,7 @@ Resources:
         - Key: DataType
           Value: Devices
 
-  # DynamoDB 表 - Patient Profiles
+  # DynamoDB Table - Patient Profiles
   PatientProfilesTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -268,7 +268,7 @@ Resources:
         - Key: DataType
           Value: PatientProfiles
 
-  # DynamoDB 表 - Device Sessions (动态绑定)
+  # DynamoDB Table - Device Sessions (Dynamic Binding)
   SessionsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -317,7 +317,7 @@ Resources:
         - Key: DataType
           Value: Sessions
 
-  # S3 存储桶
+  # S3 Storage Bucket
   DataBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -341,7 +341,7 @@ Resources:
       CorsConfiguration:
         CorsRules:
           - AllowedOrigins:
-              - '*'  # 生产环境改为具体域名
+              - '*'  # Replace with specific domain in production
             AllowedMethods:
               - GET
               - PUT

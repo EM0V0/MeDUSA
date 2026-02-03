@@ -155,18 +155,18 @@ class SecureNetworkService {
             options.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
           }
           
-          // 记录安全请求日志
+          // Log secure request
           _logSecureRequest(options);
           
           handler.next(options);
         },
         onResponse: (response, handler) {
-          // 验证响应安全性
+          // Validate response security
           _validateResponseSecurity(response);
           handler.next(response);
         },
         onError: (error, handler) {
-          // 安全错误处理
+          // Security error handling
           _handleSecurityError(error);
           handler.next(error);
         },
@@ -174,7 +174,7 @@ class SecureNetworkService {
     );
   }
 
-  /// 记录安全请求日志
+  /// Log secure request
   void _logSecureRequest(RequestOptions options) {
     if (kDebugMode) {
       debugPrint('$_tag: Secure request to ${options.uri}');
@@ -183,11 +183,11 @@ class SecureNetworkService {
     }
   }
 
-  /// 验证响应安全性
+  /// Validate response security
   void _validateResponseSecurity(Response response) {
     final headers = response.headers;
     
-    // 检查安全头
+    // Check security headers
     final requiredSecurityHeaders = [
       'strict-transport-security',
       'x-content-type-options',
@@ -200,13 +200,13 @@ class SecureNetworkService {
       }
     }
     
-    // 验证TLS连接信息（如果可用）
+    // Verify TLS connection info (if available)
     if (kDebugMode) {
       debugPrint('$_tag: Response received with status: ${response.statusCode}');
     }
   }
 
-  /// 安全错误处理
+  /// Security error handling
   void _handleSecurityError(DioException error) {
     switch (error.type) {
       case DioExceptionType.badCertificate:
@@ -224,17 +224,17 @@ class SecureNetworkService {
     }
   }
 
-  /// 报告安全事件
+  /// Report security incident
   void _reportSecurityIncident(String type, String details) {
     if (kDebugMode) {
       debugPrint('$_tag: SECURITY INCIDENT - Type: $type, Details: $details');
     }
     
-    // 在生产环境中，这里应该发送到安全监控系统
-    // 例如：发送到AWS CloudWatch、Azure Monitor等
+    // In production, this should send to security monitoring systems
+    // e.g., AWS CloudWatch, Azure Monitor, etc.
   }
 
-  /// 公共API方法
+  /// Public API methods
   Dio get dio => _dio;
 
   /// HTTP GET request
@@ -337,7 +337,7 @@ class SecureNetworkService {
     }
   }
 
-  /// 验证TLS连接
+  /// Verify TLS connection
   Future<bool> verifyTLSConnection(String url) async {
     try {
       final uri = Uri.parse(url);
@@ -363,7 +363,7 @@ class SecureNetworkService {
     }
   }
 
-  /// 获取连接的TLS信息
+  /// Get TLS connection info
   Future<Map<String, dynamic>> getTLSInfo(String url) async {
     try {
       final uri = Uri.parse(url);
@@ -392,7 +392,7 @@ class SecureNetworkService {
     }
   }
 
-  /// 清理资源
+  /// Cleanup resources
   void dispose() {
     _dio.close();
   }

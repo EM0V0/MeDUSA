@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../services/audit_service.dart';
 import '../services/security_service.dart';
 
-// 安全事件类型（移到顶级）
+// Security event types (moved to top-level)
 enum TLSSecurityEvent {
   tlsVersionDowngrade,
   certificateValidationFailure,
@@ -13,15 +13,15 @@ enum TLSSecurityEvent {
   dataIntegrityFailure,
 }
 
-/// TLS监控和审计服务
-/// 专为医疗设备安全合规设计
+/// TLS monitoring and auditing service
+/// Designed for medical device security compliance
 class TLSMonitoringService {
   static const String _tag = 'TLSMonitoringService';
   
   final AuditService _auditService;
   final SecurityService _securityService;
   
-  // TLS监控配置
+  // TLS monitoring configuration
   static const List<String> _criticalEndpoints = [
     'api.medusa-medical.com',
     '*.execute-api.amazonaws.com',
@@ -34,15 +34,15 @@ class TLSMonitoringService {
   })  : _auditService = auditService,
         _securityService = securityService;
 
-  /// 监控TLS连接质量
+  /// Monitor TLS connection quality
   Future<TLSConnectionReport> monitorTLSConnection(String endpoint) async {
     final startTime = DateTime.now();
     
     try {
-      // 获取TLS连接信息
+      // Get TLS connection info
       final tlsInfo = await _securityService.getTLSConnectionInfo();
       
-      // 创建连接报告
+      // Create connection report
       final report = TLSConnectionReport(
         endpoint: endpoint,
         timestamp: startTime,
@@ -54,10 +54,10 @@ class TLSMonitoringService {
         issues: _identifySecurityIssues(tlsInfo),
       );
       
-      // 记录审计日志
+      // Log audit event
       await _logTLSEvent(report);
       
-      // 检查安全阈值
+      // Check security thresholds
       await _checkSecurityThresholds(report);
       
       return report;
@@ -79,7 +79,7 @@ class TLSMonitoringService {
     }
   }
 
-  /// 批量监控关键端点
+  /// Batch monitor critical endpoints
   Future<List<TLSConnectionReport>> monitorCriticalEndpoints() async {
     final reports = <TLSConnectionReport>[];
     
@@ -88,24 +88,24 @@ class TLSMonitoringService {
         final report = await monitorTLSConnection(endpoint);
         reports.add(report);
         
-        // 短暂延迟避免请求过于频繁
+        // Brief delay to avoid too frequent requests
         await Future.delayed(const Duration(milliseconds: 500));
       } catch (e) {
         debugPrint('$_tag: Failed to monitor $endpoint: $e');
       }
     }
     
-    // 生成综合安全报告
+    // Generate comprehensive security report
     await _generateSecuritySummary(reports);
     
     return reports;
   }
 
-  /// 计算安全评分 (0-100)
+  /// Calculate security score (0-100)
   int _calculateSecurityScore(Map<String, dynamic> tlsInfo) {
     int score = 0;
     
-    // TLS版本评分 (40分)
+    // TLS version score (40 points)
     final tlsVersion = tlsInfo['tls_version']?.toString().toLowerCase() ?? '';
     if (tlsVersion.contains('1.3')) {
       score += 40;
@@ -114,19 +114,19 @@ class TLSMonitoringService {
     } else if (tlsVersion.contains('1.1')) {
       score += 10;
     }
-    // TLS 1.0及以下得0分
+    // TLS 1.0 and below get 0 points
     
-    // 证书有效性 (30分)
+    // Certificate validity (30 points)
     if (tlsInfo['is_certificate_valid'] == true) {
       score += 30;
     }
     
-    // 连接成功性 (20分)
+    // Connection success (20 points)
     if (tlsInfo['error'] == null) {
       score += 20;
     }
     
-    // 证书有效期检查 (10分)
+    // Certificate expiration check (10 points)
     final endValidity = tlsInfo['certificate_end_validity'];
     if (endValidity != null) {
       final expiry = DateTime.parse(endValidity);
@@ -137,17 +137,17 @@ class TLSMonitoringService {
       } else if (daysToExpiry > 7) {
         score += 5;
       }
-      // 7天内过期得0分
+      // Expires within 7 days gets 0 points
     }
     
     return score.clamp(0, 100);
   }
 
-  /// 识别安全问题
+  /// Identify security issues
   List<String> _identifySecurityIssues(Map<String, dynamic> tlsInfo) {
     final issues = <String>[];
     
-    // TLS版本检查
+    // TLS version check
     final tlsVersion = tlsInfo['tls_version']?.toString().toLowerCase() ?? '';
     if (!tlsVersion.contains('1.3') && !tlsVersion.contains('1.2')) {
       issues.add('Insecure TLS version: $tlsVersion');
@@ -157,12 +157,12 @@ class TLSMonitoringService {
       issues.add('TLS 1.3 not used - medical devices require latest TLS');
     }
     
-    // 证书检查
+    // Certificate check
     if (tlsInfo['is_certificate_valid'] != true) {
       issues.add('Invalid or untrusted certificate');
     }
     
-    // 证书过期检查
+    // Certificate expiration check
     final endValidity = tlsInfo['certificate_end_validity'];
     if (endValidity != null) {
       final expiry = DateTime.parse(endValidity);
@@ -175,7 +175,7 @@ class TLSMonitoringService {
       }
     }
     
-    // 连接错误检查
+    // Connection error check
     if (tlsInfo['error'] != null) {
       issues.add('Connection error: ${tlsInfo['error']}');
     }
@@ -183,7 +183,7 @@ class TLSMonitoringService {
     return issues;
   }
 
-  /// 记录TLS事件到审计日志
+  /// Log TLS event to audit log
   Future<void> _logTLSEvent(TLSConnectionReport report) async {
     try {
       final auditData = {
@@ -217,9 +217,9 @@ class TLSMonitoringService {
     }
   }
 
-  /// 检查安全阈值并触发警报
+  /// Check security thresholds and trigger alerts
   Future<void> _checkSecurityThresholds(TLSConnectionReport report) async {
-    // 严重安全问题 (立即警报)
+    // Critical security issues (immediate alert)
     if (report.securityScore < 50) {
       await _triggerSecurityAlert(TLSSecurityEvent.tlsVersionDowngrade, report);
     }
@@ -232,18 +232,18 @@ class TLSMonitoringService {
       await _triggerSecurityAlert(TLSSecurityEvent.weakCipherSuite, report);
     }
     
-    // 连接性能问题
+    // Connection performance issues
     if (report.connectionTime.inSeconds > 30) {
       await _triggerSecurityAlert(TLSSecurityEvent.connectionTimeout, report);
     }
     
-    // 数据完整性检查
+    // Data integrity check
     if (report.issues.isNotEmpty) {
       await _triggerSecurityAlert(TLSSecurityEvent.dataIntegrityFailure, report);
     }
   }
 
-  /// 触发安全警报
+  /// Trigger security alert
   Future<void> _triggerSecurityAlert(TLSSecurityEvent eventType, TLSConnectionReport report) async {
     try {
       final alertData = {
@@ -269,15 +269,15 @@ class TLSMonitoringService {
         debugPrint('$_tag: SECURITY ALERT - ${eventType.toString()} for ${report.endpoint}');
       }
       
-      // 在生产环境中，这里应该发送到监控系统
-      // 例如：AWS CloudWatch Alarms, PagerDuty, Slack等
+      // In production, this should send to monitoring systems
+      // e.g., AWS CloudWatch Alarms, PagerDuty, Slack, etc.
       
     } catch (e) {
       debugPrint('$_tag: Failed to trigger security alert: $e');
     }
   }
 
-  /// 获取事件严重程度
+  /// Get event severity level
   String _getEventSeverity(TLSSecurityEvent eventType) {
     switch (eventType) {
       case TLSSecurityEvent.tlsVersionDowngrade:
@@ -292,7 +292,7 @@ class TLSMonitoringService {
     }
   }
 
-  /// 判断是否需要立即处理
+  /// Determine if immediate action is required
   bool _requiresImmediateAction(TLSSecurityEvent eventType) {
     return [
       TLSSecurityEvent.tlsVersionDowngrade,
@@ -301,7 +301,7 @@ class TLSMonitoringService {
     ].contains(eventType);
   }
 
-  /// 生成安全摘要报告
+  /// Generate security summary report
   Future<void> _generateSecuritySummary(List<TLSConnectionReport> reports) async {
     final summary = {
       'total_endpoints': reports.length,
@@ -323,7 +323,7 @@ class TLSMonitoringService {
     );
   }
 
-  /// 获取TLS合规状态
+  /// Get TLS compliance status
   Future<TLSComplianceStatus> getComplianceStatus() async {
     final reports = await monitorCriticalEndpoints();
     
@@ -348,7 +348,7 @@ class TLSMonitoringService {
   }
 }
 
-/// TLS连接报告
+/// TLS connection report
 class TLSConnectionReport {
   final String endpoint;
   final DateTime timestamp;
@@ -387,7 +387,7 @@ class TLSConnectionReport {
   }
 }
 
-/// TLS合规状态
+/// TLS compliance status
 class TLSComplianceStatus {
   final bool isFullyCompliant;
   final int compliancePercentage;
