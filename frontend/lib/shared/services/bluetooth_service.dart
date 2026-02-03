@@ -128,16 +128,22 @@ class MedicalBluetoothService extends ChangeNotifier {
 
   /// Check if Bluetooth is enabled
   Future<bool> _isBluetoothEnabled() async {
+    // Web platform - assume available, browser handles permissions
+    if (kIsWeb) {
+      debugPrint('[BT Init] Web platform - assuming Bluetooth available');
+      return true;
+    }
+    
     try {
       final adapterState = await FlutterBlueAdapter.adapterState.first
           .timeout(const Duration(seconds: 2));
       
       // On Windows, 'unknown' state often means Bluetooth is available but state can't be determined
       // We should allow it and let the actual scan determine availability
-      if (Platform.isWindows || kIsWeb) {
+      if (Platform.isWindows) {
         final isAvailable = adapterState == flutter_blue_plus.BluetoothAdapterState.on ||
                            adapterState == flutter_blue_plus.BluetoothAdapterState.unknown;
-        debugPrint('[BT Init] Windows/Web - Adapter state: $adapterState, treating as available: $isAvailable');
+        debugPrint('[BT Init] Windows - Adapter state: $adapterState, treating as available: $isAvailable');
         return isAvailable;
       }
       
@@ -148,8 +154,8 @@ class MedicalBluetoothService extends ChangeNotifier {
     } catch (e) {
       debugPrint('[BT Init] Error checking Bluetooth state: $e');
       // On Windows, if we can't determine state, assume it's available
-      if (Platform.isWindows || kIsWeb) {
-        debugPrint('[BT Init] Windows/Web - Error occurred, assuming Bluetooth available');
+      if (!kIsWeb && Platform.isWindows) {
+        debugPrint('[BT Init] Windows - Error occurred, assuming Bluetooth available');
         return true;
       }
       return false;
@@ -157,7 +163,15 @@ class MedicalBluetoothService extends ChangeNotifier {
   }
 
   /// Start scanning for Raspberry Pi devices
+  /// Note: On Web platform, this method is not supported. Use WebBleService.requestDevice() instead.
   Future<void> startScan({Duration timeout = const Duration(seconds: 30)}) async {
+    // Web Bluetooth does not support background scanning
+    if (kIsWeb) {
+      _setError('Web Bluetooth requires user interaction. Please use the "Select Device" button.');
+      debugPrint('[Scan] Web platform - background scanning not supported');
+      return;
+    }
+    
     if (_isScanning) {
       debugPrint('Already scanning');
       return;
@@ -354,7 +368,8 @@ class MedicalBluetoothService extends ChangeNotifier {
         },
       );
 
-      if (Platform.isWindows) {
+      // WinBle specific connection monitoring (Windows only, not Web)
+      if (!kIsWeb && Platform.isWindows) {
         _winBleConnectionSubscription?.cancel();
         final address = device.remoteId.str;
         _winBleConnectionSubscription =

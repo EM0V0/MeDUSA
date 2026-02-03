@@ -18,19 +18,30 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="MeDUSA - Medical Device Universal Sensor Application">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="medusa_app">
+  <meta name="apple-mobile-web-app-title" content="MeDUSA">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>medusa_app</title>
+  <title>MeDUSA</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- 
+    Web Bluetooth API Notes:
+    - Requires HTTPS or localhost (secure context)
+    - Only supported in Chrome, Edge, Opera (Chromium-based browsers)
+    - Safari and Firefox do NOT support Web Bluetooth
+    - User interaction required to trigger device selection dialog
+    
+    For development on localhost, Web Bluetooth will work.
+    For production, ensure HTTPS is configured.
+  -->
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

@@ -43,6 +43,14 @@ class BluetoothAdapter {
       return true;
     }
 
+    // Web platform uses WebBleService, not this adapter
+    if (kIsWeb) {
+      debugPrint('[BluetoothAdapter] Web platform - use WebBleService instead');
+      _isInitialized = true;
+      _setStatus('Initialized (Web - use WebBleService)');
+      return true;
+    }
+
     try {
       if (Platform.isWindows) {
         debugPrint('[BluetoothAdapter] Using WinBle for Windows');
@@ -94,6 +102,14 @@ class BluetoothAdapter {
     _discoveredDevices.clear();
     _devicesController.add([]);
     _setStatus('Scanning...');
+
+    // Web platform doesn't support background scanning
+    if (kIsWeb) {
+      debugPrint('[BluetoothAdapter] Web platform - background scanning not supported');
+      _isScanning = false;
+      _setStatus('Web: Use device selection dialog');
+      return;
+    }
 
     if (Platform.isWindows) {
       // Use WinBle

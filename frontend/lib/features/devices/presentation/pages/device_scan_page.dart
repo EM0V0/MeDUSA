@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as flutter_blue_plus;
@@ -14,6 +15,7 @@ import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
 import '../../../../shared/services/bluetooth_service.dart' show MedicalBluetoothService;
 import '../../../../shared/services/network_service.dart';
+import '../../../../shared/services/web_ble_service.dart';
 import '../../../../shared/services/winble_wifi_helper_service.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 
@@ -27,6 +29,8 @@ class DeviceScanPage extends StatefulWidget {
 class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStateMixin {
   final MedicalBluetoothService _bluetoothService = MedicalBluetoothService();
   final WinBleWiFiHelperService _wifiService = WinBleWiFiHelperService();
+  // Web Bluetooth service for browser platform
+  final WebBleService? _webBleService = kIsWeb ? WebBleService() : null;
   late AnimationController _scanAnimationController;
   late Animation<double> _scanAnimation;
   
@@ -39,6 +43,7 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
   List<BluetoothDevice> _discoveredDevices = [];
   String _statusMessage = 'Ready to scan';
   bool _isInitialized = false;
+  bool _isWebConnecting = false;
 
   @override
   void initState() {
@@ -108,6 +113,8 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
     if (_wifiServiceListener != null) {
       _wifiService.removeListener(_wifiServiceListener!);
     }
+    // Dispose Web Bluetooth service
+    _webBleService?.dispose();
     super.dispose();
   }
 
@@ -272,24 +279,59 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
             ),
           ),
           if (!isScanning && !isConnected)
-            ElevatedButton.icon(
-              onPressed: _startScan,
-              icon: Icon(
-                Icons.search_rounded,
-                size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
-              ),
-              label: Text(
-                'Scan',
-                style: FontUtils.body(
-                  context: context,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Web platform: Show device selection button
+                if (kIsWeb) ...[
+                  ElevatedButton.icon(
+                    onPressed: _isWebConnecting ? null : _selectWebBluetoothDevice,
+                    icon: _isWebConnecting 
+                      ? SizedBox(
+                          width: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
+                          height: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
+                          child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Icon(
+                          Icons.bluetooth_searching_rounded,
+                          size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
+                        ),
+                    label: Text(
+                      _isWebConnecting ? 'Connecting...' : 'Select Device',
+                      style: FontUtils.body(
+                        context: context,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                    ),
+                  ),
+                ] else ...[
+                  // Non-web platform: Show scan button
+                  ElevatedButton.icon(
+                    onPressed: _startScan,
+                    icon: Icon(
+                      Icons.search_rounded,
+                      size: IconUtils.getResponsiveIconSize(IconSizeType.small, context),
+                    ),
+                    label: Text(
+                      'Scan',
+                      style: FontUtils.body(
+                        context: context,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                    ),
+                  ),
+                ],
+              ],
             )
           else if (isScanning)
             ElevatedButton.icon(
@@ -921,6 +963,74 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
   Future<void> _stopScan() async {
     _scanAnimationController.stop();
     await _bluetoothService.stopScan();
+  }
+
+  /// Web Bluetooth: Request device selection via browser dialog
+  Future<void> _selectWebBluetoothDevice() async {
+    if (_webBleService == null) return;
+    
+    setState(() {
+      _isWebConnecting = true;
+      _statusMessage = 'Opening device selection...';
+    });
+
+    try {
+      // Request device - this opens the browser's BLE device picker
+      final device = await _webBleService!.requestDevice();
+      
+      if (device != null) {
+        setState(() {
+          _statusMessage = 'Connecting to ${device.name ?? "device"}...';
+        });
+        
+        // Connect to the selected device
+        final connected = await _webBleService!.connect(device);
+        
+        if (connected && mounted) {
+          setState(() {
+            _statusMessage = 'Connected to ${device.name ?? "device"}';
+          });
+          
+          // Show success message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Connected to ${device.name ?? "device"} via Web Bluetooth'),
+                backgroundColor: AppColors.success,
+              ),
+            );
+          }
+        } else {
+          setState(() {
+            _statusMessage = 'Connection failed';
+          });
+        }
+      } else {
+        setState(() {
+          _statusMessage = 'No device selected';
+        });
+      }
+    } catch (e) {
+      debugPrint('[Web BLE] Error: $e');
+      setState(() {
+        _statusMessage = 'Error: ${e.toString().split(':').last.trim()}';
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Web Bluetooth Error: ${e.toString().split(':').last.trim()}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isWebConnecting = false;
+        });
+      }
+    }
   }
 
   Future<void> _connectToDevice(BluetoothDevice device) async {

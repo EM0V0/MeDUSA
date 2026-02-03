@@ -8,24 +8,56 @@ import 'package:flutter_blue_plus_windows/flutter_blue_plus_windows.dart'
 /// Facade that forwards FlutterBluePlus calls to the Windows implementation
 /// powered by win_ble when the app is running on desktop. Other platforms use
 /// the default FlutterBluePlus backend.
+/// 
+/// For Web platform, this adapter provides limited functionality as Web Bluetooth
+/// has a different paradigm (user-triggered device selection). Use WebBleService
+/// directly for full Web Bluetooth support.
 class FlutterBlueAdapter {
   static bool get _useWindows => !kIsWeb && Platform.isWindows;
+  static bool get _isWeb => kIsWeb;
 
-  static Future<bool> get isSupported async => _useWindows
-      ? fb_win.FlutterBluePlusWindows.isSupported
-      : fb.FlutterBluePlus.isSupported;
+  static Future<bool> get isSupported async {
+    if (_isWeb) {
+      // Web Bluetooth is handled separately via WebBleService
+      // Return true to not block initialization
+      return true;
+    }
+    return _useWindows
+        ? fb_win.FlutterBluePlusWindows.isSupported
+        : fb.FlutterBluePlus.isSupported;
+  }
 
-  static Stream<fb.BluetoothAdapterState> get adapterState => _useWindows
-      ? fb_win.FlutterBluePlusWindows.adapterState
-      : fb.FlutterBluePlus.adapterState;
+  static Stream<fb.BluetoothAdapterState> get adapterState {
+    if (_isWeb) {
+      // Web doesn't have direct adapter state access
+      // Return a stream that indicates unknown state
+      return Stream.value(fb.BluetoothAdapterState.unknown);
+    }
+    return _useWindows
+        ? fb_win.FlutterBluePlusWindows.adapterState
+        : fb.FlutterBluePlus.adapterState;
+  }
 
-  static Stream<List<fb.ScanResult>> get scanResults => _useWindows
-      ? fb_win.FlutterBluePlusWindows.scanResults
-      : fb.FlutterBluePlus.scanResults;
+  static Stream<List<fb.ScanResult>> get scanResults {
+    if (_isWeb) {
+      // Web Bluetooth doesn't support scan results stream
+      // Device selection is done through requestDevice() dialog
+      return Stream.value([]);
+    }
+    return _useWindows
+        ? fb_win.FlutterBluePlusWindows.scanResults
+        : fb.FlutterBluePlus.scanResults;
+  }
 
-  static List<fb.BluetoothDevice> get connectedDevices => _useWindows
-      ? fb_win.FlutterBluePlusWindows.connectedDevices
-      : fb.FlutterBluePlus.connectedDevices;
+  static List<fb.BluetoothDevice> get connectedDevices {
+    if (_isWeb) {
+      // Web Bluetooth doesn't expose connected devices list in the same way
+      return [];
+    }
+    return _useWindows
+        ? fb_win.FlutterBluePlusWindows.connectedDevices
+        : fb.FlutterBluePlus.connectedDevices;
+  }
 
   static Future<void> startScan({
     List<fb.Guid> withServices = const [],
@@ -34,6 +66,15 @@ class FlutterBlueAdapter {
     Duration? timeout,
     bool androidUsesFineLocation = false,
   }) async {
+    if (_isWeb) {
+      // Web Bluetooth doesn't support startScan
+      // Use WebBleService.requestDevice() instead
+      throw UnsupportedError(
+        'Web Bluetooth does not support background scanning. '
+        'Use WebBleService.requestDevice() to show device picker dialog.',
+      );
+    }
+    
     if (_useWindows) {
       await fb_win.FlutterBluePlusWindows.startScan(
         withServices: withServices,
@@ -53,6 +94,11 @@ class FlutterBlueAdapter {
   }
 
   static Future<void> stopScan() async {
+    if (_isWeb) {
+      // No-op for web
+      return;
+    }
+    
     if (_useWindows) {
       await fb_win.FlutterBluePlusWindows.stopScan();
     } else {

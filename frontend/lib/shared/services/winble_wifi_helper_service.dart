@@ -18,7 +18,10 @@ class WinBleWiFiHelperService extends ChangeNotifier {
   static final WinBleWiFiHelperService _instance = WinBleWiFiHelperService._internal();
   factory WinBleWiFiHelperService() => _instance;
   WinBleWiFiHelperService._internal() {
-    _setupPinChannelListener();
+    // Skip platform-specific setup on Web
+    if (!kIsWeb) {
+      _setupPinChannelListener();
+    }
   }
 
   final WinBleService _winBle = WinBleService();
