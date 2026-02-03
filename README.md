@@ -208,14 +208,14 @@ sam deploy --guided
 #### Step 4: Update Frontend Configuration
 Edit `frontend/lib/core/constants/app_constants.dart` with your API Gateway URL.
 
-### Environment Variables
+### Environment Variables (Required)
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `JWT_SECRET` | Secret key for JWT signing | Yes |
-| `USERS_TABLE` | DynamoDB users table name | Yes |
-| `SENDER_EMAIL` | Verified SES email address | Yes |
-| `USE_SES` | Enable AWS SES (`true`/`false`) | Yes |
+| Variable | Description |
+|----------|-------------|
+| `JWT_SECRET` | Secret key for JWT signing |
+| `USERS_TABLE` | DynamoDB users table name |
+| `SENDER_EMAIL` | Verified SES email address |
+| `USE_SES` | Enable AWS SES (`true`/`false`) |
 
 See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for comprehensive deployment instructions.
 
