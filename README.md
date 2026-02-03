@@ -1,4 +1,4 @@
-# 🏥 MeDUSA - Medical Device Unified Security & Analytics
+# MeDUSA - Medical Device Unified Security & Analytics
 
 <div align="center">
 
@@ -12,13 +12,13 @@
 
 *Bridging the Gap Between Theory and Practice in Healthcare Security*
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Learning Modules](#-learning-modules) • [Deployment](#-deployment) • [Documentation](#-documentation)
+[Features](#features) • [Quick Start](#quick-start) • [Learning Modules](#learning-modules) • [Deployment](#deployment) • [Documentation](#documentation)
 
 </div>
 
 ---
 
-## 📖 Overview
+## Overview
 
 **MeDUSA** (Medical Device Unified Security & Analytics) is an open-source educational platform designed to teach medical device cybersecurity through hands-on experience. Built as a realistic Parkinson's disease tremor monitoring system, MeDUSA provides students with a safe, controlled environment to learn and practice security concepts critical to healthcare technology.
 
@@ -26,16 +26,16 @@
 
 The medical device industry faces a critical shortage of cybersecurity professionals who understand both healthcare requirements and security principles. Traditional classroom instruction often fails to provide the practical experience needed to develop real-world skills. MeDUSA addresses this gap by offering:
 
-- 🎯 **Real-World Simulation**: A fully functional medical device ecosystem
-- 🔐 **Security-First Design**: Implementations following FDA guidance and industry standards  
-- 📚 **Comprehensive Curriculum**: From basic concepts to advanced penetration testing
-- 🛠️ **Practical Labs**: Hands-on exercises with intentional vulnerabilities to discover and fix
+- **Real-World Simulation**: A fully functional medical device ecosystem
+- **Security-First Design**: Implementations following FDA guidance and industry standards  
+- **Comprehensive Curriculum**: From basic concepts to advanced penetration testing
+- **Practical Labs**: Hands-on exercises with intentional vulnerabilities to discover and fix
 
 ---
 
-## ✨ Features
+## Features
 
-### 🏥 Clinical Features
+### Clinical Features
 | Feature | Description |
 |---------|-------------|
 | **Real-time Tremor Monitoring** | Live visualization of Parkinsonian tremor data with Demo Mode |
@@ -44,7 +44,7 @@ The medical device industry faces a critical shortage of cybersecurity professio
 | **Data Analytics** | Statistical analysis with frequency domain processing |
 | **Multi-Role Access** | Patient, Doctor, and Administrator interfaces |
 
-### 🔒 Security Features
+### Security Features
 | Feature | Implementation |
 |---------|----------------|
 | **Authentication** | JWT-based auth with mandatory MFA (TOTP) |
@@ -54,17 +54,17 @@ The medical device industry faces a critical shortage of cybersecurity professio
 | **Audit Logging** | Comprehensive security event tracking |
 | **Replay Protection** | Nonce-based request validation |
 
-### 📱 Platform Support
-- ✅ Web Application (Primary)
-- ✅ Windows Desktop *(Full BLE support)*
-- ✅ Android Mobile
-- ✅ iOS Mobile (requires Mac for build)
+### Platform Support
+- Web Application (Primary)
+- Windows Desktop *(Full BLE support)*
+- Android Mobile
+- iOS Mobile (requires Mac for build)
 
 > **Note on Bluetooth:** Currently, only the **Windows desktop** version has fully implemented Bluetooth Low Energy (BLE) connectivity for medical device pairing. The Windows BLE implementation includes device scanning, pairing, WiFi provisioning, and real-time data collection. Other platforms use simulated data or require additional development.
 
 ---
 
-## 🎓 Learning Modules
+## Learning Modules
 
 MeDUSA supports a progressive learning path for medical device security:
 
@@ -100,7 +100,7 @@ MeDUSA supports a progressive learning path for medical device security:
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - [Flutter SDK](https://flutter.dev/docs/get-started/install) 3.x or later
@@ -136,7 +136,7 @@ pip install -r requirements.txt
 .\start_local.ps1
 ```
 
-### 🎮 Demo Mode
+### Demo Mode
 No hardware device? No problem! MeDUSA includes a **Demo Mode** that generates realistic simulated tremor data:
 
 1. Log in to the dashboard
@@ -148,7 +148,7 @@ This is perfect for demonstrations, training sessions, and learning without phys
 
 ---
 
-## 🛠️ Deployment
+## Deployment
 
 ### Architecture Overview
 
@@ -221,7 +221,7 @@ See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for comprehensive deployment 
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 ### Core Documentation
 | Document | Description |
@@ -230,7 +230,7 @@ See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for comprehensive deployment 
 | [Deployment Guide](DEPLOYMENT_GUIDE.md) | Detailed deployment instructions |
 | [Reproducibility Guide](doc_assets/Reproducibility_Guide.md) | Setup and simulation guide |
 
-### Security & Compliance
+### Security and Compliance
 | Document | Description |
 |----------|-------------|
 | [FDA Premarket Checklist](doc_assets/FDA_Premarket_Cybersecurity_Checklist.md) | FDA cybersecurity requirements mapping |
@@ -248,33 +248,33 @@ See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for comprehensive deployment 
 
 ---
 
-## 🎯 Skills You'll Develop
+## Skills You'll Develop
 
 By working with MeDUSA, students will gain practical skills in:
 
 ### Technical Skills
-- 🔧 Full-stack development (Flutter + Python + AWS)
-- 🔐 Implementing secure authentication systems
-- 📡 Bluetooth Low Energy (BLE) communication
-- ☁️ Cloud deployment (AWS Lambda, DynamoDB, S3)
-- 🔍 Security testing and vulnerability assessment
+- Full-stack development (Flutter + Python + AWS)
+- Implementing secure authentication systems
+- Bluetooth Low Energy (BLE) communication
+- Cloud deployment (AWS Lambda, DynamoDB, S3)
+- Security testing and vulnerability assessment
 
 ### Domain Knowledge
-- 🏥 Medical device regulatory requirements
-- 📋 FDA premarket cybersecurity guidance
-- 📊 Healthcare data protection principles
-- 🛡️ STRIDE threat modeling methodology
-- 📝 Security documentation standards
+- Medical device regulatory requirements
+- FDA premarket cybersecurity guidance
+- Healthcare data protection principles
+- STRIDE threat modeling methodology
+- Security documentation standards
 
 ### Professional Skills
-- 📄 Writing security assessment reports
-- 🎯 Conducting risk analysis
-- 🤝 Communicating security findings to stakeholders
-- 📈 Prioritizing remediation efforts
+- Writing security assessment reports
+- Conducting risk analysis
+- Communicating security findings to stakeholders
+- Prioritizing remediation efforts
 
 ---
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 MeDUSA/
@@ -305,7 +305,7 @@ MeDUSA/
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 MeDUSA welcomes contributions from educators and students:
 
@@ -316,24 +316,24 @@ MeDUSA welcomes contributions from educators and students:
 
 ---
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 **MeDUSA is designed for educational purposes only.**
 
-- ❌ This is NOT a certified medical device
-- ❌ Do NOT use for actual patient care
-- ⚠️ Some features intentionally include vulnerabilities for learning
-- ✅ Always conduct security testing in authorized environments only
+- This is NOT a certified medical device
+- Do NOT use for actual patient care
+- Some features intentionally include vulnerabilities for learning
+- Always conduct security testing in authorized environments only
 
 ---
 
-## 📜 License
+## License
 
 This project is released for **educational and research purposes**.
 
 ---
 
-## 👨‍💻 Author
+## Author
 
 <div align="center">
 
@@ -345,7 +345,7 @@ MeDUSA was designed and built as a comprehensive educational platform to address
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **Michael Rushanan** and his *Medical Device Cybersecurity* course at Johns Hopkins University for providing the educational framework, learning materials, and expert guidance that shaped this platform
 - Flutter and Dart teams for the excellent cross-platform framework
@@ -359,7 +359,7 @@ MeDUSA was designed and built as a comprehensive educational platform to address
 
 **Ready to start your medical device security journey?**
 
-[🚀 Get Started](#-quick-start) | [📚 Documentation](#-documentation) | [🐛 Report Issue](https://github.com/EM0V0/MeDUSA/issues)
+[Get Started](#quick-start) | [Documentation](#documentation) | [Report Issue](https://github.com/EM0V0/MeDUSA/issues)
 
 ---
 
