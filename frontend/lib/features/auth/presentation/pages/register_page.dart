@@ -27,7 +27,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _confirmPasswordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
-  String _selectedRole = 'doctor';
+  String _selectedRole = 'patient';  // Default to patient (admin not available for self-registration)
 
   @override
   void dispose() {
@@ -167,9 +167,9 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'doctor', child: Text('Doctor')),
                       DropdownMenuItem(value: 'patient', child: Text('Patient')),
-                      DropdownMenuItem(value: 'admin', child: Text('Administrator')),
+                      DropdownMenuItem(value: 'doctor', child: Text('Doctor')),
+                      // Note: Admin accounts can only be created by existing admins
                     ],
                     onChanged: (value) {
                       setState(() {

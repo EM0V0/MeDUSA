@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../../features/admin/presentation/pages/user_management_page.dart';
+import '../../features/admin/presentation/pages/device_management_page.dart';
+import '../../features/admin/presentation/pages/system_settings_page.dart';
+import '../../features/admin/presentation/pages/audit_logs_page.dart';
 import '../../features/devices/presentation/pages/device_connection_page.dart';
 import '../../features/devices/presentation/pages/device_scan_page.dart';
 import '../../features/devices/presentation/pages/wifi_provision_page.dart';
@@ -153,6 +156,30 @@ class AppRouter {
             pageBuilder: (context, state) => NoTransitionPage(
               key: state.pageKey,
               child: const UserManagementPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/device-management',
+            name: 'device-management',
+            pageBuilder: (context, state) => NoTransitionPage(
+              key: state.pageKey,
+              child: const DeviceManagementPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/system-settings',
+            name: 'system-settings',
+            pageBuilder: (context, state) => NoTransitionPage(
+              key: state.pageKey,
+              child: const SystemSettingsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/audit-logs',
+            name: 'audit-logs',
+            pageBuilder: (context, state) => NoTransitionPage(
+              key: state.pageKey,
+              child: const AuditLogsPage(),
             ),
           ),
 

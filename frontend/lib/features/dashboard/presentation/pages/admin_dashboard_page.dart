@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -407,13 +408,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   Widget _buildActionCard(_AdminAction action) {
     return InkWell(
       onTap: () {
-        // TODO: Navigate to action.route
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Navigating to ${action.title}...'),
-            backgroundColor: action.color,
-          ),
-        );
+        // Navigate to the action route
+        context.go(action.route);
       },
       borderRadius: BorderRadius.circular(12.r),
       child: Container(

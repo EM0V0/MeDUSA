@@ -31,7 +31,7 @@ class _RegisterPageWithVerificationState extends State<RegisterPageWithVerificat
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isVerificationStep = false;
-  String _selectedRole = 'doctor';
+  String _selectedRole = 'patient';  // Default to patient (admin not available for self-registration)
   String _registrationEmail = '';
 
   @override
@@ -298,9 +298,9 @@ class _RegisterPageWithVerificationState extends State<RegisterPageWithVerificat
             ),
           ),
           items: const [
-            DropdownMenuItem(value: 'doctor', child: Text('Doctor')),
             DropdownMenuItem(value: 'patient', child: Text('Patient')),
-            DropdownMenuItem(value: 'admin', child: Text('Administrator')),
+            DropdownMenuItem(value: 'doctor', child: Text('Doctor')),
+            // Note: Admin accounts can only be created by existing admins
           ],
           onChanged: (value) {
             setState(() {
