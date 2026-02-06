@@ -44,52 +44,52 @@ This document provides a comprehensive threat model for the MeDUSA (Medical Data
 ## 3. Data Flow Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              MeDUSA System                                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────────┐      HTTPS/TLS 1.3      ┌──────────────────────────────┐ │
-│  │              │ ◄──────────────────────► │                              │ │
-│  │   Flutter    │                          │       AWS API Gateway        │ │
-│  │   Mobile/    │                          │       (REST API)             │ │
-│  │   Desktop    │                          └──────────────┬───────────────┘ │
-│  │   App        │                                         │                 │
-│  │              │                                         │ IAM Auth        │
-│  └──────────────┘                                         ▼                 │
-│         │                                   ┌──────────────────────────────┐ │
-│         │ BLE                               │                              │ │
-│         ▼                                   │       Lambda Functions       │ │
-│  ┌──────────────┐                          │       (medusa-api-v3)        │ │
-│  │              │                          │                              │ │
-│  │  Raspberry   │ ─── MQTT/TLS ───────────► │  ┌────────────────────────┐ │ │
-│  │     Pi       │                          │  │  Auth    │  RBAC       │ │ │
-│  │   Device     │                          │  │  Module  │  Module     │ │ │
-│  │              │                          │  └──────────┴─────────────┘ │ │
-│  └──────────────┘                          └──────────────┬───────────────┘ │
-│                                                           │                 │
-│                                                           │ IAM Auth        │
-│                                                           ▼                 │
-│                                            ┌──────────────────────────────┐ │
-│                                            │                              │ │
-│                                            │       Data Stores            │ │
-│                                            │  ┌─────────┐ ┌─────────┐    │ │
-│                                            │  │DynamoDB │ │   S3    │    │ │
-│                                            │  │ Tables  │ │ Bucket  │    │ │
-│                                            │  └─────────┘ └─────────┘    │ │
-│                                            │                              │ │
-│                                            └──────────────────────────────┘ │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────�?
+�?                             MeDUSA System                                   �?
+├─────────────────────────────────────────────────────────────────────────────�?
+�?                                                                             �?
+�? ┌──────────────�?     HTTPS/TLS 1.3      ┌──────────────────────────────�?�?
+�? �?             �?◄──────────────────────�?�?                             �?�?
+�? �?  Flutter    �?                         �?      AWS API Gateway        �?�?
+�? �?  Mobile/    �?                         �?      (REST API)             �?�?
+�? �?  Desktop    �?                         └──────────────┬───────────────�?�?
+�? �?  App        �?                                        �?                �?
+�? �?             �?                                        �?IAM Auth        �?
+�? └──────────────�?                                        �?                �?
+�?        �?                                  ┌──────────────────────────────�?�?
+�?        �?BLE                               �?                             �?�?
+�?        �?                                  �?      Lambda Functions       �?�?
+�? ┌──────────────�?                         �?      (medusa-api-v3)        �?�?
+�? �?             �?                         �?                             �?�?
+�? �? Raspberry   �?─── MQTT/TLS ───────────�?�? ┌────────────────────────�?�?�?
+�? �?    Pi       �?                         �? �? Auth    �? RBAC       �?�?�?
+�? �?  Device     �?                         �? �? Module  �? Module     �?�?�?
+�? �?             �?                         �? └──────────┴─────────────�?�?�?
+�? └──────────────�?                         └──────────────┬───────────────�?�?
+�?                                                          �?                �?
+�?                                                          �?IAM Auth        �?
+�?                                                          �?                �?
+�?                                           ┌──────────────────────────────�?�?
+�?                                           �?                             �?�?
+�?                                           �?      Data Stores            �?�?
+�?                                           �? ┌─────────�?┌─────────�?   �?�?
+�?                                           �? │DynamoDB �?�?  S3    �?   �?�?
+�?                                           �? �?Tables  �?�?Bucket  �?   �?�?
+�?                                           �? └─────────�?└─────────�?   �?�?
+�?                                           �?                             �?�?
+�?                                           └──────────────────────────────�?�?
+�?                                                                             �?
+└─────────────────────────────────────────────────────────────────────────────�?
 ```
 
 ### 3.1 Trust Boundaries
 
 | Boundary | Components | Trust Level |
 |----------|------------|-------------|
-| **TB1** | User Device ↔ Internet | Untrusted |
-| **TB2** | Internet ↔ API Gateway | Semi-trusted (TLS protected) |
-| **TB3** | API Gateway ↔ Lambda | Trusted (AWS internal) |
-| **TB4** | Lambda ↔ DynamoDB/S3 | Trusted (AWS internal, IAM controlled) |
+| **TB1** | User Device �?Internet | Untrusted |
+| **TB2** | Internet �?API Gateway | Semi-trusted (TLS protected) |
+| **TB3** | API Gateway �?Lambda | Trusted (AWS internal) |
+| **TB4** | Lambda �?DynamoDB/S3 | Trusted (AWS internal, IAM controlled) |
 
 ---
 
@@ -99,54 +99,54 @@ This document provides a comprehensive threat model for the MeDUSA (Medical Data
 
 | ID | Threat | Attack Vector | Impact | Likelihood | Mitigation | Status |
 |----|--------|---------------|--------|------------|------------|--------|
-| S1 | User impersonation | Stolen credentials | High | Medium | MFA, strong password policy | ✅ Implemented |
-| S2 | Session hijacking | Token theft | High | Low | Short-lived tokens, HTTPS only | ✅ Implemented |
-| S3 | Device spoofing | Fake device registration | Medium | Low | Device authentication, admin approval | ✅ Implemented |
-| S4 | API spoofing | Man-in-the-middle | High | Low | TLS 1.3, certificate validation | ✅ Implemented |
+| S1 | User impersonation | Stolen credentials | High | Medium | MFA, strong password policy | �?Implemented |
+| S2 | Session hijacking | Token theft | High | Low | Short-lived tokens, HTTPS only | �?Implemented |
+| S3 | Device spoofing | Fake device registration | Medium | Low | Device authentication, admin approval | �?Implemented |
+| S4 | API spoofing | Man-in-the-middle | High | Low | TLS 1.3, certificate validation | �?Implemented |
 
 ### 4.2 Tampering (Data Integrity)
 
 | ID | Threat | Attack Vector | Impact | Likelihood | Mitigation | Status |
 |----|--------|---------------|--------|------------|------------|--------|
-| T1 | Tremor data modification | API parameter tampering | High | Low | Input validation, audit logging | ✅ Implemented |
-| T2 | Patient record tampering | Unauthorized API calls | High | Low | RBAC, audit logging | ✅ Implemented |
-| T3 | JWT token modification | Token forgery | Critical | Very Low | HS256 signature verification | ✅ Implemented |
+| T1 | Tremor data modification | API parameter tampering | High | Low | Input validation, audit logging | �?Implemented |
+| T2 | Patient record tampering | Unauthorized API calls | High | Low | RBAC, audit logging | �?Implemented |
+| T3 | JWT token modification | Token forgery | Critical | Very Low | HS256 signature verification | �?Implemented |
 | T4 | Request replay | Replay captured requests | Medium | Low | Timestamp validation, nonce | ⚠️ Partial |
 
 ### 4.3 Repudiation (Non-repudiation)
 
 | ID | Threat | Attack Vector | Impact | Likelihood | Mitigation | Status |
 |----|--------|---------------|--------|------------|------------|--------|
-| R1 | Deny data access | No audit trail | Medium | Medium | CloudWatch logging | ✅ Implemented |
-| R2 | Deny treatment decisions | Missing timestamps | High | Low | Immutable timestamps in DynamoDB | ✅ Implemented |
-| R3 | Deny device actions | No device logging | Medium | Medium | Session-based tracking | ✅ Implemented |
+| R1 | Deny data access | No audit trail | Medium | Medium | CloudWatch logging | �?Implemented |
+| R2 | Deny treatment decisions | Missing timestamps | High | Low | Immutable timestamps in DynamoDB | �?Implemented |
+| R3 | Deny device actions | No device logging | Medium | Medium | Session-based tracking | �?Implemented |
 
 ### 4.4 Information Disclosure (Confidentiality)
 
 | ID | Threat | Attack Vector | Impact | Likelihood | Mitigation | Status |
 |----|--------|---------------|--------|------------|------------|--------|
-| I1 | Patient data leak | Unauthorized access | Critical | Low | RBAC, encryption at rest | ✅ Implemented |
-| I2 | Credential exposure | Log leakage | High | Low | Sensitive data masking | ✅ Implemented |
-| I3 | API key exposure | Source code leak | High | Low | Environment variables, Secrets Manager | ✅ Implemented |
-| I4 | Error message disclosure | Verbose errors | Low | Medium | Sanitized error responses | ✅ Implemented |
+| I1 | Patient data leak | Unauthorized access | Critical | Low | RBAC, encryption at rest | �?Implemented |
+| I2 | Credential exposure | Log leakage | High | Low | Sensitive data masking | �?Implemented |
+| I3 | API key exposure | Source code leak | High | Low | Environment variables, Secrets Manager | �?Implemented |
+| I4 | Error message disclosure | Verbose errors | Low | Medium | Sanitized error responses | �?Implemented |
 
 ### 4.5 Denial of Service (Availability)
 
 | ID | Threat | Attack Vector | Impact | Likelihood | Mitigation | Status |
 |----|--------|---------------|--------|------------|------------|--------|
-| D1 | API flooding | High request volume | Medium | Medium | API Gateway throttling | ✅ Implemented |
-| D2 | Authentication brute force | Login attempts | Medium | Medium | Rate limiting (5 req/min) | ✅ Implemented |
-| D3 | Lambda exhaustion | Resource-heavy requests | Medium | Low | Lambda concurrency limits | ✅ Implemented |
-| D4 | Database throttling | High read/write | Medium | Low | DynamoDB on-demand billing | ✅ Implemented |
+| D1 | API flooding | High request volume | Medium | Medium | API Gateway throttling | �?Implemented |
+| D2 | Authentication brute force | Login attempts | Medium | Medium | Rate limiting (5 req/min) | �?Implemented |
+| D3 | Lambda exhaustion | Resource-heavy requests | Medium | Low | Lambda concurrency limits | �?Implemented |
+| D4 | Database throttling | High read/write | Medium | Low | DynamoDB on-demand billing | �?Implemented |
 
 ### 4.6 Elevation of Privilege
 
 | ID | Threat | Attack Vector | Impact | Likelihood | Mitigation | Status |
 |----|--------|---------------|--------|------------|------------|--------|
-| E1 | Patient to Doctor | Role parameter injection | Critical | Very Low | Server-side role assignment | ✅ Implemented |
-| E2 | Doctor to Admin | Token manipulation | Critical | Very Low | JWT signature verification | ✅ Implemented |
-| E3 | Cross-patient access | IDOR vulnerability | High | Low | Patient ID validation in RBAC | ✅ Implemented |
-| E4 | Lambda function escalation | IAM misconfiguration | High | Very Low | Least privilege IAM roles | ✅ Implemented |
+| E1 | Patient to Doctor | Role parameter injection | Critical | Very Low | Server-side role assignment | �?Implemented |
+| E2 | Doctor to Admin | Token manipulation | Critical | Very Low | JWT signature verification | �?Implemented |
+| E3 | Cross-patient access | IDOR vulnerability | High | Low | Patient ID validation in RBAC | �?Implemented |
+| E4 | Lambda function escalation | IAM misconfiguration | High | Very Low | Least privilege IAM roles | �?Implemented |
 
 ---
 
@@ -157,18 +157,18 @@ This document provides a comprehensive threat model for the MeDUSA (Medical Data
 ```
 Goal: Access Patient Health Data Without Authorization
 ├── 1. Compromise User Account
-│   ├── 1.1 Credential Theft [MITIGATED: MFA]
-│   │   ├── 1.1.1 Phishing
-│   │   └── 1.1.2 Keylogger
-│   ├── 1.2 Session Hijacking [MITIGATED: HTTPS, Short tokens]
-│   └── 1.3 Brute Force [MITIGATED: Rate limiting]
+�?  ├── 1.1 Credential Theft [MITIGATED: MFA]
+�?  �?  ├── 1.1.1 Phishing
+�?  �?  └── 1.1.2 Keylogger
+�?  ├── 1.2 Session Hijacking [MITIGATED: HTTPS, Short tokens]
+�?  └── 1.3 Brute Force [MITIGATED: Rate limiting]
 ├── 2. Exploit API Vulnerabilities
-│   ├── 2.1 IDOR (Insecure Direct Object Reference) [MITIGATED: RBAC checks]
-│   ├── 2.2 SQL/NoSQL Injection [MITIGATED: Pydantic validation]
-│   └── 2.3 Broken Access Control [MITIGATED: Role-based middleware]
+�?  ├── 2.1 IDOR (Insecure Direct Object Reference) [MITIGATED: RBAC checks]
+�?  ├── 2.2 SQL/NoSQL Injection [MITIGATED: Pydantic validation]
+�?  └── 2.3 Broken Access Control [MITIGATED: Role-based middleware]
 ├── 3. Intercept Data in Transit
-│   ├── 3.1 Man-in-the-Middle [MITIGATED: TLS 1.3]
-│   └── 3.2 SSL Stripping [MITIGATED: HSTS headers]
+�?  ├── 3.1 Man-in-the-Middle [MITIGATED: TLS 1.3]
+�?  └── 3.2 SSL Stripping [MITIGATED: HSTS headers]
 └── 4. Access Data at Rest
     ├── 4.1 Database Compromise [MITIGATED: AWS encryption]
     └── 4.2 Backup Exposure [MITIGATED: AWS managed backups]
@@ -179,11 +179,11 @@ Goal: Access Patient Health Data Without Authorization
 ```
 Goal: Manipulate Medical Device or Data
 ├── 1. Spoof Device Identity
-│   ├── 1.1 Clone Device ID [MITIGATED: MAC binding]
-│   └── 1.2 Register Fake Device [MITIGATED: Admin approval]
+�?  ├── 1.1 Clone Device ID [MITIGATED: MAC binding]
+�?  └── 1.2 Register Fake Device [MITIGATED: Admin approval]
 ├── 2. Inject False Data
-│   ├── 2.1 Modify Sensor Readings [MITIGATED: Timestamp validation]
-│   └── 2.2 Replay Old Data [PARTIAL: Session tokens]
+�?  ├── 2.1 Modify Sensor Readings [MITIGATED: Timestamp validation]
+�?  └── 2.2 Replay Old Data [PARTIAL: Session tokens]
 └── 3. Disrupt Device Communication
     ├── 3.1 BLE Jamming [OUT OF SCOPE: Hardware]
     └── 3.2 API Flooding [MITIGATED: Rate limiting]
@@ -204,7 +204,7 @@ Goal: Manipulate Medical Device or Data
 
 ### 6.2 Risk Matrix
 
-| Impact ↓ Likelihood → | Very Low | Low | Medium | High |
+| Impact �?Likelihood �?| Very Low | Low | Medium | High |
 |----------------------|----------|-----|--------|------|
 | **Critical** | E1, E2 | I1 | | |
 | **High** | T4 | T2, I3, E3 | S1, T1 | |
