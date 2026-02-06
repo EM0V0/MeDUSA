@@ -4,8 +4,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
 import '../../../../core/auth/role_permissions.dart';
+import '../../data/services/admin_api_service.dart';
 
-/// Simplified User Management Page
+/// User Management Page - Uses real backend API
 /// Displays user list with basic filtering by role
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({super.key});
@@ -15,70 +16,52 @@ class UserManagementPage extends StatefulWidget {
 }
 
 class _UserManagementPageState extends State<UserManagementPage> {
+  final AdminApiService _adminApiService = AdminApiService();
+  
   String _searchQuery = '';
   String _selectedRole = 'all';
+  
+  List<UserItem> _users = [];
+  bool _isLoading = true;
+  String? _error;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadUsers();
+  }
+  
+  Future<void> _loadUsers() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    
+    try {
+      final response = await _adminApiService.getUsers(
+        role: _selectedRole == 'all' ? null : _selectedRole,
+      );
+      
+      if (response.success) {
+        setState(() {
+          _users = response.users;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _error = response.error ?? 'Failed to load users';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
 
-  // Mock data - matching backend roles: patient, doctor, admin
-  final List<_User> _users = [
-    _User(
-      id: '1',
-      name: 'Dr. Sarah Johnson',
-      email: 'sarah@medusa.com',
-      role: 'doctor',
-      createdAt: DateTime.now().subtract(const Duration(days: 30)),
-    ),
-    _User(
-      id: '2',
-      name: 'John Smith',
-      email: 'john@medusa.com',
-      role: 'patient',
-      createdAt: DateTime.now().subtract(const Duration(days: 15)),
-    ),
-    _User(
-      id: '3',
-      name: 'Dr. Michael Brown',
-      email: 'michael@medusa.com',
-      role: 'doctor',
-      createdAt: DateTime.now().subtract(const Duration(days: 45)),
-    ),
-    _User(
-      id: '4',
-      name: 'Emily Davis',
-      email: 'emily@medusa.com',
-      role: 'patient',
-      createdAt: DateTime.now().subtract(const Duration(days: 7)),
-    ),
-    _User(
-      id: '5',
-      name: 'Admin User',
-      email: 'admin@medusa.com',
-      role: 'admin',
-      createdAt: DateTime.now().subtract(const Duration(days: 90)),
-    ),
-    _User(
-      id: '6',
-      name: 'Dr. Lisa Wilson',
-      email: 'lisa@medusa.com',
-      role: 'doctor',
-      createdAt: DateTime.now().subtract(const Duration(days: 20)),
-    ),
-    _User(
-      id: '7',
-      name: 'Robert Johnson',
-      email: 'robert@medusa.com',
-      role: 'patient',
-      createdAt: DateTime.now().subtract(const Duration(days: 5)),
-    ),
-    _User(
-      id: '8',
-      name: 'Dr. David Lee',
-      email: 'david@medusa.com',
-      role: 'doctor',
-      createdAt: DateTime.now().subtract(const Duration(days: 60)),
-    ),
-  ];
-
-  List<_User> get filteredUsers {
+  List<UserItem> get filteredUsers {
     return _users.where((user) {
       final matchesSearch = user.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           user.email.toLowerCase().contains(_searchQuery.toLowerCase());
@@ -95,10 +78,47 @@ class _UserManagementPageState extends State<UserManagementPage> {
         children: [
           _buildHeader(),
           _buildFiltersAndSearch(),
-          Expanded(child: _buildUsersList()),
+          Expanded(child: _buildContent()),
         ],
       ),
     );
+  }
+  
+  Widget _buildContent() {
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading users from server...'),
+          ],
+        ),
+      );
+    }
+    
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: AppColors.error),
+            SizedBox(height: 16.h),
+            Text('Error loading users', style: FontUtils.title(context: context)),
+            SizedBox(height: 8.h),
+            Text(_error!, style: TextStyle(color: Colors.grey[600])),
+            SizedBox(height: 16.h),
+            ElevatedButton(
+              onPressed: _loadUsers,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return _buildUsersList();
   }
 
   Widget _buildHeader() {
@@ -147,6 +167,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
               ],
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadUsers,
+            tooltip: 'Refresh users',
+          ),
+          SizedBox(width: 8.w),
           _buildRoleStats(),
         ],
       ),
@@ -232,7 +258,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
               DropdownMenuItem(value: 'doctor', child: Text('Doctors')),
               DropdownMenuItem(value: 'admin', child: Text('Admins')),
             ],
-            onChanged: (value) => setState(() => _selectedRole = value ?? 'all'),
+            onChanged: (value) {
+              setState(() => _selectedRole = value ?? 'all');
+              _loadUsers();
+            },
           ),
         ],
       ),
@@ -265,7 +294,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
     );
   }
 
-  Widget _buildUserCard(_User user) {
+  Widget _buildUserCard(UserItem user) {
     return Card(
       margin: EdgeInsets.only(bottom: 12.h),
       child: ListTile(
@@ -273,7 +302,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
         leading: CircleAvatar(
           backgroundColor: _getRoleColor(user.role),
           child: Text(
-            user.name[0].toUpperCase(),
+            user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
@@ -363,7 +392,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
-  void _showUserActions(_User user) {
+  void _showUserActions(UserItem user) {
     showModalBottomSheet(
       context: context,
       builder: (context) => Container(
@@ -384,9 +413,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
               title: const Text('Edit User'),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Edit feature coming soon')),
-                );
+                _showEditDialog(user);
               },
             ),
             ListTile(
@@ -402,8 +429,76 @@ class _UserManagementPageState extends State<UserManagementPage> {
       ),
     );
   }
+  
+  void _showEditDialog(UserItem user) {
+    String selectedRole = user.role;
+    final nameController = TextEditingController(text: user.name);
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit User'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              SizedBox(height: 16.h),
+              DropdownButtonFormField<String>(
+                value: selectedRole,
+                decoration: const InputDecoration(labelText: 'Role'),
+                items: const [
+                  DropdownMenuItem(value: 'patient', child: Text('Patient')),
+                  DropdownMenuItem(value: 'doctor', child: Text('Doctor')),
+                  DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                ],
+                onChanged: (value) {
+                  setDialogState(() => selectedRole = value ?? user.role);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                try {
+                  final success = await _adminApiService.updateUser(
+                    user.id,
+                    name: nameController.text,
+                    role: selectedRole,
+                  );
+                  
+                  if (success && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('User updated successfully')),
+                    );
+                    _loadUsers();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-  void _showUserDetails(_User user) {
+  void _showUserDetails(UserItem user) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -456,7 +551,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
     );
   }
 
-  void _confirmDelete(_User user) {
+  void _confirmDelete(UserItem user) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -468,12 +563,24 @@ class _UserManagementPageState extends State<UserManagementPage> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              setState(() => _users.removeWhere((u) => u.id == user.id));
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${user.name} deleted')),
-              );
+              try {
+                final success = await _adminApiService.deleteUser(user.id);
+                
+                if (success && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${user.name} deleted')),
+                  );
+                  _loadUsers();
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              }
             },
             child: const Text('Delete', style: TextStyle(color: AppColors.error)),
           ),
@@ -481,20 +588,4 @@ class _UserManagementPageState extends State<UserManagementPage> {
       ),
     );
   }
-}
-
-class _User {
-  final String id;
-  final String name;
-  final String email;
-  final String role;
-  final DateTime createdAt;
-
-  _User({
-    required this.id,
-    required this.name,
-    required this.email,
-    required this.role,
-    required this.createdAt,
-  });
 }

@@ -3,9 +3,10 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
+import '../../data/services/admin_api_service.dart';
 
 /// Audit Logs Page for Admin
-/// Displays system audit logs for security and compliance monitoring
+/// Displays system audit logs from the real backend API
 class AuditLogsPage extends StatefulWidget {
   const AuditLogsPage({super.key});
 
@@ -14,92 +15,72 @@ class AuditLogsPage extends StatefulWidget {
 }
 
 class _AuditLogsPageState extends State<AuditLogsPage> {
+  final AdminApiService _adminApiService = AdminApiService();
+  
   String _searchQuery = '';
   String _selectedEventType = 'all';
   String _selectedSeverity = 'all';
+  
+  List<AuditLogItem> _logs = [];
+  bool _isLoading = true;
+  String? _error;
+  String? _nextToken;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadLogs();
+  }
+  
+  Future<void> _loadLogs({bool loadMore = false}) async {
+    if (!loadMore) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
+    
+    try {
+      final response = await _adminApiService.getAuditLogs(
+        eventType: _selectedEventType == 'all' ? null : _selectedEventType,
+        severity: _selectedSeverity == 'all' ? null : _selectedSeverity,
+        limit: 100,
+        nextToken: loadMore ? _nextToken : null,
+      );
+      
+      if (response.success) {
+        setState(() {
+          if (loadMore) {
+            _logs.addAll(response.items);
+          } else {
+            _logs = response.items;
+          }
+          _nextToken = response.nextToken;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _error = response.error ?? 'Failed to load audit logs';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
 
-  // Mock audit log data
-  final List<_AuditLog> _logs = [
-    _AuditLog(
-      id: 'log_001',
-      eventType: 'AUTH_LOGIN_SUCCESS',
-      severity: 'INFO',
-      userId: 'usr_5170e6f3',
-      userEmail: 'andysun12@outlook.com',
-      action: 'User logged in successfully',
-      ipAddress: '128.220.159.215',
-      timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-    ),
-    _AuditLog(
-      id: 'log_002',
-      eventType: 'AUTH_LOGIN_FAILURE',
-      severity: 'WARNING',
-      userId: null,
-      userEmail: 'unknown@example.com',
-      action: 'Failed login attempt - invalid password',
-      ipAddress: '192.168.1.100',
-      timestamp: DateTime.now().subtract(const Duration(minutes: 15)),
-    ),
-    _AuditLog(
-      id: 'log_003',
-      eventType: 'DATA_CREATE',
-      severity: 'INFO',
-      userId: 'usr_e679f321',
-      userEmail: 'zsun54@jh.edu',
-      action: 'Created new patient session',
-      ipAddress: '128.220.159.215',
-      timestamp: DateTime.now().subtract(const Duration(hours: 1)),
-    ),
-    _AuditLog(
-      id: 'log_004',
-      eventType: 'AUTHZ_ACCESS_DENIED',
-      severity: 'ERROR',
-      userId: 'usr_5170e6f3',
-      userEmail: 'andysun12@outlook.com',
-      action: 'Attempted to access admin endpoint',
-      ipAddress: '128.220.159.215',
-      timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-    ),
-    _AuditLog(
-      id: 'log_005',
-      eventType: 'DEVICE_REGISTER',
-      severity: 'INFO',
-      userId: 'usr_48e4ea5b',
-      userEmail: 'baiyianying1999@gmail.com',
-      action: 'Registered new device dev_001',
-      ipAddress: '128.220.159.215',
-      timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-    ),
-    _AuditLog(
-      id: 'log_006',
-      eventType: 'SECURITY_RATE_LIMIT',
-      severity: 'CRITICAL',
-      userId: null,
-      userEmail: null,
-      action: 'Rate limit exceeded from IP',
-      ipAddress: '45.33.32.156',
-      timestamp: DateTime.now().subtract(const Duration(hours: 5)),
-    ),
-    _AuditLog(
-      id: 'log_007',
-      eventType: 'AUTH_MFA_SUCCESS',
-      severity: 'INFO',
-      userId: 'usr_e679f321',
-      userEmail: 'zsun54@jh.edu',
-      action: 'MFA verification successful',
-      ipAddress: '128.220.159.215',
-      timestamp: DateTime.now().subtract(const Duration(hours: 6)),
-    ),
-  ];
-
-  List<_AuditLog> get filteredLogs {
+  List<AuditLogItem> get filteredLogs {
+    if (_searchQuery.isEmpty) return _logs;
+    
     return _logs.where((log) {
-      final matchesSearch = log.action.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (log.userEmail?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
-          log.ipAddress.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesType = _selectedEventType == 'all' || log.eventType.startsWith(_selectedEventType);
-      final matchesSeverity = _selectedSeverity == 'all' || log.severity == _selectedSeverity;
-      return matchesSearch && matchesType && matchesSeverity;
+      final searchLower = _searchQuery.toLowerCase();
+      return (log.action?.toLowerCase().contains(searchLower) ?? false) ||
+          (log.userId?.toLowerCase().contains(searchLower) ?? false) ||
+          (log.ipAddress?.toLowerCase().contains(searchLower) ?? false) ||
+          log.eventType.toLowerCase().contains(searchLower);
     }).toList();
   }
 
@@ -111,10 +92,65 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
         children: [
           _buildHeader(),
           _buildFiltersAndSearch(),
-          Expanded(child: _buildLogsList()),
+          Expanded(child: _buildContent()),
         ],
       ),
     );
+  }
+  
+  Widget _buildContent() {
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading audit logs from server...'),
+          ],
+        ),
+      );
+    }
+    
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: AppColors.error),
+            SizedBox(height: 16.h),
+            Text('Error loading audit logs', style: FontUtils.title(context: context)),
+            SizedBox(height: 8.h),
+            Text(_error!, style: TextStyle(color: Colors.grey[600])),
+            SizedBox(height: 16.h),
+            ElevatedButton(
+              onPressed: _loadLogs,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    if (_logs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.history, size: 48, color: Colors.grey[400]),
+            SizedBox(height: 16.h),
+            Text('No audit logs found', style: FontUtils.title(context: context)),
+            SizedBox(height: 8.h),
+            Text(
+              'Audit logs will appear here as system events occur.',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return _buildLogsList();
   }
 
   Widget _buildHeader() {
@@ -154,7 +190,7 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
                 ),
                 SizedBox(height: 4.h),
                 Text(
-                  '${_logs.length} events recorded',
+                  '${_logs.length} events recorded • Real-time monitoring',
                   style: FontUtils.body(
                     context: context,
                     color: AppColors.lightOnSurfaceVariant,
@@ -163,56 +199,40 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
               ],
             ),
           ),
-          _buildSeverityStats(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSeverityStats() {
-    final info = _logs.where((l) => l.severity == 'INFO').length;
-    final warning = _logs.where((l) => l.severity == 'WARNING').length;
-    final error = _logs.where((l) => l.severity == 'ERROR').length;
-    final critical = _logs.where((l) => l.severity == 'CRITICAL').length;
-
-    return Row(
-      children: [
-        _buildStatChip('Info', info, AppColors.info),
-        SizedBox(width: 6.w),
-        _buildStatChip('Warn', warning, AppColors.warning),
-        SizedBox(width: 6.w),
-        _buildStatChip('Error', error, AppColors.error),
-        SizedBox(width: 6.w),
-        _buildStatChip('Critical', critical, Colors.purple),
-      ],
-    );
-  }
-
-  Widget _buildStatChip(String label, int count, Color color) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8.r),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8.w,
-            height: 8.w,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+          // Refresh button
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadLogs,
+            tooltip: 'Refresh logs',
           ),
-          SizedBox(width: 4.w),
-          Text(
-            count.toString(),
-            style: FontUtils.caption(
-              context: context,
-              color: color,
-              fontWeight: FontWeight.bold,
+          SizedBox(width: 8.w),
+          // Live indicator
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+            decoration: BoxDecoration(
+              color: AppColors.success.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20.r),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8.w,
+                  height: 8.h,
+                  decoration: const BoxDecoration(
+                    color: AppColors.success,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                SizedBox(width: 6.w),
+                Text(
+                  'Live',
+                  style: FontUtils.body(
+                    context: context,
+                    color: AppColors.success,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -223,46 +243,91 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
   Widget _buildFiltersAndSearch() {
     return Container(
       padding: EdgeInsets.all(16.w),
-      color: Colors.white,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: AppColors.lightDivider, width: 1),
+        ),
+      ),
       child: Row(
         children: [
+          // Search
           Expanded(
+            flex: 3,
             child: TextField(
+              onChanged: (value) => setState(() => _searchQuery = value),
               decoration: InputDecoration(
                 hintText: 'Search logs...',
                 prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: AppColors.lightBackground,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.r),
-                  borderSide: const BorderSide(color: AppColors.lightOutline),
+                  borderRadius: BorderRadius.circular(8.r),
+                  borderSide: BorderSide.none,
                 ),
-                contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
               ),
-              onChanged: (value) => setState(() => _searchQuery = value),
             ),
           ),
           SizedBox(width: 12.w),
-          DropdownButton<String>(
-            value: _selectedEventType,
-            items: const [
-              DropdownMenuItem(value: 'all', child: Text('All Events')),
-              DropdownMenuItem(value: 'AUTH', child: Text('Auth')),
-              DropdownMenuItem(value: 'DATA', child: Text('Data')),
-              DropdownMenuItem(value: 'DEVICE', child: Text('Device')),
-              DropdownMenuItem(value: 'SECURITY', child: Text('Security')),
-            ],
-            onChanged: (value) => setState(() => _selectedEventType = value ?? 'all'),
+          // Event Type Filter
+          Expanded(
+            flex: 2,
+            child: DropdownButtonFormField<String>(
+              value: _selectedEventType,
+              decoration: InputDecoration(
+                labelText: 'Event Type',
+                filled: true,
+                fillColor: AppColors.lightBackground,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8.r),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('All Events')),
+                DropdownMenuItem(value: 'AUTH', child: Text('Authentication')),
+                DropdownMenuItem(value: 'AUTHZ', child: Text('Authorization')),
+                DropdownMenuItem(value: 'DATA', child: Text('Data Access')),
+                DropdownMenuItem(value: 'DEVICE', child: Text('Device')),
+                DropdownMenuItem(value: 'SECURITY', child: Text('Security')),
+                DropdownMenuItem(value: 'SYSTEM', child: Text('System')),
+              ],
+              onChanged: (value) {
+                setState(() => _selectedEventType = value ?? 'all');
+                _loadLogs();
+              },
+            ),
           ),
           SizedBox(width: 12.w),
-          DropdownButton<String>(
-            value: _selectedSeverity,
-            items: const [
-              DropdownMenuItem(value: 'all', child: Text('All Severity')),
-              DropdownMenuItem(value: 'INFO', child: Text('Info')),
-              DropdownMenuItem(value: 'WARNING', child: Text('Warning')),
-              DropdownMenuItem(value: 'ERROR', child: Text('Error')),
-              DropdownMenuItem(value: 'CRITICAL', child: Text('Critical')),
-            ],
-            onChanged: (value) => setState(() => _selectedSeverity = value ?? 'all'),
+          // Severity Filter
+          Expanded(
+            flex: 2,
+            child: DropdownButtonFormField<String>(
+              value: _selectedSeverity,
+              decoration: InputDecoration(
+                labelText: 'Severity',
+                filled: true,
+                fillColor: AppColors.lightBackground,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8.r),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('All Levels')),
+                DropdownMenuItem(value: 'INFO', child: Text('Info')),
+                DropdownMenuItem(value: 'WARNING', child: Text('Warning')),
+                DropdownMenuItem(value: 'ERROR', child: Text('Error')),
+                DropdownMenuItem(value: 'CRITICAL', child: Text('Critical')),
+              ],
+              onChanged: (value) {
+                setState(() => _selectedSeverity = value ?? 'all');
+                _loadLogs();
+              },
+            ),
           ),
         ],
       ),
@@ -271,134 +336,184 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
 
   Widget _buildLogsList() {
     final logs = filteredLogs;
-
-    if (logs.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history_toggle_off, size: 64, color: Colors.grey[400]),
-            SizedBox(height: 16.h),
-            Text(
-              'No logs found',
-              style: FontUtils.title(context: context, color: Colors.grey[600]),
-            ),
-          ],
-        ),
-      );
-    }
-
+    
     return ListView.builder(
       padding: EdgeInsets.all(16.w),
-      itemCount: logs.length,
-      itemBuilder: (context, index) => _buildLogCard(logs[index]),
+      itemCount: logs.length + (_nextToken != null ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index >= logs.length) {
+          // Load more button
+          return Center(
+            child: Padding(
+              padding: EdgeInsets.all(16.w),
+              child: ElevatedButton(
+                onPressed: () => _loadLogs(loadMore: true),
+                child: const Text('Load More'),
+              ),
+            ),
+          );
+        }
+        
+        final log = logs[index];
+        return _buildLogCard(log);
+      },
     );
   }
 
-  Widget _buildLogCard(_AuditLog log) {
-    return Card(
+  Widget _buildLogCard(AuditLogItem log) {
+    return Container(
       margin: EdgeInsets.only(bottom: 8.h),
-      child: ExpansionTile(
-        leading: _buildSeverityIcon(log.severity),
-        title: Text(
-          log.eventType,
-          style: FontUtils.body(
-            context: context,
-            fontWeight: FontWeight.w600,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8.r),
+        border: Border(
+          left: BorderSide(
+            color: _getSeverityColor(log.severity),
+            width: 4.w,
           ),
         ),
-        subtitle: Text(
-          _formatTimestamp(log.timestamp),
-          style: FontUtils.caption(context: context, color: Colors.grey[600]),
-        ),
-        children: [
-          Padding(
-            padding: EdgeInsets.all(16.w),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildDetailRow('Action', log.action),
-                _buildDetailRow('User', log.userEmail ?? 'N/A'),
-                _buildDetailRow('IP Address', log.ipAddress),
-                _buildDetailRow('Log ID', log.id),
-              ],
-            ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
+      child: ListTile(
+        contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+        leading: _buildEventIcon(log.eventType),
+        title: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
+              decoration: BoxDecoration(
+                color: _getEventTypeColor(log.eventType).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4.r),
+              ),
+              child: Text(
+                log.eventType,
+                style: FontUtils.caption(
+                  context: context,
+                  color: _getEventTypeColor(log.eventType),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            SizedBox(width: 8.w),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+              decoration: BoxDecoration(
+                color: _getSeverityColor(log.severity).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4.r),
+              ),
+              child: Text(
+                log.severity,
+                style: FontUtils.caption(
+                  context: context,
+                  color: _getSeverityColor(log.severity),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(height: 4.h),
+            Text(
+              log.action ?? 'No action description',
+              style: FontUtils.body(context: context),
+            ),
+            SizedBox(height: 4.h),
+            Row(
+              children: [
+                if (log.userId != null) ...[
+                  Icon(Icons.person_outline, size: 12.sp, color: Colors.grey),
+                  SizedBox(width: 4.w),
+                  Text(
+                    log.userId!,
+                    style: FontUtils.caption(context: context, color: Colors.grey[600]),
+                  ),
+                  SizedBox(width: 12.w),
+                ],
+                Icon(Icons.computer, size: 12.sp, color: Colors.grey),
+                SizedBox(width: 4.w),
+                Text(
+                  log.ipAddress ?? 'Unknown IP',
+                  style: FontUtils.caption(context: context, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ],
+        ),
+        trailing: Text(
+          _formatTimestamp(log.timestampDateTime),
+          style: FontUtils.caption(context: context, color: Colors.grey[500]),
+        ),
+      ),
     );
   }
 
-  Widget _buildSeverityIcon(String severity) {
-    final color = _getSeverityColor(severity);
-    final icon = _getSeverityIcon(severity);
-    
+  Widget _buildEventIcon(String eventType) {
+    IconData icon;
+    if (eventType.startsWith('AUTH')) {
+      icon = Icons.lock_outline;
+    } else if (eventType.startsWith('AUTHZ')) {
+      icon = Icons.shield_outlined;
+    } else if (eventType.startsWith('DATA')) {
+      icon = Icons.storage_outlined;
+    } else if (eventType.startsWith('DEVICE')) {
+      icon = Icons.devices_outlined;
+    } else if (eventType.startsWith('SECURITY')) {
+      icon = Icons.security_outlined;
+    } else {
+      icon = Icons.info_outline;
+    }
+
     return Container(
       padding: EdgeInsets.all(8.w),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: _getEventTypeColor(eventType).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8.r),
       ),
-      child: Icon(icon, color: color, size: 20),
+      child: Icon(
+        icon,
+        color: _getEventTypeColor(eventType),
+        size: 20.sp,
+      ),
     );
   }
 
   Color _getSeverityColor(String severity) {
     switch (severity) {
-      case 'INFO':
-        return AppColors.info;
-      case 'WARNING':
-        return AppColors.warning;
+      case 'CRITICAL':
+        return Colors.red[700]!;
       case 'ERROR':
         return AppColors.error;
-      case 'CRITICAL':
-        return Colors.purple;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  IconData _getSeverityIcon(String severity) {
-    switch (severity) {
-      case 'INFO':
-        return Icons.info_outline;
       case 'WARNING':
-        return Icons.warning_outlined;
-      case 'ERROR':
-        return Icons.error_outline;
-      case 'CRITICAL':
-        return Icons.dangerous_outlined;
+        return AppColors.warning;
+      case 'INFO':
       default:
-        return Icons.help_outline;
+        return AppColors.success;
     }
   }
 
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 4.h),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100.w,
-            child: Text(
-              label,
-              style: FontUtils.body(
-                context: context,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: FontUtils.body(context: context),
-            ),
-          ),
-        ],
-      ),
-    );
+  Color _getEventTypeColor(String eventType) {
+    if (eventType.startsWith('AUTH')) {
+      return Colors.blue;
+    } else if (eventType.startsWith('AUTHZ')) {
+      return Colors.orange;
+    } else if (eventType.startsWith('DATA')) {
+      return Colors.green;
+    } else if (eventType.startsWith('DEVICE')) {
+      return Colors.purple;
+    } else if (eventType.startsWith('SECURITY')) {
+      return Colors.red;
+    } else {
+      return Colors.grey;
+    }
   }
 
   String _formatTimestamp(DateTime timestamp) {
@@ -415,26 +530,4 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
       return '${timestamp.day}/${timestamp.month}/${timestamp.year} ${timestamp.hour}:${timestamp.minute.toString().padLeft(2, '0')}';
     }
   }
-}
-
-class _AuditLog {
-  final String id;
-  final String eventType;
-  final String severity;
-  final String? userId;
-  final String? userEmail;
-  final String action;
-  final String ipAddress;
-  final DateTime timestamp;
-
-  _AuditLog({
-    required this.id,
-    required this.eventType,
-    required this.severity,
-    this.userId,
-    this.userEmail,
-    required this.action,
-    required this.ipAddress,
-    required this.timestamp,
-  });
 }

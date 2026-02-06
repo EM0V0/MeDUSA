@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
 import '../../../../shared/services/role_service.dart';
+import '../../../admin/data/services/admin_api_service.dart';
 
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
@@ -17,26 +18,61 @@ class AdminDashboardPage extends StatefulWidget {
 
 class _AdminDashboardPageState extends State<AdminDashboardPage> {
   final RoleService _roleService = RoleService();
+  final AdminApiService _adminApiService = AdminApiService();
+  
+  DashboardStats? _stats;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardStats();
+  }
+  
+  Future<void> _loadDashboardStats() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    
+    try {
+      final stats = await _adminApiService.getDashboardStats();
+      setState(() {
+        _stats = stats;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDesktop = ResponsiveBreakpoints.of(context).largerThan(TABLET);
     
     return Scaffold(
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(20.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            SizedBox(height: 24.h),
-            _buildSystemMetrics(),
-            SizedBox(height: 24.h),
-            if (isDesktop) 
-              _buildDesktopLayout()
-            else 
-              _buildMobileLayout(),
-          ],
+      body: RefreshIndicator(
+        onRefresh: _loadDashboardStats,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.all(20.w),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              SizedBox(height: 24.h),
+              _buildSystemMetrics(),
+              SizedBox(height: 24.h),
+              if (isDesktop) 
+                _buildDesktopLayout()
+              else 
+                _buildMobileLayout(),
+            ],
+          ),
         ),
       ),
     );
@@ -141,6 +177,24 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Widget _buildSystemMetrics() {
+    if (_isLoading) {
+      return Container(
+        padding: EdgeInsets.all(20.w),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16.r),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    
+    final totalUsers = _stats?.totalUsers ?? 0;
+    final totalDevices = _stats?.totalDevices ?? 0;
+    final activeDevices = _stats?.activeDevices ?? 0;
+    final totalSessions = _stats?.totalSessions ?? 0;
+    
     return Container(
       padding: EdgeInsets.all(20.w),
       decoration: BoxDecoration(
@@ -172,6 +226,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                   color: AppColors.lightOnSurface,
                 ),
               ),
+              const Spacer(),
+              if (_error != null)
+                Icon(Icons.warning, color: AppColors.warning, size: 20)
+              else
+                Icon(Icons.check_circle, color: AppColors.success, size: 20),
             ],
           ),
           SizedBox(height: 20.h),
@@ -186,20 +245,20 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 rowFlex: 1,
                 child: _buildMetricCard(
                   'Active Users',
-                  '1,247',
+                  totalUsers.toString(),
                   Icons.people_rounded,
                   AppColors.success,
-                  '+12%',
+                  'Total',
                 ),
               ),
               ResponsiveRowColumnItem(
                 rowFlex: 1,
                 child: _buildMetricCard(
                   'Connected Devices',
-                  '856',
+                  '$activeDevices/$totalDevices',
                   Icons.devices_rounded,
                   AppColors.primary,
-                  '+5%',
+                  'Active',
                 ),
               ),
               ResponsiveRowColumnItem(
@@ -215,11 +274,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               ResponsiveRowColumnItem(
                 rowFlex: 1,
                 child: _buildMetricCard(
-                  'Data Storage',
-                  '2.4 TB',
+                  'Sessions',
+                  totalSessions.toString(),
                   Icons.storage_rounded,
                   AppColors.warning,
-                  '78%',
+                  'Total',
                 ),
               ),
             ],
@@ -642,6 +701,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Widget _buildQuickStats() {
+    final doctorCount = _stats?.doctorCount ?? 0;
+    final patientCount = _stats?.patientCount ?? 0;
+    final activeSessions = _stats?.activeSessions ?? 0;
+    
     return Container(
       padding: EdgeInsets.all(20.w),
       decoration: BoxDecoration(
@@ -676,10 +739,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             ],
           ),
           SizedBox(height: 16.h),
-          _buildStatItem('Total Doctors', '156', AppColors.primary),
-          _buildStatItem('Total Patients', '1,091', AppColors.success),
-          _buildStatItem('Active Sessions', '342', AppColors.warning),
-          _buildStatItem('Data Processed', '45.2 GB', AppColors.error),
+          _buildStatItem('Total Doctors', doctorCount.toString(), AppColors.primary),
+          _buildStatItem('Total Patients', patientCount.toString(), AppColors.success),
+          _buildStatItem('Active Sessions', activeSessions.toString(), AppColors.warning),
+          _buildStatItem('Total Devices', (_stats?.totalDevices ?? 0).toString(), AppColors.error),
         ],
       ),
     );

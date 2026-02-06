@@ -45,6 +45,13 @@ if not USE_MEMORY:
     T_PATIENT_PROFILES, PROFILES_PK_ATTR, PROFILES_SK_ATTR = _table_with_schema("DDB_TABLE_PATIENT_PROFILES")
     T_SESSIONS, SESSIONS_PK_ATTR, SESSIONS_SK_ATTR = _table_with_schema("DDB_TABLE_SESSIONS")
     T_TREMOR_ANALYSIS, TREMOR_PK_ATTR, TREMOR_SK_ATTR = _table_with_schema("DDB_TABLE_TREMOR_ANALYSIS")
+    
+    # New tables for additional features
+    T_AUDIT_LOGS, AUDIT_PK_ATTR, AUDIT_SK_ATTR = _table_with_schema("DDB_TABLE_AUDIT_LOGS")
+    T_SYSTEM_SETTINGS, SETTINGS_PK_ATTR, SETTINGS_SK_ATTR = _table_with_schema("DDB_TABLE_SYSTEM_SETTINGS")
+    T_MESSAGES, MESSAGES_PK_ATTR, MESSAGES_SK_ATTR = _table_with_schema("DDB_TABLE_MESSAGES")
+    T_SYMPTOMS, SYMPTOMS_PK_ATTR, SYMPTOMS_SK_ATTR = _table_with_schema("DDB_TABLE_SYMPTOMS")
+    T_REPORTS, REPORTS_PK_ATTR, REPORTS_SK_ATTR = _table_with_schema("DDB_TABLE_REPORTS")
 
     USERS_SINGLE_TABLE = _is_pk_sk(USERS_PK_ATTR, USERS_SK_ATTR)
     REFRESH_SINGLE_TABLE = _is_pk_sk(REFRESH_PK_ATTR, REFRESH_SK_ATTR)
@@ -78,6 +85,11 @@ else:
     _patient_profiles: Dict[str, Dict[str,Any]] = {}
     _sessions: Dict[str, Dict[str,Any]] = {}
     _tremor_analysis: List[Dict[str,Any]] = []
+    _audit_logs: List[Dict[str,Any]] = []
+    _system_settings: Dict[str, Dict[str,Any]] = {}
+    _messages: List[Dict[str,Any]] = []
+    _symptoms: List[Dict[str,Any]] = []
+    _reports: List[Dict[str,Any]] = []
     USERS_SINGLE_TABLE = False
     REFRESH_SINGLE_TABLE = False
     POSES_SINGLE_TABLE = False
@@ -89,6 +101,11 @@ else:
     REFRESH_PK_ATTR, REFRESH_SK_ATTR = "token", None
     POSES_PK_ATTR, POSES_SK_ATTR = "patientId", None
     TREMOR_PK_ATTR, TREMOR_SK_ATTR = "patient_id", "timestamp"
+    AUDIT_PK_ATTR, AUDIT_SK_ATTR = "pk", "sk"
+    SETTINGS_PK_ATTR, SETTINGS_SK_ATTR = "settingKey", None
+    MESSAGES_PK_ATTR, MESSAGES_SK_ATTR = "conversationId", "messageId"
+    SYMPTOMS_PK_ATTR, SYMPTOMS_SK_ATTR = "patientId", "recordId"
+    REPORTS_PK_ATTR, REPORTS_SK_ATTR = "reportId", None
 
     def _user_key(user_id: str) -> Dict[str,str]:
         return {"id": user_id}
@@ -653,3 +670,509 @@ def get_tremor_analysis(patient_id: str, start_time: Optional[int] = None, end_t
     except Exception as e:
         print(f"Error querying tremor analysis: {e}")
         return [], 0
+
+
+# ============== Audit Logs ==============
+
+def put_audit_log(log: Dict[str, Any]) -> bool:
+    """Store an audit log entry"""
+    if USE_MEMORY:
+        _audit_logs.insert(0, log)
+        # Keep only last 10000 logs in memory
+        if len(_audit_logs) > 10000:
+            _audit_logs.pop()
+        return True
+    
+    try:
+        T_AUDIT_LOGS.put_item(Item=log)
+        return True
+    except Exception as e:
+        print(f"Error storing audit log: {e}")
+        return False
+
+
+def get_audit_logs(
+    event_type: Optional[str] = None,
+    user_id: Optional[str] = None,
+    severity: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    limit: int = 100,
+    next_token: Optional[str] = None
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Query audit logs with optional filters"""
+    if USE_MEMORY:
+        items = _audit_logs.copy()
+        if event_type:
+            items = [i for i in items if i.get("eventType") == event_type]
+        if user_id:
+            items = [i for i in items if i.get("userId") == user_id]
+        if severity:
+            items = [i for i in items if i.get("severity") == severity]
+        if start_time:
+            items = [i for i in items if i.get("sk", "") >= start_time]
+        if end_time:
+            items = [i for i in items if i.get("sk", "") <= end_time]
+        return items[:limit], None
+    
+    try:
+        # Use GSI based on filter
+        if event_type:
+            key_condition = Key("eventType").eq(event_type)
+            if start_time and end_time:
+                key_condition = key_condition & Key("sk").between(start_time, end_time)
+            elif start_time:
+                key_condition = key_condition & Key("sk").gte(start_time)
+            
+            params = {
+                "IndexName": "eventType-index",
+                "KeyConditionExpression": key_condition,
+                "ScanIndexForward": False,
+                "Limit": limit
+            }
+        elif user_id:
+            key_condition = Key("userId").eq(user_id)
+            if start_time and end_time:
+                key_condition = key_condition & Key("sk").between(start_time, end_time)
+            elif start_time:
+                key_condition = key_condition & Key("sk").gte(start_time)
+            
+            params = {
+                "IndexName": "userId-index",
+                "KeyConditionExpression": key_condition,
+                "ScanIndexForward": False,
+                "Limit": limit
+            }
+        else:
+            # Scan all logs (use partition key ALL for all logs)
+            key_condition = Key("pk").eq("AUDIT#ALL")
+            if start_time and end_time:
+                key_condition = key_condition & Key("sk").between(start_time, end_time)
+            elif start_time:
+                key_condition = key_condition & Key("sk").gte(start_time)
+            
+            params = {
+                "KeyConditionExpression": key_condition,
+                "ScanIndexForward": False,
+                "Limit": limit
+            }
+        
+        if next_token:
+            import json
+            import base64
+            params["ExclusiveStartKey"] = json.loads(base64.b64decode(next_token).decode())
+        
+        # Add severity filter if specified
+        if severity:
+            params["FilterExpression"] = Attr("severity").eq(severity)
+        
+        resp = T_AUDIT_LOGS.query(**params)
+        items = resp.get("Items", [])
+        
+        # Convert Decimals
+        for item in items:
+            for k, v in item.items():
+                if isinstance(v, Decimal):
+                    item[k] = int(v) if v % 1 == 0 else float(v)
+        
+        # Encode next token
+        last_key = resp.get("LastEvaluatedKey")
+        token = None
+        if last_key:
+            import json
+            import base64
+            token = base64.b64encode(json.dumps(last_key).encode()).decode()
+        
+        return items, token
+    except Exception as e:
+        print(f"Error querying audit logs: {e}")
+        return [], None
+
+
+# ============== System Settings ==============
+
+def get_system_setting(key: str) -> Optional[Dict[str, Any]]:
+    """Get a system setting by key"""
+    if USE_MEMORY:
+        return _system_settings.get(key)
+    
+    try:
+        resp = T_SYSTEM_SETTINGS.get_item(Key={"settingKey": key})
+        return resp.get("Item")
+    except Exception as e:
+        print(f"Error getting system setting: {e}")
+        return None
+
+
+def get_all_system_settings() -> Dict[str, Any]:
+    """Get all system settings"""
+    if USE_MEMORY:
+        return {k: v.get("value") for k, v in _system_settings.items()}
+    
+    try:
+        resp = T_SYSTEM_SETTINGS.scan()
+        items = resp.get("Items", [])
+        return {item["settingKey"]: item.get("value") for item in items}
+    except Exception as e:
+        print(f"Error getting all system settings: {e}")
+        return {}
+
+
+def put_system_setting(key: str, value: Any, updated_by: str) -> bool:
+    """Update a system setting"""
+    if USE_MEMORY:
+        _system_settings[key] = {
+            "settingKey": key,
+            "value": value,
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+            "updatedBy": updated_by
+        }
+        return True
+    
+    try:
+        T_SYSTEM_SETTINGS.put_item(Item={
+            "settingKey": key,
+            "value": value,
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+            "updatedBy": updated_by
+        })
+        return True
+    except Exception as e:
+        print(f"Error updating system setting: {e}")
+        return False
+
+
+# ============== Messages ==============
+
+def create_conversation(conversation_id: str, participants: List[str], created_by: str) -> Dict[str, Any]:
+    """Create a new conversation"""
+    conversation = {
+        "conversationId": conversation_id,
+        "participants": participants,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "createdBy": created_by,
+        "lastMessageAt": datetime.now(timezone.utc).isoformat(),
+        "lastMessagePreview": ""
+    }
+    
+    if USE_MEMORY:
+        # Store in memory (simplified)
+        return conversation
+    
+    # For DynamoDB, we store conversation metadata with messageId = "METADATA"
+    try:
+        T_MESSAGES.put_item(Item={
+            **conversation,
+            "messageId": "METADATA",
+            "participantId": participants[0]  # Primary participant for indexing
+        })
+        # Also create index entries for other participants
+        for pid in participants[1:]:
+            T_MESSAGES.put_item(Item={
+                **conversation,
+                "messageId": "METADATA",
+                "participantId": pid
+            })
+        return conversation
+    except Exception as e:
+        print(f"Error creating conversation: {e}")
+        return conversation
+
+
+def get_conversations(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """Get conversations for a user"""
+    if USE_MEMORY:
+        return [m for m in _messages if user_id in m.get("participants", [])][:limit]
+    
+    try:
+        resp = T_MESSAGES.query(
+            IndexName="participantId-index",
+            KeyConditionExpression=Key("participantId").eq(user_id) & Key("messageId").eq("METADATA"),
+            Limit=limit
+        )
+        return resp.get("Items", [])
+    except Exception as e:
+        print(f"Error getting conversations: {e}")
+        return []
+
+
+def send_message(conversation_id: str, sender_id: str, content: str, message_type: str = "text") -> Dict[str, Any]:
+    """Send a message in a conversation"""
+    message_id = f"MSG#{datetime.now(timezone.utc).isoformat()}#{secrets.token_hex(4)}"
+    message = {
+        "conversationId": conversation_id,
+        "messageId": message_id,
+        "senderId": sender_id,
+        "content": content,
+        "messageType": message_type,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "readBy": [sender_id]
+    }
+    
+    if USE_MEMORY:
+        _messages.append(message)
+        return message
+    
+    try:
+        T_MESSAGES.put_item(Item={
+            **message,
+            "participantId": sender_id  # For indexing
+        })
+        return message
+    except Exception as e:
+        print(f"Error sending message: {e}")
+        return message
+
+
+def get_messages(conversation_id: str, limit: int = 50, before: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Get messages in a conversation"""
+    if USE_MEMORY:
+        msgs = [m for m in _messages if m.get("conversationId") == conversation_id]
+        msgs.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+        return msgs[:limit]
+    
+    try:
+        key_condition = Key("conversationId").eq(conversation_id) & Key("messageId").begins_with("MSG#")
+        params = {
+            "KeyConditionExpression": key_condition,
+            "ScanIndexForward": False,
+            "Limit": limit
+        }
+        if before:
+            params["ExclusiveStartKey"] = {"conversationId": conversation_id, "messageId": before}
+        
+        resp = T_MESSAGES.query(**params)
+        return resp.get("Items", [])
+    except Exception as e:
+        print(f"Error getting messages: {e}")
+        return []
+
+
+# ============== Symptoms ==============
+
+def create_symptom_record(patient_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a new symptom record"""
+    record_id = f"SYM#{datetime.now(timezone.utc).isoformat()}#{secrets.token_hex(4)}"
+    symptom = {
+        "patientId": patient_id,
+        "recordId": record_id,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        **record
+    }
+    
+    if USE_MEMORY:
+        _symptoms.append(symptom)
+        return symptom
+    
+    try:
+        T_SYMPTOMS.put_item(Item=symptom)
+        return symptom
+    except Exception as e:
+        print(f"Error creating symptom record: {e}")
+        return symptom
+
+
+def get_symptom_records(patient_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """Get symptom records for a patient"""
+    if USE_MEMORY:
+        items = [s for s in _symptoms if s.get("patientId") == patient_id]
+        items.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+        return items[:limit]
+    
+    try:
+        resp = T_SYMPTOMS.query(
+            KeyConditionExpression=Key("patientId").eq(patient_id),
+            ScanIndexForward=False,
+            Limit=limit
+        )
+        return resp.get("Items", [])
+    except Exception as e:
+        print(f"Error getting symptom records: {e}")
+        return []
+
+
+def delete_symptom_record(patient_id: str, record_id: str) -> bool:
+    """Delete a symptom record"""
+    if USE_MEMORY:
+        global _symptoms
+        _symptoms = [s for s in _symptoms if not (s.get("patientId") == patient_id and s.get("recordId") == record_id)]
+        return True
+    
+    try:
+        T_SYMPTOMS.delete_item(Key={"patientId": patient_id, "recordId": record_id})
+        return True
+    except Exception as e:
+        print(f"Error deleting symptom record: {e}")
+        return False
+
+
+# ============== Reports ==============
+
+def create_report(report: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a new report"""
+    report_id = f"RPT-{secrets.token_hex(6).upper()}"
+    report_data = {
+        "reportId": report_id,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "status": "pending",
+        **report
+    }
+    
+    if USE_MEMORY:
+        _reports.append(report_data)
+        return report_data
+    
+    try:
+        T_REPORTS.put_item(Item=report_data)
+        return report_data
+    except Exception as e:
+        print(f"Error creating report: {e}")
+        return report_data
+
+
+def get_reports(
+    patient_id: Optional[str] = None,
+    author_id: Optional[str] = None,
+    limit: int = 50
+) -> List[Dict[str, Any]]:
+    """Get reports with optional filters"""
+    if USE_MEMORY:
+        items = _reports.copy()
+        if patient_id:
+            items = [r for r in items if r.get("patientId") == patient_id]
+        if author_id:
+            items = [r for r in items if r.get("authorId") == author_id]
+        items.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+        return items[:limit]
+    
+    try:
+        if patient_id:
+            resp = T_REPORTS.query(
+                IndexName="patientId-index",
+                KeyConditionExpression=Key("patientId").eq(patient_id),
+                ScanIndexForward=False,
+                Limit=limit
+            )
+        elif author_id:
+            resp = T_REPORTS.query(
+                IndexName="authorId-index",
+                KeyConditionExpression=Key("authorId").eq(author_id),
+                ScanIndexForward=False,
+                Limit=limit
+            )
+        else:
+            resp = T_REPORTS.scan(Limit=limit)
+        
+        return resp.get("Items", [])
+    except Exception as e:
+        print(f"Error getting reports: {e}")
+        return []
+
+
+def get_report(report_id: str) -> Optional[Dict[str, Any]]:
+    """Get a single report by ID"""
+    if USE_MEMORY:
+        for r in _reports:
+            if r.get("reportId") == report_id:
+                return r
+        return None
+    
+    try:
+        resp = T_REPORTS.get_item(Key={"reportId": report_id})
+        return resp.get("Item")
+    except Exception as e:
+        print(f"Error getting report: {e}")
+        return None
+
+
+def update_report(report_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Update a report"""
+    if USE_MEMORY:
+        for i, r in enumerate(_reports):
+            if r.get("reportId") == report_id:
+                _reports[i].update(updates)
+                _reports[i]["updatedAt"] = datetime.now(timezone.utc).isoformat()
+                return _reports[i]
+        return None
+    
+    try:
+        update_expr = "SET " + ", ".join(f"#{k} = :{k}" for k in updates.keys())
+        update_expr += ", #updatedAt = :updatedAt"
+        
+        expr_names = {f"#{k}": k for k in updates.keys()}
+        expr_names["#updatedAt"] = "updatedAt"
+        
+        expr_values = {f":{k}": v for k, v in updates.items()}
+        expr_values[":updatedAt"] = datetime.now(timezone.utc).isoformat()
+        
+        resp = T_REPORTS.update_item(
+            Key={"reportId": report_id},
+            UpdateExpression=update_expr,
+            ExpressionAttributeNames=expr_names,
+            ExpressionAttributeValues=expr_values,
+            ReturnValues="ALL_NEW"
+        )
+        return resp.get("Attributes")
+    except Exception as e:
+        print(f"Error updating report: {e}")
+        return None
+
+
+def delete_report(report_id: str) -> bool:
+    """Delete a report"""
+    if USE_MEMORY:
+        global _reports
+        _reports = [r for r in _reports if r.get("reportId") != report_id]
+        return True
+    
+    try:
+        T_REPORTS.delete_item(Key={"reportId": report_id})
+        return True
+    except Exception as e:
+        print(f"Error deleting report: {e}")
+        return False
+
+
+# ============== Admin Dashboard Stats ==============
+
+def get_dashboard_stats() -> Dict[str, Any]:
+    """Get dashboard statistics for admin"""
+    if USE_MEMORY:
+        return {
+            "totalUsers": len(_users),
+            "totalDoctors": len([u for u in _users.values() if u.get("role") == "doctor"]),
+            "totalPatients": len([u for u in _users.values() if u.get("role") == "patient"]),
+            "totalDevices": len(_devices),
+            "activeDevices": len([d for d in _devices if d.get("status") == "active"]),
+            "activeSessions": len([s for s in _sessions.values() if s.get("status") == "active"]),
+            "totalReports": len(_reports),
+            "recentAuditLogs": len(_audit_logs)
+        }
+    
+    try:
+        # Count users by role
+        users_resp = T_USERS.scan(Select="COUNT")
+        total_users = users_resp.get("Count", 0)
+        
+        # Count devices
+        devices_resp = T_DEVICES.scan(Select="COUNT")
+        total_devices = devices_resp.get("Count", 0)
+        
+        # Count active sessions
+        sessions_resp = T_SESSIONS.query(
+            IndexName="status-index",
+            KeyConditionExpression=Key("status").eq("active"),
+            Select="COUNT"
+        )
+        active_sessions = sessions_resp.get("Count", 0)
+        
+        return {
+            "totalUsers": total_users,
+            "totalDevices": total_devices,
+            "activeSessions": active_sessions,
+            "systemUptime": "99.9%",  # Would come from CloudWatch in production
+            "dataStorage": "2.4 TB"   # Would come from S3 metrics
+        }
+    except Exception as e:
+        print(f"Error getting dashboard stats: {e}")
+        return {}

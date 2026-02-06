@@ -16,7 +16,7 @@ import os
 import json
 import time
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
 from enum import Enum
 
@@ -262,8 +262,16 @@ class AuditService:
         if severity is None:
             severity = self._get_severity_for_event(event_type)
         
-        # Build the audit entry
+        # Generate unique log ID
+        log_id = f"LOG#{timestamp.isoformat()}#{hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:8]}"
+        
+        # Build the audit entry for DynamoDB storage
         audit_entry = {
+            # DynamoDB keys
+            "pk": "AUDIT#ALL",  # Partition key for global queries
+            "sk": timestamp.isoformat(),  # Sort key for time-based ordering
+            "logId": log_id,
+            
             # Event identification
             "log_type": "AUDIT",
             "service": self.service_name,
@@ -271,37 +279,43 @@ class AuditService:
             "timestamp": timestamp.isoformat(),
             "timestamp_unix": int(timestamp.timestamp() * 1000),  # Milliseconds
             
-            # Event classification
-            "event_type": event_type.value,
+            # Event classification - flattened for GSI
+            "eventType": event_type.value,
             "severity": severity.value,
             "outcome": outcome,
             
-            # Actor information
-            "actor": {
-                "user_id": user_id,
-                "role": user_role,
-                "ip_address": ip_address,
-                "user_agent": user_agent,
-            },
+            # Actor information - flattened for GSI
+            "userId": user_id,
+            "userRole": user_role,
+            "ipAddress": ip_address,
+            "userAgent": user_agent,
             
             # Resource information
-            "resource": {
-                "type": resource_type,
-                "id": resource_id,
-            },
+            "resourceType": resource_type,
+            "resourceId": resource_id,
             
             # Action details
             "action": action,
             "details": self._mask_sensitive_data(details) if details else None,
             
             # Correlation and integrity
-            "request_id": request_id,
+            "requestId": request_id,
+            
+            # TTL for automatic cleanup (90 days retention)
+            "ttl": int((timestamp + timedelta(days=90)).timestamp())
         }
         
         # Add event hash for integrity verification
         audit_entry["event_hash"] = self._generate_event_hash(audit_entry)
         
-        # Output the log (CloudWatch will capture stdout)
+        # Store in DynamoDB
+        try:
+            import db
+            db.put_audit_log(audit_entry)
+        except Exception as e:
+            print(f"[AUDIT_STORE_ERROR] Failed to store audit log: {e}")
+        
+        # Also output to CloudWatch for real-time monitoring
         log_line = json.dumps(audit_entry, default=str)
         print(f"[AUDIT] {log_line}")
         

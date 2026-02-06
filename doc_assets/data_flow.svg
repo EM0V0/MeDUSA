@@ -29,16 +29,17 @@
   <text class="note" x="25" y="55">Trust Boundary 1: Device Zone</text>
 
   <!-- Sensor Device -->
-  <rect class="box" x="30" y="70" width="170" height="70" rx="6" />
+  <rect class="box" x="30" y="70" width="170" height="80" rx="6" />
   <text class="title" x="50" y="95">Wearable Sensor (Pi)</text>
   <text class="text" x="50" y="112">• IMU/Magnetometer</text>
   <text class="text" x="50" y="126">• Real-time tremor data</text>
+  <text class="text" x="50" y="140">• WiFi → Cloud upload</text>
 
   <!-- Mobile/Desktop App -->
-  <rect class="box" x="30" y="160" width="170" height="70" rx="6" />
-  <text class="title" x="50" y="185">Flutter App</text>
-  <text class="text" x="50" y="202">• BLE pairing (Windows)</text>
-  <text class="text" x="50" y="216">• Local secure storage</text>
+  <rect class="box" x="30" y="170" width="170" height="70" rx="6" />
+  <text class="title" x="50" y="195">Flutter App</text>
+  <text class="text" x="50" y="212">• BLE → WiFi provisioning</text>
+  <text class="text" x="50" y="226">• Local secure storage</text>
 
   <!-- Trust Boundary 2: Network Zone -->
   <rect class="trust-boundary" x="230" y="40" width="280" height="510" rx="10" />
@@ -113,8 +114,8 @@
   <!-- Data Flow Legend -->
   <rect class="box" x="545" y="330" width="420" height="130" rx="6" />
   <text class="title" x="565" y="355">Data Flow Summary</text>
-  <text class="text" x="565" y="375">1. Sensor → App: BLE (encrypted, Windows only)</text>
-  <text class="text" x="565" y="390">2. App → API Gateway: HTTPS/TLS 1.3</text>
+  <text class="text" x="565" y="375">1. App → Sensor: BLE WiFi provisioning</text>
+  <text class="text" x="565" y="390">2. Sensor → API Gateway: WiFi/HTTPS/TLS 1.3</text>
   <text class="text" x="565" y="405">3. API Gateway → Lambda: JWT validation</text>
   <text class="text" x="565" y="420">4. Lambda → DynamoDB: IAM role auth</text>
   <text class="text" x="565" y="435">5. All data encrypted at rest (AWS managed)</text>
@@ -125,13 +126,17 @@
   <text class="text" x="565" y="512">Login → [Credentials valid?] → MFA Challenge → [TOTP valid?]</text>
   <text class="text" x="565" y="527">→ Issue JWT (1h access + 7d refresh) → Store refresh in DynamoDB</text>
 
-  <!-- Arrows: Device to App -->
-  <line class="arrow" x1="115" y1="140" x2="115" y2="160" />
-  <text class="note" x="120" y="153">BLE</text>
+  <!-- Arrows: App to Device (WiFi provisioning via BLE) -->
+  <line class="arrow" x1="115" y1="170" x2="115" y2="150" />
+  <text class="note" x="120" y="163">BLE WiFi</text>
+
+  <!-- Arrows: Sensor direct to API Gateway (via WiFi) -->
+  <line class="arrow-secure" x1="200" y1="105" x2="250" y2="105" />
+  <text class="note" x="205" y="98">WiFi/TLS</text>
 
   <!-- Arrows: App to API Gateway -->
-  <line class="arrow-secure" x1="200" y1="195" x2="250" y2="115" />
-  <text class="note" x="205" y="150">TLS 1.3</text>
+  <line class="arrow-secure" x1="200" y1="205" x2="250" y2="125" />
+  <text class="note" x="205" y="160">TLS 1.3</text>
 
   <!-- Arrows: API Gateway to Authorizer -->
   <line class="arrow" x1="370" y1="160" x2="370" y2="175" />

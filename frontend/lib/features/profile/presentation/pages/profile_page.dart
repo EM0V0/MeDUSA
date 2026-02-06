@@ -5,6 +5,7 @@ import 'package:responsive_framework/responsive_framework.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
+import '../../../admin/data/services/admin_api_service.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -14,13 +15,61 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  final _nameController = TextEditingController(text: 'Dr. Sarah Johnson');
-  final _emailController = TextEditingController(text: 'sarah.johnson@medusa.com');
-  final _phoneController = TextEditingController(text: '+1 (555) 123-4567');
-  final _specialtyController = TextEditingController(text: 'Neurologist');
-  final _licenseController = TextEditingController(text: 'MD-12345678');
-  final _departmentController = TextEditingController(text: 'Neurology Department');
-  final _hospitalController = TextEditingController(text: 'City General Hospital');
+  final AdminApiService _apiService = AdminApiService();
+  
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _specialtyController = TextEditingController();
+  final _licenseController = TextEditingController();
+  final _departmentController = TextEditingController();
+  final _hospitalController = TextEditingController();
+  
+  bool _isLoading = true;
+  bool _isSaving = false;
+  String? _error;
+  UserProfile? _profile;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+  
+  Future<void> _loadProfile() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    
+    try {
+      final profile = await _apiService.getProfile();
+      
+      if (profile != null) {
+        setState(() {
+          _profile = profile;
+          _nameController.text = profile.name;
+          _emailController.text = profile.email;
+          _phoneController.text = profile.phone ?? '';
+          _specialtyController.text = profile.specialty ?? '';
+          _licenseController.text = profile.licenseNumber ?? '';
+          _departmentController.text = profile.department ?? '';
+          _hospitalController.text = profile.hospital ?? '';
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _error = 'Failed to load profile';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -37,6 +86,44 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).smallerThan(TABLET);
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: AppColors.lightBackground,
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Loading profile...'),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    if (_error != null && _profile == null) {
+      return Scaffold(
+        backgroundColor: AppColors.lightBackground,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+              const SizedBox(height: 16),
+              const Text('Error loading profile'),
+              Text(_error!, style: TextStyle(color: Colors.grey[600])),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadProfile,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppColors.lightBackground,
@@ -127,7 +214,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   radius: isMobile ? 50.w : 40.w,
                   backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                   child: Text(
-                    'SJ',
+                    _profile?.name.isNotEmpty == true 
+                        ? _profile!.name.substring(0, _profile!.name.length > 1 ? 2 : 1).toUpperCase()
+                        : '?',
                     style: FontUtils.title(
                       context: context,
                       fontWeight: FontWeight.bold,
@@ -314,9 +403,7 @@ class _ProfilePageState extends State<ProfilePage> {
               width: isMobile ? double.infinity : 200.w,
               height: isMobile ? 56.h : 48.h,
               child: ElevatedButton(
-                onPressed: () {
-                  _saveProfile();
-                },
+                onPressed: _isSaving ? null : () => _saveProfile(),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: AppColors.lightSurface,
@@ -324,13 +411,22 @@ class _ProfilePageState extends State<ProfilePage> {
                     borderRadius: BorderRadius.circular(12.r),
                   ),
                 ),
-                child: Text(
-                  'Save Changes',
-                  style: FontUtils.body(
-                    context: context,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        'Save Changes',
+                        style: FontUtils.body(
+                          context: context,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
             ),
           ),
@@ -450,12 +546,47 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _saveProfile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: FontUtils.bodyText('Profile updated successfully', context),
-      ),
-    );
+  void _saveProfile() async {
+    setState(() => _isSaving = true);
+    
+    try {
+      final success = await _apiService.updateProfile(
+        name: _nameController.text,
+        phone: _phoneController.text,
+        specialty: _specialtyController.text,
+        licenseNumber: _licenseController.text,
+        department: _departmentController.text,
+        hospital: _hospitalController.text,
+      );
+      
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: FontUtils.bodyText('Profile updated successfully', context),
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: FontUtils.bodyText('Failed to update profile', context),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: FontUtils.bodyText('Error: $e', context),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   void _changePassword() {

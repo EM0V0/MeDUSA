@@ -4,6 +4,7 @@ import 'package:responsive_framework/responsive_framework.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
+import '../../../admin/data/services/admin_api_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -14,13 +15,14 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMixin {
   late TabController _tabController;
+  final AdminApiService _apiService = AdminApiService();
 
   // User Profile Settings
-  final _nameController = TextEditingController(text: 'Dr. Sarah Johnson');
-  final _emailController = TextEditingController(text: 'sarah.johnson@medusa.com');
-  final _phoneController = TextEditingController(text: '+1 (555) 123-4567');
-  final _specialtyController = TextEditingController(text: 'Neurologist');
-  final _licenseController = TextEditingController(text: 'MD-12345678');
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _specialtyController = TextEditingController();
+  final _licenseController = TextEditingController();
 
   // Notification Settings
   bool emailNotifications = true;
@@ -41,11 +43,56 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   int dataRetentionDays = 365;
   bool debugMode = false;
   String backupFrequency = 'Daily';
+  
+  bool _isLoading = true;
+  bool _isSaving = false;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadSettings();
+  }
+  
+  Future<void> _loadSettings() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    
+    try {
+      final settings = await _apiService.getUserSettings();
+      
+      if (settings != null && mounted) {
+        setState(() {
+          emailNotifications = settings.emailNotifications;
+          pushNotifications = settings.pushNotifications;
+          smsNotifications = settings.smsNotifications;
+          criticalAlerts = settings.criticalAlerts;
+          dailyReports = settings.dailyReports;
+          weeklyReports = settings.weeklyReports;
+          twoFactorAuth = settings.twoFactorAuth;
+          biometricAuth = settings.biometricAuth;
+          autoLogout = settings.autoLogout;
+          sessionTimeout = settings.sessionTimeout;
+          alertThreshold = settings.alertThreshold;
+          dataRetentionDays = settings.dataRetentionDays;
+          debugMode = settings.debugMode;
+          backupFrequency = settings.backupFrequency;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -62,6 +109,22 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).smallerThan(TABLET);
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: AppColors.lightBackground,
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Loading settings...'),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppColors.lightBackground,
@@ -656,16 +719,54 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
     );
   }
 
-  void _saveSystemSettings() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content: Text(
-        'System settings saved successfully',
-        style: FontUtils.body(
-          context: context,
-        ),
-      )),
-    );
+  void _saveSystemSettings() async {
+    setState(() => _isSaving = true);
+    
+    try {
+      final success = await _apiService.updateUserSettings(
+        alertThreshold: alertThreshold,
+        dataRetentionDays: dataRetentionDays,
+        debugMode: debugMode,
+        backupFrequency: backupFrequency,
+      );
+      
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'System settings saved successfully',
+              style: FontUtils.body(context: context),
+            ),
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to save system settings',
+              style: FontUtils.body(context: context),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error: $e',
+              style: FontUtils.body(context: context),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   void _exportData() {
@@ -680,15 +781,55 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
     );
   }
 
-  void _saveNotificationSettings() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content: Text(
-        'Notification settings saved successfully',
-        style: FontUtils.body(
-          context: context,
-        ),
-      )),
-    );
+  void _saveNotificationSettings() async {
+    setState(() => _isSaving = true);
+    
+    try {
+      final success = await _apiService.updateUserSettings(
+        emailNotifications: emailNotifications,
+        pushNotifications: pushNotifications,
+        smsNotifications: smsNotifications,
+        criticalAlerts: criticalAlerts,
+        dailyReports: dailyReports,
+        weeklyReports: weeklyReports,
+      );
+      
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Notification settings saved successfully',
+              style: FontUtils.body(context: context),
+            ),
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to save notification settings',
+              style: FontUtils.body(context: context),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error: $e',
+              style: FontUtils.body(context: context),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 }

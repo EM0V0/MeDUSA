@@ -27,6 +27,11 @@ Globals:
         DDB_TABLE_PATIENT_PROFILES: !Ref PatientProfilesTable
         DDB_TABLE_SESSIONS: !Ref SessionsTable
         DDB_TABLE_TREMOR_ANALYSIS: medusa-tremor-analysis
+        DDB_TABLE_AUDIT_LOGS: !Ref AuditLogsTable
+        DDB_TABLE_SYSTEM_SETTINGS: !Ref SystemSettingsTable
+        DDB_TABLE_MESSAGES: !Ref MessagesTable
+        DDB_TABLE_SYMPTOMS: !Ref SymptomsTable
+        DDB_TABLE_REPORTS: !Ref ReportsTable
         
         # Storage Configuration
         S3_BUCKET: !Ref DataBucket
@@ -65,6 +70,16 @@ Resources:
             TableName: !Ref PatientProfilesTable
         - DynamoDBCrudPolicy:
             TableName: !Ref SessionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AuditLogsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SystemSettingsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MessagesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SymptomsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ReportsTable
         - Statement:
             - Effect: Allow
               Action:
@@ -316,6 +331,196 @@ Resources:
           Value: v3
         - Key: DataType
           Value: Sessions
+
+  # DynamoDB Table - Audit Logs
+  AuditLogsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: medusa-audit-logs-prod
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: eventType
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: eventType-index
+          KeySchema:
+            - AttributeName: eventType
+              KeyType: HASH
+            - AttributeName: sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: userId-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: MeDUSA
+        - Key: Version
+          Value: v3
+        - Key: DataType
+          Value: AuditLogs
+
+  # DynamoDB Table - System Settings
+  SystemSettingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: medusa-system-settings-prod
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: settingKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: settingKey
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: MeDUSA
+        - Key: Version
+          Value: v3
+        - Key: DataType
+          Value: SystemSettings
+
+  # DynamoDB Table - Messages
+  MessagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: medusa-messages-prod
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: conversationId
+          AttributeType: S
+        - AttributeName: messageId
+          AttributeType: S
+        - AttributeName: participantId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: conversationId
+          KeyType: HASH
+        - AttributeName: messageId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: participantId-index
+          KeySchema:
+            - AttributeName: participantId
+              KeyType: HASH
+            - AttributeName: messageId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: MeDUSA
+        - Key: Version
+          Value: v3
+        - Key: DataType
+          Value: Messages
+
+  # DynamoDB Table - Symptoms
+  SymptomsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: medusa-symptoms-prod
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: patientId
+          AttributeType: S
+        - AttributeName: recordId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: patientId
+          KeyType: HASH
+        - AttributeName: recordId
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: MeDUSA
+        - Key: Version
+          Value: v3
+        - Key: DataType
+          Value: Symptoms
+
+  # DynamoDB Table - Reports
+  ReportsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: medusa-reports-prod
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: reportId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+        - AttributeName: patientId
+          AttributeType: S
+        - AttributeName: authorId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: reportId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: patientId-index
+          KeySchema:
+            - AttributeName: patientId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: authorId-index
+          KeySchema:
+            - AttributeName: authorId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: MeDUSA
+        - Key: Version
+          Value: v3
+        - Key: DataType
+          Value: Reports
 
   # S3 Storage Bucket
   DataBucket:

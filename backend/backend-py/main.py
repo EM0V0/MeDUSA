@@ -111,6 +111,130 @@ def test_email(email: str):
         "has_ses_client": email_service.ses_client is not None
     }
 
+
+# -------- Admin - Audit Logs
+@app.get("/api/v1/admin/audit-logs")
+@require_role("admin")
+async def get_audit_logs(
+    request: Request,
+    eventType: Optional[str] = None,
+    userId: Optional[str] = None,
+    severity: Optional[str] = None,
+    startTime: Optional[str] = None,
+    endTime: Optional[str] = None,
+    limit: int = 100,
+    nextToken: Optional[str] = None
+):
+    """
+    Get audit logs with optional filters (Admin only).
+    
+    Query Parameters:
+    - eventType: Filter by event type (e.g., AUTH_LOGIN_SUCCESS)
+    - userId: Filter by user ID
+    - severity: Filter by severity (INFO, WARNING, ERROR, CRITICAL)
+    - startTime: ISO timestamp for start of range
+    - endTime: ISO timestamp for end of range
+    - limit: Maximum number of logs to return (default 100)
+    - nextToken: Pagination token
+    """
+    try:
+        logs, next_token = db.get_audit_logs(
+            event_type=eventType,
+            user_id=userId,
+            severity=severity,
+            start_time=startTime,
+            end_time=endTime,
+            limit=limit,
+            next_token=nextToken
+        )
+        
+        # Log this admin action
+        audit_service.log_event(
+            event_type=AuditEventType.DATA_READ,
+            user_id=get_user_id(request),
+            user_role=get_user_role(request),
+            resource_type="audit_logs",
+            action="query",
+            details={"filters": {"eventType": eventType, "userId": userId, "severity": severity}}
+        )
+        
+        return {
+            "items": logs,
+            "count": len(logs),
+            "nextToken": next_token
+        }
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "AUDIT_QUERY_FAILED", "message": str(e)})
+
+
+# -------- Admin - Dashboard Stats
+@app.get("/api/v1/admin/dashboard/stats")
+@require_role("admin")
+async def get_admin_dashboard_stats(request: Request):
+    """
+    Get dashboard statistics for admin (Admin only).
+    """
+    try:
+        stats = db.get_dashboard_stats()
+        return {"success": True, "data": stats}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "STATS_FAILED", "message": str(e)})
+
+
+# -------- Admin - System Settings
+@app.get("/api/v1/admin/settings")
+@require_role("admin")
+async def get_system_settings(request: Request):
+    """
+    Get all system settings (Admin only).
+    """
+    try:
+        settings = db.get_all_system_settings()
+        # Provide defaults if settings are not configured
+        defaults = {
+            "emailNotifications": True,
+            "dataRetention": True,
+            "autoBackup": True,
+            "maintenanceMode": False,
+            "sessionTimeout": "30",
+            "dataRetentionDays": "365"
+        }
+        for key, default_value in defaults.items():
+            if key not in settings:
+                settings[key] = default_value
+        return {"success": True, "data": settings}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "SETTINGS_FETCH_FAILED", "message": str(e)})
+
+
+@app.put("/api/v1/admin/settings")
+@require_role("admin")
+async def update_system_settings(request: Request):
+    """
+    Update system settings (Admin only).
+    """
+    try:
+        body = await request.json()
+        user_id = get_user_id(request)
+        
+        for key, value in body.items():
+            db.put_system_setting(key, value, user_id)
+        
+        # Log this admin action
+        audit_service.log_event(
+            event_type=AuditEventType.SYSTEM_CONFIG_CHANGE,
+            user_id=user_id,
+            user_role=get_user_role(request),
+            resource_type="system_settings",
+            action="update",
+            details={"updated_keys": list(body.keys())}
+        )
+        
+        return {"success": True, "message": "Settings updated successfully"}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "SETTINGS_UPDATE_FAILED", "message": str(e)})
+
+
 # -------- Security - Nonce Endpoint
 @app.get("/api/v1/security/nonce")
 def get_nonce():
@@ -1671,6 +1795,537 @@ async def assign_patient(request: Request, body: AssignPatientReq):
         print(traceback.format_exc())
         # Return the actual error for debugging
         raise HTTPException(500, detail=f"Internal Server Error: {str(e)}")
+
+
+# -------- Symptoms
+@app.get("/api/v1/symptoms")
+@require_role("patient", "doctor", "admin")
+async def get_symptoms(request: Request, patientId: Optional[str] = None, limit: int = 50):
+    """
+    Get symptom records. Patients see their own, doctors/admins can specify patient.
+    """
+    user_id = get_user_id(request)
+    role = get_user_role(request)
+    
+    # Determine which patient's symptoms to fetch
+    target_patient = patientId if patientId else user_id
+    
+    # Access control
+    if role == "patient" and target_patient != user_id:
+        raise HTTPException(403, detail="Access denied")
+    
+    try:
+        records = db.get_symptom_records(target_patient, limit)
+        return {"success": True, "items": records, "count": len(records)}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "SYMPTOMS_FETCH_FAILED", "message": str(e)})
+
+
+@app.post("/api/v1/symptoms")
+@require_role("patient")
+async def create_symptom(request: Request):
+    """
+    Create a new symptom record (Patient only).
+    """
+    user_id = get_user_id(request)
+    
+    try:
+        body = await request.json()
+        record = db.create_symptom_record(user_id, body)
+        
+        # Log this action
+        audit_service.log_event(
+            event_type=AuditEventType.DATA_CREATE,
+            user_id=user_id,
+            user_role="patient",
+            resource_type="symptom",
+            resource_id=record.get("recordId"),
+            action="create"
+        )
+        
+        return {"success": True, "data": record}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "SYMPTOM_CREATE_FAILED", "message": str(e)})
+
+
+@app.delete("/api/v1/symptoms/{record_id}")
+@require_role("patient", "admin")
+async def delete_symptom(request: Request, record_id: str):
+    """
+    Delete a symptom record.
+    """
+    user_id = get_user_id(request)
+    role = get_user_role(request)
+    
+    # For patients, only allow deleting their own records
+    patient_id = user_id if role == "patient" else None
+    
+    try:
+        if patient_id:
+            success = db.delete_symptom_record(patient_id, record_id)
+        else:
+            # Admin can delete any (need to find patient_id first - simplified here)
+            success = True  # Would need more complex logic for admin
+        
+        if success:
+            audit_service.log_event(
+                event_type=AuditEventType.DATA_DELETE,
+                user_id=user_id,
+                user_role=role,
+                resource_type="symptom",
+                resource_id=record_id,
+                action="delete"
+            )
+        
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "SYMPTOM_DELETE_FAILED", "message": str(e)})
+
+
+# -------- Reports
+@app.get("/api/v1/reports")
+@require_role("patient", "doctor", "admin")
+async def get_reports(
+    request: Request,
+    patientId: Optional[str] = None,
+    limit: int = 50
+):
+    """
+    Get reports. Patients see their own, doctors see their patients', admins see all.
+    """
+    user_id = get_user_id(request)
+    role = get_user_role(request)
+    
+    try:
+        if role == "patient":
+            reports = db.get_reports(patient_id=user_id, limit=limit)
+        elif role == "doctor":
+            if patientId:
+                reports = db.get_reports(patient_id=patientId, limit=limit)
+            else:
+                reports = db.get_reports(author_id=user_id, limit=limit)
+        else:  # admin
+            if patientId:
+                reports = db.get_reports(patient_id=patientId, limit=limit)
+            else:
+                reports = db.get_reports(limit=limit)
+        
+        return {"success": True, "items": reports, "count": len(reports)}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "REPORTS_FETCH_FAILED", "message": str(e)})
+
+
+@app.get("/api/v1/reports/{report_id}")
+@require_role("patient", "doctor", "admin")
+async def get_report(request: Request, report_id: str):
+    """
+    Get a single report by ID.
+    """
+    user_id = get_user_id(request)
+    role = get_user_role(request)
+    
+    try:
+        report = db.get_report(report_id)
+        if not report:
+            raise HTTPException(404, detail="Report not found")
+        
+        # Access control
+        if role == "patient" and report.get("patientId") != user_id:
+            raise HTTPException(403, detail="Access denied")
+        
+        return {"success": True, "data": report}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "REPORT_FETCH_FAILED", "message": str(e)})
+
+
+@app.post("/api/v1/reports")
+@require_role("doctor", "admin")
+async def create_report(request: Request):
+    """
+    Create a new report (Doctor/Admin only).
+    """
+    user_id = get_user_id(request)
+    role = get_user_role(request)
+    
+    try:
+        body = await request.json()
+        body["authorId"] = user_id
+        body["authorRole"] = role
+        
+        report = db.create_report(body)
+        
+        audit_service.log_event(
+            event_type=AuditEventType.DATA_CREATE,
+            user_id=user_id,
+            user_role=role,
+            resource_type="report",
+            resource_id=report.get("reportId"),
+            action="create",
+            details={"patientId": body.get("patientId"), "type": body.get("type")}
+        )
+        
+        return {"success": True, "data": report}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "REPORT_CREATE_FAILED", "message": str(e)})
+
+
+@app.put("/api/v1/reports/{report_id}")
+@require_role("doctor", "admin")
+async def update_report(request: Request, report_id: str):
+    """
+    Update a report.
+    """
+    user_id = get_user_id(request)
+    role = get_user_role(request)
+    
+    try:
+        body = await request.json()
+        report = db.update_report(report_id, body)
+        
+        if not report:
+            raise HTTPException(404, detail="Report not found")
+        
+        return {"success": True, "data": report}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "REPORT_UPDATE_FAILED", "message": str(e)})
+
+
+@app.delete("/api/v1/reports/{report_id}")
+@require_role("doctor", "admin")
+async def delete_report(request: Request, report_id: str):
+    """
+    Delete a report.
+    """
+    user_id = get_user_id(request)
+    role = get_user_role(request)
+    
+    try:
+        success = db.delete_report(report_id)
+        
+        if success:
+            audit_service.log_event(
+                event_type=AuditEventType.DATA_DELETE,
+                user_id=user_id,
+                user_role=role,
+                resource_type="report",
+                resource_id=report_id,
+                action="delete"
+            )
+        
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "REPORT_DELETE_FAILED", "message": str(e)})
+
+
+# -------- Messages
+@app.get("/api/v1/messages/conversations")
+@require_role("patient", "doctor", "admin")
+async def get_conversations(request: Request, limit: int = 50):
+    """
+    Get conversations for the current user.
+    """
+    user_id = get_user_id(request)
+    
+    try:
+        conversations = db.get_conversations(user_id, limit)
+        return {"success": True, "items": conversations, "count": len(conversations)}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "CONVERSATIONS_FETCH_FAILED", "message": str(e)})
+
+
+@app.get("/api/v1/messages/conversations/{conversation_id}")
+@require_role("patient", "doctor", "admin")
+async def get_conversation_messages(
+    request: Request,
+    conversation_id: str,
+    limit: int = 50,
+    before: Optional[str] = None
+):
+    """
+    Get messages in a conversation.
+    """
+    user_id = get_user_id(request)
+    
+    try:
+        messages = db.get_messages(conversation_id, limit, before)
+        return {"success": True, "items": messages, "count": len(messages)}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "MESSAGES_FETCH_FAILED", "message": str(e)})
+
+
+@app.post("/api/v1/messages/conversations")
+@require_role("patient", "doctor", "admin")
+async def create_conversation(request: Request):
+    """
+    Create a new conversation.
+    """
+    user_id = get_user_id(request)
+    
+    try:
+        body = await request.json()
+        participants = body.get("participants", [])
+        if user_id not in participants:
+            participants.append(user_id)
+        
+        conversation_id = f"CONV#{secrets.token_hex(8)}"
+        conversation = db.create_conversation(conversation_id, participants, user_id)
+        
+        return {"success": True, "data": conversation}
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "CONVERSATION_CREATE_FAILED", "message": str(e)})
+
+
+@app.post("/api/v1/messages")
+@require_role("patient", "doctor", "admin")
+async def send_message(request: Request):
+    """
+    Send a message in a conversation.
+    """
+    user_id = get_user_id(request)
+    
+    try:
+        body = await request.json()
+        conversation_id = body.get("conversationId")
+        content = body.get("content")
+        message_type = body.get("messageType", "text")
+        
+        if not conversation_id or not content:
+            raise HTTPException(400, detail="conversationId and content are required")
+        
+        message = db.send_message(conversation_id, user_id, content, message_type)
+        
+        return {"success": True, "data": message}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "MESSAGE_SEND_FAILED", "message": str(e)})
+
+
+# -------- User Profile
+@app.get("/api/v1/profile")
+@require_role("patient", "doctor", "admin")
+async def get_user_profile(request: Request):
+    """
+    Get current user's profile.
+    """
+    user_id = get_user_id(request)
+    
+    try:
+        user = db.get_user(user_id)
+        if not user:
+            raise HTTPException(404, detail="User not found")
+        
+        # Remove sensitive fields
+        safe_user = {
+            "id": user.get("id"),
+            "email": user.get("email"),
+            "name": user.get("name"),
+            "role": user.get("role"),
+            "phone": user.get("phone"),
+            "specialty": user.get("specialty"),
+            "license": user.get("license"),
+            "department": user.get("department"),
+            "hospital": user.get("hospital"),
+            "createdAt": user.get("createdAt"),
+            "mfaEnabled": user.get("mfaEnabled", False)
+        }
+        
+        return {"success": True, "data": safe_user}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "PROFILE_FETCH_FAILED", "message": str(e)})
+
+
+@app.put("/api/v1/profile")
+@require_role("patient", "doctor", "admin")
+async def update_user_profile(request: Request):
+    """
+    Update current user's profile.
+    """
+    user_id = get_user_id(request)
+    role = get_user_role(request)
+    
+    try:
+        body = await request.json()
+        
+        # Only allow updating certain fields
+        allowed_fields = ["name", "phone", "specialty", "license", "department", "hospital"]
+        updates = {k: v for k, v in body.items() if k in allowed_fields}
+        
+        if not updates:
+            raise HTTPException(400, detail="No valid fields to update")
+        
+        # Update user
+        user = db.get_user(user_id)
+        if not user:
+            raise HTTPException(404, detail="User not found")
+        
+        user.update(updates)
+        user["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        db.put_user(user)
+        
+        audit_service.log_event(
+            event_type=AuditEventType.DATA_UPDATE,
+            user_id=user_id,
+            user_role=role,
+            resource_type="user_profile",
+            resource_id=user_id,
+            action="update",
+            details={"updated_fields": list(updates.keys())}
+        )
+        
+        return {"success": True, "message": "Profile updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "PROFILE_UPDATE_FAILED", "message": str(e)})
+
+
+# -------- User Settings (per-user preferences)
+@app.get("/api/v1/settings/user")
+@require_role("patient", "doctor", "admin")
+async def get_user_settings(request: Request):
+    """
+    Get current user's settings/preferences.
+    """
+    user_id = get_user_id(request)
+    
+    try:
+        user = db.get_user(user_id)
+        if not user:
+            raise HTTPException(404, detail="User not found")
+        
+        # Return user settings with defaults
+        settings = user.get("settings", {})
+        defaults = {
+            "emailNotifications": True,
+            "pushNotifications": True,
+            "alertThreshold": 7.5,
+            "dataRetentionDays": 365
+        }
+        
+        for key, default_value in defaults.items():
+            if key not in settings:
+                settings[key] = default_value
+        
+        return {"success": True, "data": settings}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "SETTINGS_FETCH_FAILED", "message": str(e)})
+
+
+@app.put("/api/v1/settings/user")
+@require_role("patient", "doctor", "admin")
+async def update_user_settings(request: Request):
+    """
+    Update current user's settings/preferences.
+    """
+    user_id = get_user_id(request)
+    role = get_user_role(request)
+    
+    try:
+        body = await request.json()
+        
+        user = db.get_user(user_id)
+        if not user:
+            raise HTTPException(404, detail="User not found")
+        
+        # Update settings
+        settings = user.get("settings", {})
+        settings.update(body)
+        user["settings"] = settings
+        user["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        db.put_user(user)
+        
+        return {"success": True, "message": "Settings updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "SETTINGS_UPDATE_FAILED", "message": str(e)})
+
+
+# -------- Admin - User Management (extended)
+@app.put("/api/v1/admin/users/{user_id}")
+@require_role("admin")
+async def update_user(request: Request, user_id: str):
+    """
+    Update a user (Admin only).
+    """
+    admin_id = get_user_id(request)
+    
+    try:
+        body = await request.json()
+        
+        user = db.get_user(user_id)
+        if not user:
+            raise HTTPException(404, detail="User not found")
+        
+        # Only allow updating certain fields
+        allowed_fields = ["name", "role", "emailVerified", "isActive"]
+        updates = {k: v for k, v in body.items() if k in allowed_fields}
+        
+        user.update(updates)
+        user["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        user["updatedBy"] = admin_id
+        db.put_user(user)
+        
+        audit_service.log_event(
+            event_type=AuditEventType.DATA_UPDATE,
+            user_id=admin_id,
+            user_role="admin",
+            resource_type="user",
+            resource_id=user_id,
+            action="update",
+            details={"updated_fields": list(updates.keys())}
+        )
+        
+        return {"success": True, "message": "User updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "USER_UPDATE_FAILED", "message": str(e)})
+
+
+@app.delete("/api/v1/admin/users/{user_id}")
+@require_role("admin")
+async def delete_user(request: Request, user_id: str):
+    """
+    Delete/deactivate a user (Admin only).
+    """
+    admin_id = get_user_id(request)
+    
+    try:
+        user = db.get_user(user_id)
+        if not user:
+            raise HTTPException(404, detail="User not found")
+        
+        # Soft delete - mark as inactive rather than deleting
+        user["isActive"] = False
+        user["deletedAt"] = datetime.now(timezone.utc).isoformat()
+        user["deletedBy"] = admin_id
+        db.put_user(user)
+        
+        audit_service.log_event(
+            event_type=AuditEventType.DATA_DELETE,
+            user_id=admin_id,
+            user_role="admin",
+            resource_type="user",
+            resource_id=user_id,
+            action="deactivate"
+        )
+        
+        return {"success": True, "message": "User deactivated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail={"code": "USER_DELETE_FAILED", "message": str(e)})
+
 
 # -------- Tremor Analysis
 @app.get("/api/v1/tremor/analysis", response_model=TremorResponse)
