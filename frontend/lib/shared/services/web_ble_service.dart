@@ -64,6 +64,9 @@ class WebBleService extends ChangeNotifier {
   /// Check if Web Bluetooth is supported in current browser
   bool get isBluetoothApiSupported => _webBluetooth.isBluetoothApiSupported;
 
+  /// Get the notify characteristic (used for receiving data from device)
+  BluetoothCharacteristic? get notifyCharacteristic => _notifyCharacteristic;
+
   /// Initialize the Web Bluetooth service
   Future<bool> initialize() async {
     if (_isInitialized) {

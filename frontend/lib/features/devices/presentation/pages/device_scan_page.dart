@@ -980,7 +980,7 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
       
       if (device != null) {
         setState(() {
-          _statusMessage = 'Connecting to ${device.name ?? "device"}...';
+          _statusMessage = 'Connecting to ${device.name}...';
         });
         
         // Connect to the selected device
@@ -988,14 +988,14 @@ class _DeviceScanPageState extends State<DeviceScanPage> with TickerProviderStat
         
         if (connected && mounted) {
           setState(() {
-            _statusMessage = 'Connected to ${device.name ?? "device"}';
+            _statusMessage = 'Connected to ${device.name}';
           });
           
           // Show success message
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Connected to ${device.name ?? "device"} via Web Bluetooth'),
+                content: Text('Connected to ${device.name} via Web Bluetooth'),
                 backgroundColor: AppColors.success,
               ),
             );

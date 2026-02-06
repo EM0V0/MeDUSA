@@ -46,7 +46,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   
   bool _isLoading = true;
   bool _isSaving = false;
-  String? _error;
+  String? _loadError;
 
   @override
   void initState() {
@@ -58,7 +58,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   Future<void> _loadSettings() async {
     setState(() {
       _isLoading = true;
-      _error = null;
+      _loadError = null;
     });
     
     try {
@@ -88,10 +88,12 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
         });
       }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loadError = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -120,6 +122,27 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
               CircularProgressIndicator(),
               SizedBox(height: 16),
               Text('Loading settings...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_loadError != null) {
+      return Scaffold(
+        backgroundColor: AppColors.lightBackground,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              Text('Error loading settings: $_loadError'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadSettings,
+                child: const Text('Retry'),
+              ),
             ],
           ),
         ),
@@ -284,7 +307,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
             ),
             SizedBox(height: 24.h),
             ElevatedButton(
-              onPressed: _saveNotificationSettings,
+              onPressed: _isSaving ? null : _saveNotificationSettings,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -293,7 +316,13 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                   borderRadius: BorderRadius.circular(8.r),
                 ),
               ),
-              child: FontUtils.bodyText('Save Notification Settings', context),
+              child: _isSaving 
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : FontUtils.bodyText('Save Notification Settings', context),
             ),
           ],
         ),
@@ -505,7 +534,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                 SizedBox(width: 16.w),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: _isSaving ? null : () {
                       _saveSystemSettings();
                     },
                     style: ElevatedButton.styleFrom(
@@ -516,7 +545,13 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                       ),
                       padding: EdgeInsets.symmetric(vertical: isMobile ? 16.h : 12.h),
                     ),
-                    child: Text(
+                    child: _isSaving 
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
                       'Save Settings',
                       style: FontUtils.body(
                         fontWeight: FontWeight.w600,
