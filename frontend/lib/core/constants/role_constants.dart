@@ -67,6 +67,7 @@ enum AppPermission {
   editSystemSettings('edit_system_settings', 'Edit system settings'),
   viewAuditLogs('view_audit_logs', 'View audit logs'),
   manageDevices('manage_devices', 'Manage medical devices'),
+  viewSecurityEducation('view_security_education', 'View security education center'),
   
   // Communication permissions
   sendMessages('send_messages', 'Send messages to patients/doctors'),
@@ -155,6 +156,7 @@ class RolePermissions {
       AppPermission.editSystemSettings,
       AppPermission.viewAuditLogs,
       AppPermission.manageDevices,
+      AppPermission.viewSecurityEducation,
       
       // Communication
       AppPermission.sendMessages,
@@ -309,6 +311,13 @@ class RoleNavigationConfig {
         icon: 'history_outlined',
         selectedIcon: 'history',
         requiredPermission: AppPermission.viewAuditLogs,
+      ),
+      NavigationItemConfig(
+        route: '/security-education',
+        label: 'Security Lab',
+        icon: 'school_outlined',
+        selectedIcon: 'school',
+        requiredPermission: AppPermission.viewSecurityEducation,
       ),
     ],
     

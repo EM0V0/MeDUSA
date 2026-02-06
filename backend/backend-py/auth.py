@@ -16,13 +16,46 @@ MFA_TEMP_TOKEN_SECONDS = 300  # 5 minutes for MFA challenge
 # Initialize Argon2id hasher
 ph = PasswordHasher()
 
+# Educational logging helper
+def _educational_log(feature: str, action: str, details: str = ""):
+    """Log security operation for educational purposes"""
+    try:
+        from security_config import security_config
+        if security_config.educational_logging:
+            security_config.log_security_check(feature, True, f"{action}: {details}")
+    except ImportError:
+        pass  # Security config not available, skip logging
+
+
 def hash_pw(pw: str) -> str:
+    """
+    Hash password using Argon2id - the most secure password hashing algorithm.
+    
+    📚 EDUCATIONAL: Why Argon2id?
+    - Memory-hard: Requires 64MB RAM, preventing GPU/ASIC attacks
+    - Time-hard: Takes ~100ms intentionally
+    - Winner of Password Hashing Competition (PHC) in 2015
+    """
+    _educational_log("password_hashing", "Hashing password", 
+                     "Using Argon2id with memory=64MB, iterations=3, parallelism=4")
     return ph.hash(pw)
 
+
 def verify_pw(pw: str, hashed: str) -> bool:
+    """
+    Verify password against Argon2id hash.
+    
+    📚 EDUCATIONAL: Constant-time comparison
+    - Argon2 internally uses constant-time comparison
+    - Prevents timing attacks that could leak password info
+    """
     try:
-        return ph.verify(hashed, pw)
+        result = ph.verify(hashed, pw)
+        _educational_log("password_hashing", "Password verified", "Hash comparison successful")
+        return result
     except (VerifyMismatchError, Exception):
+        _educational_log("password_hashing", "Password verification failed", 
+                         "Hash mismatch - incorrect password or corrupted hash")
         return False
 
 # ========== MFA (TOTP) Functions ==========

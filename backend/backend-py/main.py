@@ -38,6 +38,7 @@ from email_service import EmailService
 from rbac import require_role, get_user_id, get_user_role
 from audit_service import audit_service, AuditEventType
 from replay_protection import nonce_service, require_nonce, get_nonce_endpoint
+from security_config import security_config, SecurityMode
 import db
 import storage
 
@@ -90,6 +91,365 @@ async def options_handler(path: str):
 @app.get("/api/v1/admin/health")
 def health():
     return {"ok": True, "ts": int(time.time()), "security": {"replayProtection": True, "nonceEnabled": True}}
+
+
+# ========== SECURITY EDUCATION API ==========
+# These endpoints expose security configuration for educational purposes
+
+@app.get("/api/v1/security/config")
+async def get_security_config():
+    """
+    Get current security configuration and all security features.
+    This endpoint is publicly accessible for educational purposes.
+    
+    Returns:
+    - mode: Current security mode (secure/insecure/educational)
+    - educationalLogging: Whether verbose security logging is enabled
+    - features: List of all security features with explanations
+    """
+    security_config.log_security_check(
+        "audit_logging",
+        True,
+        "Security configuration accessed - this access is logged"
+    )
+    return security_config.get_config_json()
+
+
+@app.get("/api/v1/security/features")
+async def get_security_features():
+    """
+    Get list of all security features grouped by category.
+    """
+    features = security_config.get_all_features()
+    categories = {}
+    for f in features:
+        if f.category not in categories:
+            categories[f.category] = []
+        categories[f.category].append(f.to_dict())
+    return {"categories": categories}
+
+
+@app.get("/api/v1/security/features/{feature_id}")
+async def get_security_feature(feature_id: str):
+    """
+    Get detailed information about a specific security feature.
+    Includes educational explanation, code location, and references.
+    """
+    feature = security_config.get_feature(feature_id)
+    if not feature:
+        raise HTTPException(404, detail={"code": "NOT_FOUND", "message": f"Feature '{feature_id}' not found"})
+    return feature.to_dict()
+
+
+@app.post("/api/v1/security/features/{feature_id}/toggle")
+@require_role("admin")
+async def toggle_security_feature(feature_id: str, request: Request, enabled: bool = True):
+    """
+    Toggle a security feature on/off (Admin only, educational mode only).
+    
+    ⚠️ WARNING: Disabling security features creates vulnerabilities!
+    This is for educational demonstration only.
+    """
+    if security_config.mode == SecurityMode.SECURE:
+        raise HTTPException(
+            403, 
+            detail={
+                "code": "FORBIDDEN",
+                "message": "Cannot toggle features in SECURE mode. Set SECURITY_MODE=insecure or SECURITY_MODE=educational"
+            }
+        )
+    
+    feature = security_config.get_feature(feature_id)
+    if not feature:
+        raise HTTPException(404, detail={"code": "NOT_FOUND", "message": f"Feature '{feature_id}' not found"})
+    
+    old_state = feature.enabled
+    success = security_config.toggle_feature(feature_id, enabled)
+    
+    # Log the security configuration change
+    audit_service.log_event(
+        event_type=AuditEventType.SYSTEM_CONFIG_CHANGE,
+        user_id=get_user_id(request),
+        user_role=get_user_role(request),
+        resource_type="security_feature",
+        action="toggle",
+        details={
+            "featureId": feature_id,
+            "featureName": feature.name,
+            "oldState": old_state,
+            "newState": enabled,
+            "warning": "SECURITY FEATURE MODIFIED - FOR EDUCATIONAL USE ONLY"
+        }
+    )
+    
+    return {
+        "success": success,
+        "feature": feature.to_dict(),
+        "warning": f"⚠️ {feature.name} is now {'ENABLED' if enabled else 'DISABLED'}. " +
+                   (f"Risk: {feature.risk_if_disabled}" if not enabled else "")
+    }
+
+
+@app.get("/api/v1/security/demo/password-hashing")
+async def demo_password_hashing():
+    """
+    Educational demonstration of password hashing.
+    Shows how Argon2id hashing works without exposing real passwords.
+    """
+    from argon2 import PasswordHasher
+    import time as timing
+    
+    demo_password = "DemoPassword123!"
+    ph = PasswordHasher()
+    
+    # Time the hashing operation
+    start = timing.perf_counter()
+    hashed = ph.hash(demo_password)
+    hash_time = timing.perf_counter() - start
+    
+    # Time the verification
+    start = timing.perf_counter()
+    try:
+        ph.verify(hashed, demo_password)
+        verify_success = True
+    except:
+        verify_success = False
+    verify_time = timing.perf_counter() - start
+    
+    # Parse the hash to show parameters
+    # Argon2 hash format: $argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>
+    parts = hashed.split('$')
+    
+    security_config.log_security_check(
+        "password_hashing",
+        True,
+        f"Demonstrated Argon2id hashing (hash time: {hash_time*1000:.2f}ms)"
+    )
+    
+    return {
+        "demonstration": "Password Hashing with Argon2id",
+        "inputPassword": demo_password,
+        "hashedOutput": hashed,
+        "hashLength": len(hashed),
+        "algorithm": "Argon2id",
+        "parameters": {
+            "variant": parts[1] if len(parts) > 1 else "argon2id",
+            "version": parts[2] if len(parts) > 2 else "v=19",
+            "memory": "65536 KB (64 MB)",
+            "iterations": "3",
+            "parallelism": "4 threads"
+        },
+        "timing": {
+            "hashTimeMs": round(hash_time * 1000, 2),
+            "verifyTimeMs": round(verify_time * 1000, 2),
+            "explanation": "Intentionally slow to prevent brute force attacks"
+        },
+        "verificationTest": {
+            "correctPassword": verify_success,
+            "wrongPassword": "Would return False"
+        },
+        "securityExplanation": {
+            "whyArgon2id": "Winner of Password Hashing Competition (PHC)",
+            "memoryHard": "Requires 64MB RAM per hash, preventing GPU attacks",
+            "saltedHash": "Each password has unique salt, preventing rainbow tables",
+            "adaptiveCost": "Parameters can be increased as hardware improves"
+        }
+    }
+
+
+@app.get("/api/v1/security/demo/jwt-token")
+async def demo_jwt_token():
+    """
+    Educational demonstration of JWT token structure.
+    Shows how tokens are created and what they contain.
+    """
+    import jwt
+    import base64
+    
+    # Create a demo token (not a real user)
+    demo_payload = {
+        "sub": "demo_user_123",
+        "role": "patient",
+        "exp": int(time.time()) + 3600,
+        "iat": int(time.time())
+    }
+    
+    # Use a demo secret (not the real one)
+    demo_secret = "demo-secret-for-educational-purposes"
+    demo_token = jwt.encode(demo_payload, demo_secret, algorithm="HS256")
+    
+    # Decode token parts for demonstration
+    parts = demo_token.split('.')
+    header_decoded = base64.urlsafe_b64decode(parts[0] + '==').decode('utf-8')
+    payload_decoded = base64.urlsafe_b64decode(parts[1] + '==').decode('utf-8')
+    
+    security_config.log_security_check(
+        "jwt_authentication",
+        True,
+        "Demonstrated JWT token structure"
+    )
+    
+    return {
+        "demonstration": "JWT Token Structure",
+        "fullToken": demo_token,
+        "tokenParts": {
+            "header": {
+                "encoded": parts[0],
+                "decoded": header_decoded,
+                "explanation": "Specifies the algorithm (HS256) and token type (JWT)"
+            },
+            "payload": {
+                "encoded": parts[1],
+                "decoded": payload_decoded,
+                "explanation": "Contains claims: user ID, role, expiration time"
+            },
+            "signature": {
+                "encoded": parts[2],
+                "explanation": "HMAC-SHA256 signature to prevent tampering"
+            }
+        },
+        "security": {
+            "algorithm": "HS256 (HMAC with SHA-256)",
+            "secretLocation": "Environment variable JWT_SECRET (never exposed)",
+            "expiration": "1 hour for access tokens",
+            "refreshToken": "7 days, allows getting new access tokens"
+        },
+        "attackPrevention": {
+            "tampering": "Signature verification fails if payload is modified",
+            "forgery": "Cannot create valid token without server secret",
+            "expiration": "Limits window of attack if token is stolen"
+        },
+        "warning": "⚠️ This is a demo token with a fake secret. Real tokens use a secure server-side secret."
+    }
+
+
+@app.get("/api/v1/security/demo/rbac")
+async def demo_rbac(request: Request):
+    """
+    Educational demonstration of Role-Based Access Control.
+    Shows permission matrix and current user's access level.
+    """
+    # Get current user info if authenticated
+    claims = getattr(request.state, "claims", {})
+    current_role = claims.get("role", "anonymous")
+    current_user = claims.get("sub", "not_authenticated")
+    
+    permission_matrix = {
+        "patient": {
+            "view_own_profile": True,
+            "view_own_data": True,
+            "view_other_patients": False,
+            "manage_patients": False,
+            "register_devices": False,
+            "view_audit_logs": False,
+            "system_settings": False
+        },
+        "doctor": {
+            "view_own_profile": True,
+            "view_own_data": True,
+            "view_other_patients": "assigned_only",
+            "manage_patients": "assigned_only",
+            "register_devices": True,
+            "view_audit_logs": False,
+            "system_settings": False
+        },
+        "admin": {
+            "view_own_profile": True,
+            "view_own_data": True,
+            "view_other_patients": True,
+            "manage_patients": True,
+            "register_devices": True,
+            "view_audit_logs": True,
+            "system_settings": True
+        }
+    }
+    
+    security_config.log_security_check(
+        "rbac",
+        True,
+        f"RBAC demonstration for role: {current_role}"
+    )
+    
+    return {
+        "demonstration": "Role-Based Access Control (RBAC)",
+        "currentUser": {
+            "userId": current_user,
+            "role": current_role,
+            "permissions": permission_matrix.get(current_role, {})
+        },
+        "permissionMatrix": permission_matrix,
+        "roles": {
+            "patient": "Can only access their own data",
+            "doctor": "Can access assigned patients' data",
+            "admin": "Full system access including audit logs"
+        },
+        "implementation": {
+            "decorator": "@require_role('doctor', 'admin')",
+            "file": "backend/backend-py/rbac.py",
+            "principle": "Principle of Least Privilege"
+        }
+    }
+
+
+@app.get("/api/v1/security/demo/replay-protection")
+async def demo_replay_protection():
+    """
+    Educational demonstration of replay attack protection.
+    Shows nonce generation and validation.
+    """
+    # Generate a demo nonce
+    demo_nonce = nonce_service.generate_nonce()
+    
+    # Validate it (first time should pass)
+    is_valid_first, message_first = nonce_service.validate_nonce(demo_nonce)
+    
+    # Store it to simulate usage
+    nonce_service._store_nonce(demo_nonce)
+    
+    # Try to validate again (should fail - replay detected)
+    is_valid_second, message_second = nonce_service.validate_nonce(demo_nonce)
+    
+    security_config.log_security_check(
+        "replay_protection",
+        True,
+        f"Demonstrated nonce validation: first={is_valid_first}, replay={is_valid_second}"
+    )
+    
+    return {
+        "demonstration": "Request Replay Protection",
+        "generatedNonce": demo_nonce,
+        "nonceFormat": {
+            "structure": "timestamp.randomHex.signature",
+            "timestamp": "Unix milliseconds for freshness check",
+            "randomHex": "16 bytes of cryptographic randomness",
+            "signature": "HMAC-SHA256 to prevent tampering"
+        },
+        "validationTest": {
+            "firstValidation": {
+                "passed": is_valid_first,
+                "message": message_first or "Valid nonce"
+            },
+            "replayAttempt": {
+                "passed": is_valid_second,
+                "message": message_second or "Should fail - nonce already used"
+            }
+        },
+        "attackPrevention": {
+            "replayAttack": "Each nonce can only be used once",
+            "timestampAttack": "Nonces expire after 5 minutes",
+            "tamperAttack": "HMAC signature prevents modification",
+            "predictionAttack": "Cryptographic randomness is unpredictable"
+        },
+        "workflow": [
+            "1. Client requests nonce from /security/nonce",
+            "2. Server generates and stores nonce with TTL",
+            "3. Client includes nonce in X-Request-Nonce header",
+            "4. Server validates: format, signature, timestamp, uniqueness",
+            "5. Server marks nonce as used",
+            "6. Any replay attempt is rejected"
+        ]
+    }
+
 
 @app.post("/api/v1/admin/test-email")
 def test_email(email: str):

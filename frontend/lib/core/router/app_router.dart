@@ -8,6 +8,7 @@ import '../../features/admin/presentation/pages/user_management_page.dart';
 import '../../features/admin/presentation/pages/device_management_page.dart';
 import '../../features/admin/presentation/pages/system_settings_page.dart';
 import '../../features/admin/presentation/pages/audit_logs_page.dart';
+import '../../features/admin/presentation/pages/security_education_page.dart';
 import '../../features/devices/presentation/pages/device_connection_page.dart';
 import '../../features/devices/presentation/pages/device_scan_page.dart';
 import '../../features/devices/presentation/pages/wifi_provision_page.dart';
@@ -180,6 +181,16 @@ class AppRouter {
             pageBuilder: (context, state) => NoTransitionPage(
               key: state.pageKey,
               child: const AuditLogsPage(),
+            ),
+          ),
+
+          // Security Education Route (educational platform feature)
+          GoRoute(
+            path: '/security-education',
+            name: 'security-education',
+            pageBuilder: (context, state) => NoTransitionPage(
+              key: state.pageKey,
+              child: const SecurityEducationPage(),
             ),
           ),
 
