@@ -7,10 +7,11 @@ import '../../domain/exceptions/auth_exceptions.dart';
 abstract class AuthRemoteDataSource {
   Future<User> login(String email, String password);
   Future<User> mfaLogin(String tempToken, String code);
-  Future<User> register(String name, String email, String password, String role);
+  Future<User> register(String name, String email, String password, String role, {String? verificationCode});
   Future<void> logout();
   Future<void> refreshToken();
   Future<void> resetPassword(String email, String newPassword);
+  Future<bool> requestVerification(String email, String type);
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -68,7 +69,13 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       return user.copyWith(token: responseData['accessJwt']);
     } on DioException catch (e) {
       // Handle specific HTTP error codes
-      if (e.response?.statusCode == 401) {
+      if (e.response?.statusCode == 429) {
+        final detail = e.response?.data;
+        final code = detail?['detail']?['code'] ?? 'RATE_LIMIT_EXCEEDED';
+        final message = detail?['detail']?['message'] ?? 'Too many login attempts.';
+        final retryAfter = detail?['detail']?['retryAfter'] ?? '';
+        throw Exception('Bad response: 429 - {detail: {code: $code, message: $message, retryAfter: $retryAfter}}');
+      } else if (e.response?.statusCode == 401) {
         throw Exception('Invalid email or password. Please check your credentials.');
       } else if (e.response?.statusCode == 404) {
         throw Exception('Account not found. Please register first.');
@@ -126,13 +133,14 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   }
 
   @override
-  Future<User> register(String name, String email, String password, String role) async {
+  Future<User> register(String name, String email, String password, String role, {String? verificationCode}) async {
     try {
       // API v3: Simple format with email, password, role (lowercase)
       final data = {
         'email': email,
         'password': password,
         'role': role.toLowerCase(), // API v3 uses lowercase roles
+        if (verificationCode != null) 'verificationCode': verificationCode,
       };
 
       final response = await networkService.post(
@@ -154,6 +162,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       // API v3: Returns userId only, not full user object
       // We need to construct the user object manually or fetch it
       final userId = responseData['userId'];
+      final mfaSecret = responseData['mfaSecret'];
       
       final user = User(
         id: userId,
@@ -161,6 +170,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         name: name, // We don't have name in response, use input
         role: role,
         token: responseData['accessJwt'],
+        mfaSecret: mfaSecret,
       );
       
       return user;
@@ -222,6 +232,30 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       }
     } catch (e) {
       throw Exception('Password reset failed: $e');
+    }
+  }
+
+  @override
+  Future<bool> requestVerification(String email, String type) async {
+    try {
+      final response = await networkService.post(
+        '/auth/request-verification',
+        data: {
+          'email': email,
+          'type': type,
+        },
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        throw Exception('This email is already registered.');
+      } else if (e.response?.statusCode == 429) {
+        throw Exception('Too many requests. Please wait 60 seconds.');
+      } else {
+        throw Exception('Failed to send verification code: ${e.message ?? 'Unknown error'}');
+      }
+    } catch (e) {
+      throw Exception('Failed to send verification code: $e');
     }
   }
 }

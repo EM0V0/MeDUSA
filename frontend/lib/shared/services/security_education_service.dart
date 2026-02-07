@@ -206,11 +206,167 @@ class ReplayProtectionDemo {
 /// Provides access to security education features and demonstrations.
 /// This service helps users understand how each security feature works
 /// and why it's important for medical device security.
+/// 
+/// OFFLINE MODE: When the backend is unreachable, the service maintains
+/// local state for feature toggles to enable educational demonstrations.
 class SecurityEducationService {
   final NetworkService _networkService;
   
+  /// Local state for offline mode
+  static bool _offlineMode = false;
+  static String _currentMode = 'educational';
+  static final Map<String, bool> _localFeatureStates = {
+    'password_complexity': true,
+    'password_hashing': true,
+    'input_validation': true,
+    'mfa_totp': true,
+    'jwt_authentication': true,
+    'rate_limiting': true,
+    'replay_protection': true,
+    'audit_logging': true,
+    'tls_https': true,
+    'certificate_pinning': true,
+    'rbac': true,
+    'session_management': true,
+  };
+  
   SecurityEducationService({NetworkService? networkService})
       : _networkService = networkService ?? NetworkServiceImpl.secure();
+
+  /// Check if running in offline/local mode
+  static bool get isOfflineMode => _offlineMode;
+  
+  /// Get current mode (local or from backend)
+  static String get currentMode => _currentMode;
+
+  /// Check if a feature is enabled (works offline)
+  static bool isFeatureEnabled(String featureId) {
+    return _localFeatureStates[featureId] ?? true;
+  }
+
+  /// Toggle a feature locally (for UI responsiveness)
+  static void toggleFeatureLocally(String featureId, bool enabled) {
+    _localFeatureStates[featureId] = enabled;
+    debugPrint('SecurityEducationService: Toggled $featureId to $enabled (local)');
+  }
+
+  /// Set mode locally
+  static void setModeLocally(String mode) {
+    _currentMode = mode;
+    debugPrint('SecurityEducationService: Mode set to $mode (local)');
+    
+    // If secure mode, enable all features
+    if (mode == 'secure') {
+      _localFeatureStates.updateAll((key, value) => true);
+    }
+  }
+
+  /// Get default offline config
+  static SecurityConfig getDefaultConfig() {
+    return SecurityConfig(
+      mode: _currentMode,
+      educationalLogging: true,
+      categories: ['Authentication', 'Authorization', 'Transport Security', 'Replay Protection', 'Audit & Logging', 'Input Validation', 'Secure Storage', 'Rate Limiting'],
+      features: [
+        SecurityFeature(
+          id: 'password_complexity',
+          name: 'Password Complexity',
+          description: 'Enforces strong password requirements (12+ chars, mixed case, numbers, symbols)',
+          enabled: _localFeatureStates['password_complexity'] ?? true,
+          category: 'Authentication',
+          riskIfDisabled: 'Weak passwords can be easily brute-forced',
+          fdaRequirement: 'FDA Premarket Guidance 2023: Authentication Controls',
+          educationalExplanation: 'Strong passwords are the first line of defense',
+          codeLocation: 'backend-py/password_validator.py',
+          cweReference: 'CWE-521',
+        ),
+        SecurityFeature(
+          id: 'password_hashing',
+          name: 'Argon2id Password Hashing',
+          description: 'Uses Argon2id (memory-hard) algorithm for secure password storage',
+          enabled: _localFeatureStates['password_hashing'] ?? true,
+          category: 'Authentication',
+          riskIfDisabled: 'Stored passwords could be reverse-engineered',
+          fdaRequirement: 'FDA Premarket Guidance 2023: Cryptographic Protection',
+          educationalExplanation: 'Modern password hashing prevents rainbow table attacks',
+          codeLocation: 'backend-py/auth.py',
+          cweReference: 'CWE-916',
+        ),
+        SecurityFeature(
+          id: 'mfa_totp',
+          name: 'Multi-Factor Authentication (TOTP)',
+          description: 'Time-based One-Time Password for additional login security',
+          enabled: _localFeatureStates['mfa_totp'] ?? true,
+          category: 'Authentication',
+          riskIfDisabled: 'Account compromise with stolen password',
+          fdaRequirement: 'FDA Premarket Guidance 2023: Multi-Factor Authentication',
+          educationalExplanation: 'MFA requires something you know AND something you have',
+          codeLocation: 'backend-py/auth.py',
+          cweReference: 'CWE-308',
+        ),
+        SecurityFeature(
+          id: 'rate_limiting',
+          name: 'Rate Limiting',
+          description: 'Limits login attempts to prevent brute-force attacks',
+          enabled: _localFeatureStates['rate_limiting'] ?? true,
+          category: 'Rate Limiting',
+          riskIfDisabled: 'Unlimited login attempts enable brute-force attacks',
+          fdaRequirement: 'FDA Premarket Guidance 2023: Access Controls',
+          educationalExplanation: 'Rate limiting slows down automated attacks',
+          codeLocation: 'backend-py/main.py',
+          cweReference: 'CWE-307',
+        ),
+        SecurityFeature(
+          id: 'jwt_authentication',
+          name: 'JWT Token Authentication',
+          description: 'Secure token-based authentication with expiration',
+          enabled: _localFeatureStates['jwt_authentication'] ?? true,
+          category: 'Authorization',
+          riskIfDisabled: 'Sessions could be hijacked or forged',
+          fdaRequirement: 'FDA Premarket Guidance 2023: Session Management',
+          educationalExplanation: 'JWT tokens carry signed claims that expire',
+          codeLocation: 'backend-py/auth.py',
+          cweReference: 'CWE-613',
+        ),
+        SecurityFeature(
+          id: 'input_validation',
+          name: 'Input Validation',
+          description: 'Sanitizes and validates all user input',
+          enabled: _localFeatureStates['input_validation'] ?? true,
+          category: 'Input Validation',
+          riskIfDisabled: 'SQL injection, XSS, and command injection vulnerabilities',
+          fdaRequirement: 'FDA Premarket Guidance 2023: Input Validation',
+          educationalExplanation: 'Never trust user input - always validate',
+          codeLocation: 'backend-py/main.py',
+          cweReference: 'CWE-20',
+        ),
+        SecurityFeature(
+          id: 'replay_protection',
+          name: 'Replay Protection',
+          description: 'Prevents replay attacks using nonces and timestamps',
+          enabled: _localFeatureStates['replay_protection'] ?? true,
+          category: 'Replay Protection',
+          riskIfDisabled: 'Attackers can replay captured requests',
+          fdaRequirement: 'FDA Premarket Guidance 2023: Data Integrity',
+          educationalExplanation: 'Each request must be unique and time-bound',
+          codeLocation: 'backend-py/replay_protection.py',
+          cweReference: 'CWE-294',
+        ),
+        SecurityFeature(
+          id: 'audit_logging',
+          name: 'Audit Logging',
+          description: 'Comprehensive logging of security-relevant events',
+          enabled: _localFeatureStates['audit_logging'] ?? true,
+          category: 'Audit & Logging',
+          riskIfDisabled: 'No trail for incident investigation',
+          fdaRequirement: 'FDA Premarket Guidance 2023: Audit Trail',
+          educationalExplanation: 'Complete audit trails enable forensic analysis',
+          codeLocation: 'backend-py/audit_service.py',
+          cweReference: 'CWE-778',
+        ),
+      ],
+    );
+  }
 
   /// Get the current security configuration
   Future<SecurityConfig?> getSecurityConfig() async {
@@ -220,13 +376,27 @@ class SecurityEducationService {
         final data = response.data is String 
             ? jsonDecode(response.data as String) 
             : response.data;
-        return SecurityConfig.fromJson(data as Map<String, dynamic>);
+        _offlineMode = false;
+        final config = SecurityConfig.fromJson(data as Map<String, dynamic>);
+        // Sync local state with backend
+        for (var feature in config.features) {
+          _localFeatureStates[feature.id] = feature.enabled;
+        }
+        _currentMode = config.mode;
+        return config;
       }
-      return null;
+      return _enableOfflineMode();
     } catch (e) {
       debugPrint('SecurityEducationService: Error getting config: $e');
-      return null;
+      return _enableOfflineMode();
     }
+  }
+
+  SecurityConfig _enableOfflineMode() {
+    _offlineMode = true;
+    debugPrint('SecurityEducationService: Backend unreachable, using LOCAL MODE');
+    debugPrint('SecurityEducationService: All toggles will work locally for educational purposes');
+    return getDefaultConfig();
   }
 
   /// Get live security status (for real-time dashboard updates)
@@ -253,6 +423,9 @@ class SecurityEducationService {
   /// - 'educational': All features enabled + verbose logging + can toggle
   /// - 'insecure': Features can be disabled for demos
   Future<Map<String, dynamic>?> setSecurityMode(String mode) async {
+    // Always update local state first for responsiveness
+    setModeLocally(mode);
+    
     try {
       final response = await _networkService.post(
         '/security/mode?mode=$mode',
@@ -265,11 +438,21 @@ class SecurityEducationService {
         logEducational('Mode Switch', 'Security mode changed to: $mode');
         return data as Map<String, dynamic>;
       }
-      return null;
+      return _offlineModeResponse(mode);
     } catch (e) {
       debugPrint('SecurityEducationService: Error setting mode: $e');
-      return null;
+      return _offlineModeResponse(mode);
     }
+  }
+
+  Map<String, dynamic> _offlineModeResponse(String mode) {
+    logEducational('Mode Switch (LOCAL)', 'Security mode changed to: $mode (offline mode)');
+    return {
+      'success': true,
+      'mode': mode,
+      'message': 'Mode changed locally (backend unreachable)',
+      'offline': true,
+    };
   }
 
   /// Toggle educational logging at RUNTIME
@@ -310,7 +493,11 @@ class SecurityEducationService {
   }
 
   /// Toggle a security feature (admin only, educational mode only)
+  /// Works in offline mode by updating local state.
   Future<Map<String, dynamic>?> toggleSecurityFeature(String featureId, bool enabled) async {
+    // Always update local state first for responsiveness
+    toggleFeatureLocally(featureId, enabled);
+    
     try {
       final response = await _networkService.post(
         '/security/features/$featureId/toggle?enabled=$enabled',
@@ -320,13 +507,25 @@ class SecurityEducationService {
         final data = response.data is String 
             ? jsonDecode(response.data as String) 
             : response.data;
+        logEducational('Feature Toggle', '$featureId set to ${enabled ? "ENABLED" : "DISABLED"}');
         return data as Map<String, dynamic>;
       }
-      return null;
+      return _offlineToggleResponse(featureId, enabled);
     } catch (e) {
       debugPrint('SecurityEducationService: Error toggling feature: $e');
-      return null;
+      return _offlineToggleResponse(featureId, enabled);
     }
+  }
+
+  Map<String, dynamic> _offlineToggleResponse(String featureId, bool enabled) {
+    logEducational('Feature Toggle (LOCAL)', '$featureId set to ${enabled ? "ENABLED" : "DISABLED"} (offline mode)');
+    return {
+      'success': true,
+      'featureId': featureId,
+      'enabled': enabled,
+      'message': 'Feature toggled locally (backend unreachable)',
+      'offline': true,
+    };
   }
 
   /// Get password hashing demonstration

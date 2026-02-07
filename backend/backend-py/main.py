@@ -1,6 +1,8 @@
 import os, sys, uuid, time, secrets
 from datetime import datetime, timezone
 from typing import Optional
+from collections import defaultdict
+import threading
 
 # Set UTF-8 encoding for Lambda environment
 os.environ['PYTHONIOENCODING'] = 'utf-8'
@@ -41,6 +43,115 @@ from replay_protection import nonce_service, require_nonce, get_nonce_endpoint
 from security_config import security_config, SecurityMode
 import db
 import storage
+
+# ============================================================================
+# RATE LIMITER - Brute Force Protection
+# ============================================================================
+class RateLimiter:
+    """
+    Simple in-memory rate limiter for login attempts.
+    
+    Configuration:
+    - MAX_ATTEMPTS: Maximum login attempts before lockout (default: 5)
+    - LOCKOUT_SECONDS: Duration of lockout in seconds (default: 60)
+    
+    Security Education:
+    - CWE-307: Improper Restriction of Excessive Authentication Attempts
+    - FDA Premarket Guidance 2023: Access Controls
+    """
+    
+    def __init__(self, max_attempts: int = 5, lockout_seconds: int = 60):
+        self.max_attempts = max_attempts
+        self.lockout_seconds = lockout_seconds
+        self._attempts = defaultdict(list)  # key -> list of timestamps
+        self._lock = threading.Lock()
+    
+    def _clean_old_attempts(self, key: str, now: float):
+        """Remove attempts older than lockout window"""
+        cutoff = now - self.lockout_seconds
+        self._attempts[key] = [ts for ts in self._attempts[key] if ts > cutoff]
+    
+    def is_locked_out(self, key: str) -> tuple[bool, int]:
+        """
+        Check if a key (email/IP) is locked out.
+        Returns (is_locked, remaining_seconds)
+        """
+        now = time.time()
+        with self._lock:
+            self._clean_old_attempts(key, now)
+            attempts = self._attempts[key]
+            
+            if len(attempts) >= self.max_attempts:
+                oldest = min(attempts) if attempts else now
+                remaining = int(self.lockout_seconds - (now - oldest))
+                if remaining > 0:
+                    return True, remaining
+        return False, 0
+    
+    def record_attempt(self, key: str) -> tuple[int, int]:
+        """
+        Record a failed login attempt.
+        Returns (current_attempts, max_attempts)
+        """
+        now = time.time()
+        with self._lock:
+            self._clean_old_attempts(key, now)
+            self._attempts[key].append(now)
+            return len(self._attempts[key]), self.max_attempts
+    
+    def clear_attempts(self, key: str):
+        """Clear attempts after successful login"""
+        with self._lock:
+            self._attempts.pop(key, None)
+    
+    def get_remaining_attempts(self, key: str) -> int:
+        """Get remaining attempts before lockout"""
+        now = time.time()
+        with self._lock:
+            self._clean_old_attempts(key, now)
+            return max(0, self.max_attempts - len(self._attempts[key]))
+
+# Global rate limiter instance
+login_rate_limiter = RateLimiter(max_attempts=5, lockout_seconds=60)
+
+# ============================================================================
+# AUDIT LOGGING HELPER - Respects security education toggle
+# ============================================================================
+import re as _re
+
+def audit_log_if_enabled(**kwargs):
+    """
+    Conditionally log audit events based on the audit_logging feature toggle.
+    When disabled, prints a warning instead of recording the event.
+    """
+    if security_config.is_feature_enabled("audit_logging"):
+        audit_service.log_event(**kwargs)
+    else:
+        event_type = kwargs.get("event_type", "UNKNOWN")
+        security_config.log_security_check("audit_logging", False,
+            f"BYPASSED - Audit event '{event_type}' NOT recorded (feature disabled)")
+
+# Input validation helpers
+_EMAIL_REGEX = _re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
+
+def validate_input_fields(email: str, password: str) -> tuple:
+    """
+    Validate registration input fields (email format, injection patterns).
+    Returns (is_valid, error_message).
+    """
+    # Email format check
+    if not _EMAIL_REGEX.match(email):
+        return False, "Invalid email format"
+    # Check for common injection patterns
+    injection_patterns = ['<script', 'javascript:', 'DROP TABLE', '--', '/*', '*/']
+    for pattern in injection_patterns:
+        if pattern.lower() in email.lower() or pattern.lower() in password.lower():
+            return False, f"Potentially malicious input detected"
+    if len(email) > 254:
+        return False, "Email too long (max 254 characters)"
+    if len(password) > 128:
+        return False, "Password too long (max 128 characters)"
+    return True, ""
 
 app = FastAPI(title="MeDUSA Python API (Single Lambda)")
 
@@ -125,7 +236,7 @@ async def set_security_mode(mode: str, request: Request):
     - educational: All features enabled, verbose logging, can be toggled
     - insecure: Features can be disabled for vulnerability demos
     
-    ⚠️ This is for educational purposes only!
+     This is for educational purposes only!
     """
     try:
         new_mode = SecurityMode(mode.lower())
@@ -143,7 +254,7 @@ async def set_security_mode(mode: str, request: Request):
         "previousMode": old_mode.value,
         "currentMode": new_mode.value,
         "message": f"Security mode changed from {old_mode.value.upper()} to {new_mode.value.upper()}",
-        "warning": "⚠️ Mode change takes effect immediately - no restart needed!" if new_mode != SecurityMode.SECURE else None
+        "warning": " Mode change takes effect immediately - no restart needed!" if new_mode != SecurityMode.SECURE else None
     }
 
 
@@ -212,12 +323,11 @@ async def get_security_feature(feature_id: str):
 
 
 @app.post("/api/v1/security/features/{feature_id}/toggle")
-@require_role("admin")
 async def toggle_security_feature(feature_id: str, request: Request, enabled: bool = True):
     """
-    Toggle a security feature on/off (Admin only, educational mode only).
+    Toggle a security feature on/off (educational mode only, no auth required).
     
-    ⚠️ WARNING: Disabling security features creates vulnerabilities!
+     WARNING: Disabling security features creates vulnerabilities!
     This is for educational demonstration only.
     """
     if security_config.mode == SecurityMode.SECURE:
@@ -236,11 +346,19 @@ async def toggle_security_feature(feature_id: str, request: Request, enabled: bo
     old_state = feature.enabled
     success = security_config.toggle_feature(feature_id, enabled)
     
-    # Log the security configuration change
-    audit_service.log_event(
+    # Log the security configuration change (user may be anonymous)
+    user_id = "anonymous"
+    user_role = "guest"
+    try:
+        user_id = get_user_id(request)
+        user_role = get_user_role(request)
+    except:
+        pass
+    
+    audit_log_if_enabled(
         event_type=AuditEventType.SYSTEM_CONFIG_CHANGE,
-        user_id=get_user_id(request),
-        user_role=get_user_role(request),
+        user_id=user_id,
+        user_role=user_role,
         resource_type="security_feature",
         action="toggle",
         details={
@@ -255,7 +373,7 @@ async def toggle_security_feature(feature_id: str, request: Request, enabled: bo
     return {
         "success": success,
         "feature": feature.to_dict(),
-        "warning": f"⚠️ {feature.name} is now {'ENABLED' if enabled else 'DISABLED'}. " +
+        "warning": f" {feature.name} is now {'ENABLED' if enabled else 'DISABLED'}. " +
                    (f"Risk: {feature.risk_if_disabled}" if not enabled else "")
     }
 
@@ -389,7 +507,7 @@ async def demo_jwt_token():
             "forgery": "Cannot create valid token without server secret",
             "expiration": "Limits window of attack if token is stolen"
         },
-        "warning": "⚠️ This is a demo token with a fake secret. Real tokens use a secure server-side secret."
+        "warning": " This is a demo token with a fake secret. Real tokens use a secure server-side secret."
     }
 
 
@@ -579,7 +697,7 @@ async def get_audit_logs(
         )
         
         # Log this admin action
-        audit_service.log_event(
+        audit_log_if_enabled(
             event_type=AuditEventType.DATA_READ,
             user_id=get_user_id(request),
             user_role=get_user_role(request),
@@ -651,7 +769,7 @@ async def update_system_settings(request: Request):
             db.put_system_setting(key, value, user_id)
         
         # Log this admin action
-        audit_service.log_event(
+        audit_log_if_enabled(
             event_type=AuditEventType.SYSTEM_CONFIG_CHANGE,
             user_id=user_id,
             user_role=get_user_role(request),
@@ -702,7 +820,7 @@ def request_verification(req: RequestVerificationReq):
         if not existing:
             # Don't reveal if email exists - just return success
             # But log internally for security monitoring
-            audit_service.log_event(
+            audit_log_if_enabled(
                 event_type=AuditEventType.AUTH_PASSWORD_RESET,
                 details={"email": email, "status": "email_not_found"}
             )
@@ -731,7 +849,7 @@ def request_verification(req: RequestVerificationReq):
         raise HTTPException(500, detail={"code": "EMAIL_FAILED", "message": "Failed to send verification email"})
     
     # Log verification code request
-    audit_service.log_event(
+    audit_log_if_enabled(
         event_type=AuditEventType.DATA_CREATE,
         details={"action": "verification_code_sent", "email": email, "type": code_type}
     )
@@ -750,6 +868,16 @@ def register(req: RegisterReq):
     """
     email = req.email.lower().strip()
     
+    # Validate input fields FIRST (if feature enabled) - before any DB lookups
+    if security_config.is_feature_enabled("input_validation"):
+        is_valid, error_msg = validate_input_fields(email, req.password)
+        if not is_valid:
+            security_config.log_security_check("input_validation", False, f"Input rejected: {error_msg}")
+            raise HTTPException(400, detail={"code": "INVALID_INPUT", "message": error_msg})
+        security_config.log_security_check("input_validation", True, "Input validation passed")
+    else:
+        security_config.log_security_check("input_validation", False, " BYPASSED - No input sanitization (insecure mode)")
+    
     # Verify the email verification code
     if not db.verify_and_consume_code(email, req.verificationCode, "registration"):
         raise HTTPException(400, detail={"code": "INVALID_CODE", "message": "Invalid or expired verification code"})
@@ -759,10 +887,15 @@ def register(req: RegisterReq):
     if existing:
         raise HTTPException(409, detail={"code": "EMAIL_TAKEN", "message": "Email is already registered"})
     
-    # Validate password strength
-    is_valid, error_msg = PasswordValidator.validate(req.password)
-    if not is_valid:
-        raise HTTPException(400, detail={"code": "INVALID_PASSWORD", "message": error_msg})
+    # Validate password strength (if feature enabled)
+    if security_config.is_feature_enabled("password_complexity"):
+        is_valid, error_msg = PasswordValidator.validate(req.password)
+        if not is_valid:
+            security_config.log_security_check("password_complexity", False, f"Password rejected: {error_msg}")
+            raise HTTPException(400, detail={"code": "INVALID_PASSWORD", "message": error_msg})
+        security_config.log_security_check("password_complexity", True, "Password meets complexity requirements")
+    else:
+        security_config.log_security_check("password_complexity", True, " BYPASSED - feature disabled (insecure mode)")
     
     uid = f"usr_{uuid.uuid4().hex[:8]}"
     
@@ -795,12 +928,22 @@ def register(req: RegisterReq):
     # Generate MFA secret at registration time (mandatory for medical system)
     mfa_secret = generate_mfa_secret()
     
+    # Hash password (always use Argon2id for security, but log the check)
+    if security_config.is_feature_enabled("password_hashing"):
+        hashed_password = hash_pw(req.password)
+        security_config.log_security_check("password_hashing", True, "Password hashed with Argon2id")
+    else:
+        # Even in insecure mode, we hash - but we could demonstrate weak hashing
+        # For safety, we still use Argon2id but log the warning
+        hashed_password = hash_pw(req.password)
+        security_config.log_security_check("password_hashing", True, " Feature disabled but password still hashed for safety")
+    
     user = {
         "id": uid,
         "email": email,
         "role": role,
         "name": email.split('@')[0],  # Generate name from email
-        "password": hash_pw(req.password),
+        "password": hashed_password,
         "emailVerified": True,  # Email is verified through the code
         "mfaSecret": mfa_secret,  # MFA is enabled from the start
         "mfaEnabled": True,
@@ -828,7 +971,7 @@ def register(req: RegisterReq):
     )
     
     # Log successful registration with MFA enabled
-    audit_service.log_event(
+    audit_log_if_enabled(
         event_type=AuditEventType.DATA_CREATE,
         user_id=uid,
         details={"action": "user_registered", "email": email, "role": role, "mfa_enabled": True}
@@ -849,41 +992,107 @@ def login(req: LoginReq, request: Request):
     
     If MFA is enabled, returns mfaRequired=true with tempToken.
     Otherwise, returns flat response with accessJwt, refreshToken, expiresIn, and user info.
+    
+    Rate Limiting:
+    - 5 attempts max per email
+    - 60 second lockout after max attempts
+    - Can be disabled via security education mode
     """
     # Extract client info for audit logging
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     
+    # Check rate limiting (if feature enabled)
+    rate_limit_enabled = security_config.is_feature_enabled("rate_limiting")
+    rate_limit_key = req.email.lower()  # Use email as rate limit key
+    
+    if rate_limit_enabled:
+        is_locked, remaining = login_rate_limiter.is_locked_out(rate_limit_key)
+        if is_locked:
+            # Log rate limit exceeded
+            audit_log_if_enabled(
+                event_type=AuditEventType.SECURITY_RATE_LIMIT_EXCEEDED,
+                user_id=None,
+                details={
+                    "email": req.email,
+                    "ip_address": client_ip,
+                    "lockout_remaining": remaining
+                }
+            )
+            security_config.log_security_check("rate_limiting", True, f"馃洃 BLOCKED - {remaining}s lockout remaining")
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "RATE_LIMIT_EXCEEDED",
+                    "message": f"Too many login attempts. Please wait {remaining} seconds.",
+                    "retryAfter": remaining
+                }
+            )
+        security_config.log_security_check("rate_limiting", True, f"Rate limit OK - {login_rate_limiter.get_remaining_attempts(rate_limit_key)} attempts remaining")
+    else:
+        security_config.log_security_check("rate_limiting", False, " BYPASSED - unlimited login attempts allowed!")
+    
+    # Check authentication (if feature enabled)
+    security_config.log_security_check("jwt_authentication", True, "Processing login request")
+    
     u = db.get_user_by_email(req.email)
     if not u or not verify_pw(req.password, u["password"]):
+        # Record failed attempt for rate limiting
+        if rate_limit_enabled:
+            attempts, max_attempts = login_rate_limiter.record_attempt(rate_limit_key)
+            security_config.log_security_check("rate_limiting", True, f"Failed attempt recorded: {attempts}/{max_attempts}")
+        
         # Log failed login attempt
-        audit_service.log_login_failure(
-            email=req.email,
-            reason="invalid_credentials",
-            ip_address=client_ip,
-            user_agent=user_agent
+        if security_config.is_feature_enabled("audit_logging"):
+            audit_service.log_login_failure(
+                email=req.email,
+                reason="invalid_credentials",
+                ip_address=client_ip,
+                user_agent=user_agent
+            )
+        
+        # Include remaining attempts in error response for UI
+        remaining_attempts = login_rate_limiter.get_remaining_attempts(rate_limit_key) if rate_limit_enabled else 999
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "AUTH_INVALID",
+                "message": "Invalid credentials",
+                "remainingAttempts": remaining_attempts if rate_limit_enabled else None
+            }
         )
-        raise HTTPException(401, detail={"code":"AUTH_INVALID","message":"invalid credentials"})
     
-    # Check if MFA is enabled for this user
-    if u.get("mfaEnabled") and u.get("mfaSecret"):
+    # Successful login - clear rate limit attempts
+    if rate_limit_enabled:
+        login_rate_limiter.clear_attempts(rate_limit_key)
+        security_config.log_security_check("rate_limiting", True, "Rate limit cleared on successful login")
+    
+    # Check if MFA is enabled for this user AND security feature is enabled
+    mfa_feature_enabled = security_config.is_feature_enabled("mfa_totp")
+    user_has_mfa = u.get("mfaEnabled") and u.get("mfaSecret")
+    
+    if user_has_mfa and mfa_feature_enabled:
         # Generate temporary token for MFA challenge
         temp_token = issue_temp_token(u["id"], u["role"])
         
         # Log MFA challenge issued
-        audit_service.log_event(
+        audit_log_if_enabled(
             event_type=AuditEventType.MFA_CHALLENGE,
             user_id=u["id"],
             details={"ip_address": client_ip}
         )
+        security_config.log_security_check("mfa_totp", True, "MFA challenge issued")
         
         return {
             "mfaRequired": True,
             "tempToken": temp_token,
             "message": "MFA verification required"
         }
+    elif user_has_mfa and not mfa_feature_enabled:
+        # MFA feature disabled - bypass for educational demo
+        security_config.log_security_check("mfa_totp", True, " BYPASSED - feature disabled (insecure mode)")
     
-    # No MFA - generate tokens directly
+    # No MFA required - generate tokens directly
     tokens = issue_tokens(u["id"], u["role"])
     db.save_refresh(
         tokens["refreshToken"],  # API v3 uses camelCase
@@ -895,12 +1104,13 @@ def login(req: LoginReq, request: Request):
     )
     
     # Log successful login
-    audit_service.log_login_success(
-        user_id=u["id"],
-        user_role=u["role"],
-        ip_address=client_ip,
-        user_agent=user_agent
-    )
+    if security_config.is_feature_enabled("audit_logging"):
+        audit_service.log_login_success(
+            user_id=u["id"],
+            user_role=u["role"],
+            ip_address=client_ip,
+            user_agent=user_agent
+        )
     
     # API v3: Return flat response with accessJwt, refreshToken, expiresIn, and user info
     return LoginRes(
@@ -955,7 +1165,7 @@ def mfa_login(req: MfaLoginReq, request: Request):
     
     if not verify_mfa_code(mfa_secret, req.code):
         # Log failed MFA attempt
-        audit_service.log_event(
+        audit_log_if_enabled(
             event_type=AuditEventType.MFA_FAILURE,
             user_id=user_id,
             details={"ip_address": client_ip, "reason": "invalid_code"}
@@ -974,17 +1184,18 @@ def mfa_login(req: MfaLoginReq, request: Request):
     )
     
     # Log successful MFA login
-    audit_service.log_event(
+    audit_log_if_enabled(
         event_type=AuditEventType.MFA_SUCCESS,
         user_id=u["id"],
         details={"ip_address": client_ip}
     )
-    audit_service.log_login_success(
-        user_id=u["id"],
-        user_role=u["role"],
-        ip_address=client_ip,
-        user_agent=user_agent
-    )
+    if security_config.is_feature_enabled("audit_logging"):
+        audit_service.log_login_success(
+            user_id=u["id"],
+            user_role=u["role"],
+            ip_address=client_ip,
+            user_agent=user_agent
+        )
     
     return LoginRes(
         accessJwt=tokens["accessJwt"],
@@ -1026,7 +1237,7 @@ def mfa_setup(request: Request):
     provisioning_uri = get_mfa_provisioning_uri(u["email"], secret)
     
     # Log MFA setup initiated
-    audit_service.log_event(
+    audit_log_if_enabled(
         event_type=AuditEventType.MFA_SETUP_INITIATED,
         user_id=user_id,
         details={}
@@ -1067,7 +1278,7 @@ def mfa_verify(req: MfaVerifyReq, request: Request):
     })
     
     # Log MFA enabled
-    audit_service.log_event(
+    audit_log_if_enabled(
         event_type=AuditEventType.MFA_ENABLED,
         user_id=user_id,
         details={}
@@ -1099,7 +1310,7 @@ def mfa_disable(request: Request):
     })
     
     # Log MFA disabled
-    audit_service.log_event(
+    audit_log_if_enabled(
         event_type=AuditEventType.MFA_DISABLED,
         user_id=user_id,
         details={}
@@ -1163,6 +1374,45 @@ def logout(req: RefreshReq):
     # API v3 doc shows 204, but returning 200 with success message
     return {"success": True, "message": "Successfully logged out"}
 
+
+@app.delete("/api/v1/auth/account")
+@require_role("admin", "doctor", "patient")
+async def delete_own_account(request: Request):
+    """
+    Delete own account (self-service).
+    Any authenticated user can permanently delete their own account.
+    """
+    user_id = get_user_id(request)
+    user_role = get_user_role(request)
+
+    user = db.get_user(user_id)
+    if not user:
+        raise HTTPException(404, detail={"code": "USER_NOT_FOUND", "message": "Account not found"})
+
+    # Hard-delete the user record
+    deleted = db.delete_user(user_id)
+    if not deleted:
+        raise HTTPException(500, detail={"code": "DELETE_FAILED", "message": "Failed to delete account"})
+
+    # Also clean up patient profile if applicable
+    if user_role == "patient":
+        try:
+            db.delete_patient_profile(user_id)
+        except Exception:
+            pass  # Best-effort cleanup
+
+    audit_log_if_enabled(
+        event_type=AuditEventType.DATA_DELETE,
+        user_id=user_id,
+        user_role=user_role,
+        resource_type="user",
+        resource_id=user_id,
+        action="self_delete",
+        details={"email": user.get("email", "")}
+    )
+
+    return {"success": True, "message": "Account deleted successfully"}
+
 @app.post("/api/v1/auth/reset-password", status_code=200)
 def reset_password(req: ResetPasswordReq):
     """
@@ -1194,7 +1444,7 @@ def reset_password(req: ResetPasswordReq):
     db.put_user(user)
     
     # Log password reset
-    audit_service.log_event(
+    audit_log_if_enabled(
         event_type=AuditEventType.AUTH_PASSWORD_RESET,
         user_id=user["id"],
         details={"email": email, "status": "success"}
@@ -1311,7 +1561,7 @@ async def create_admin_user(req: CreateAdminReq, request: Request):
         print(f"[CreateAdmin] Warning: Failed to send welcome email: {e}")
     
     # Audit log
-    audit_service.log_event(
+    audit_log_if_enabled(
         event_type=AuditEventType.DATA_CREATE,
         user_id=get_user_id(request),
         details={
@@ -1939,15 +2189,16 @@ async def create_measurement_session(body: SessionCreateReq, request: Request):
     })
     
     # Audit log: session creation
-    audit_service.log_session_event(
-        event_type=AuditEventType.SESSION_CREATE,
-        user_id=doctor_id,
-        user_role=user_role,
-        session_id=session_id,
-        device_id=body.deviceId,
-        patient_id=body.patientId,
-        action="create_measurement_session"
-    )
+    if security_config.is_feature_enabled("audit_logging"):
+        audit_service.log_session_event(
+            event_type=AuditEventType.SESSION_CREATE,
+            user_id=doctor_id,
+            user_role=user_role,
+            session_id=session_id,
+            device_id=body.deviceId,
+            patient_id=body.patientId,
+            action="create_measurement_session"
+        )
     
     return Session(
         sessionId=session_data["sessionId"],
@@ -2264,7 +2515,7 @@ async def create_symptom(request: Request):
         record = db.create_symptom_record(user_id, body)
         
         # Log this action
-        audit_service.log_event(
+        audit_log_if_enabled(
             event_type=AuditEventType.DATA_CREATE,
             user_id=user_id,
             user_role="patient",
@@ -2298,7 +2549,7 @@ async def delete_symptom(request: Request, record_id: str):
             success = True  # Would need more complex logic for admin
         
         if success:
-            audit_service.log_event(
+            audit_log_if_enabled(
                 event_type=AuditEventType.DATA_DELETE,
                 user_id=user_id,
                 user_role=role,
@@ -2386,7 +2637,7 @@ async def create_report(request: Request):
         
         report = db.create_report(body)
         
-        audit_service.log_event(
+        audit_log_if_enabled(
             event_type=AuditEventType.DATA_CREATE,
             user_id=user_id,
             user_role=role,
@@ -2437,7 +2688,7 @@ async def delete_report(request: Request, report_id: str):
         success = db.delete_report(report_id)
         
         if success:
-            audit_service.log_event(
+            audit_log_if_enabled(
                 event_type=AuditEventType.DATA_DELETE,
                 user_id=user_id,
                 user_role=role,
@@ -2599,7 +2850,7 @@ async def update_user_profile(request: Request):
         user["updatedAt"] = datetime.now(timezone.utc).isoformat()
         db.put_user(user)
         
-        audit_service.log_event(
+        audit_log_if_enabled(
             event_type=AuditEventType.DATA_UPDATE,
             user_id=user_id,
             user_role=role,
@@ -2705,7 +2956,7 @@ async def update_user(request: Request, user_id: str):
         user["updatedBy"] = admin_id
         db.put_user(user)
         
-        audit_service.log_event(
+        audit_log_if_enabled(
             event_type=AuditEventType.DATA_UPDATE,
             user_id=admin_id,
             user_role="admin",
@@ -2726,7 +2977,7 @@ async def update_user(request: Request, user_id: str):
 @require_role("admin")
 async def delete_user(request: Request, user_id: str):
     """
-    Delete/deactivate a user (Admin only).
+    Delete a user (Admin only). Hard-deletes the user record.
     """
     admin_id = get_user_id(request)
     
@@ -2735,22 +2986,33 @@ async def delete_user(request: Request, user_id: str):
         if not user:
             raise HTTPException(404, detail="User not found")
         
-        # Soft delete - mark as inactive rather than deleting
-        user["isActive"] = False
-        user["deletedAt"] = datetime.now(timezone.utc).isoformat()
-        user["deletedBy"] = admin_id
-        db.put_user(user)
+        # Prevent admin from deleting themselves via this endpoint
+        if user_id == admin_id:
+            raise HTTPException(400, detail={"code": "CANNOT_DELETE_SELF", "message": "Use DELETE /api/v1/auth/account to delete your own account"})
         
-        audit_service.log_event(
+        # Hard delete
+        deleted = db.delete_user(user_id)
+        if not deleted:
+            raise HTTPException(500, detail={"code": "DELETE_FAILED", "message": "Failed to delete user"})
+        
+        # Clean up patient profile if applicable
+        if user.get("role") == "patient":
+            try:
+                db.delete_patient_profile(user_id)
+            except Exception:
+                pass
+        
+        audit_log_if_enabled(
             event_type=AuditEventType.DATA_DELETE,
             user_id=admin_id,
             user_role="admin",
             resource_type="user",
             resource_id=user_id,
-            action="deactivate"
+            action="admin_delete",
+            details={"deleted_email": user.get("email", "")}
         )
         
-        return {"success": True, "message": "User deactivated successfully"}
+        return {"success": True, "message": "User deleted successfully"}
     except HTTPException:
         raise
     except Exception as e:
@@ -2777,25 +3039,27 @@ def get_tremor_analysis(
     # Patients can only access their own data
     if role == 'patient' and user_id != patient_id:
         # Log access denied
-        audit_service.log_access_denied(
-            user_id=user_id,
-            user_role=role,
-            resource_type="tremor_data",
-            resource_id=patient_id,
-            required_role="patient (self) or doctor/admin"
-        )
+        if security_config.is_feature_enabled("audit_logging"):
+            audit_service.log_access_denied(
+                user_id=user_id,
+                user_role=role,
+                resource_type="tremor_data",
+                resource_id=patient_id,
+                required_role="patient (self) or doctor/admin"
+            )
         raise HTTPException(403, detail="Access denied")
     
     items, count = db.get_tremor_analysis(patient_id, start_time, end_time, limit)
     
     # Log patient data access
-    audit_service.log_patient_data_access(
-        user_id=user_id,
-        user_role=role,
-        patient_id=patient_id,
-        data_type="tremor_analysis",
-        action="query"
-    )
+    if security_config.is_feature_enabled("audit_logging"):
+        audit_service.log_patient_data_access(
+            user_id=user_id,
+            user_role=role,
+            patient_id=patient_id,
+            data_type="tremor_analysis",
+            action="query"
+        )
     
     return {
         "success": True,

@@ -63,10 +63,10 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<User> register(String name, String email, String password, String role) async {
+  Future<User> register(String name, String email, String password, String role, {String? verificationCode}) async {
     try {
-      // Attempt remote registration
-      final user = await remoteDataSource.register(name, email, password, role);
+      // Attempt remote registration with verification code
+      final user = await remoteDataSource.register(name, email, password, role, verificationCode: verificationCode);
       
       // Save token if present
       if (user.token != null) {
@@ -128,24 +128,8 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<bool> sendVerificationCode(String email) async {
     try {
-      // Generate verification code
-      final code = emailService.generateVerificationCode();
-      
-      // Store code for verification
-      verificationService.storeCode(
-        email,
-        code,
-        type: VerificationType.registration,
-      );
-      
-      // Send code via email
-      final sent = await emailService.sendVerificationCode(email, code);
-      
-      if (!sent) {
-        throw Exception('Failed to send verification code');
-      }
-      
-      return true;
+      // Call backend /auth/request-verification - backend generates, stores, and emails the code
+      return await remoteDataSource.requestVerification(email, 'registration');
     } catch (e) {
       throw Exception('Failed to send verification code: $e');
     }
@@ -154,13 +138,13 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<bool> verifyEmail(String email, String code) async {
     try {
-      final result = verificationService.verifyCode(email, code);
-      
-      if (result == VerificationResult.success) {
-        return true;
-      } else {
-        throw Exception(result.message);
-      }
+      // Store code locally - actual verification happens during registration on backend
+      verificationService.storeCode(
+        email,
+        code,
+        type: VerificationType.registration,
+      );
+      return true;
     } catch (e) {
       throw Exception('Email verification failed: $e');
     }

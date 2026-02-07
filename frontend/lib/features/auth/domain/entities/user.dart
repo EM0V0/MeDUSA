@@ -7,6 +7,7 @@ class User {
   final bool isActive;
   final String? patientId;  // For patients - their patient ID (e.g., PAT-001)
   final String? token;      // Auth token (not stored in DB, used for session)
+  final String? mfaSecret;  // MFA secret returned after registration
 
   const User({
     required this.id,
@@ -17,6 +18,7 @@ class User {
     this.isActive = true,
     this.patientId,
     this.token,
+    this.mfaSecret,
   });
 
   Map<String, dynamic> toJson() {
@@ -64,6 +66,7 @@ class User {
     bool? isActive,
     String? patientId,
     String? token,
+    String? mfaSecret,
   }) {
     return User(
       id: id ?? this.id,
@@ -74,6 +77,7 @@ class User {
       isActive: isActive ?? this.isActive,
       patientId: patientId ?? this.patientId,
       token: token ?? this.token,
+      mfaSecret: mfaSecret ?? this.mfaSecret,
     );
   }
 }

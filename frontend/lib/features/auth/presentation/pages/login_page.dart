@@ -8,6 +8,8 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
+import '../../../../shared/services/security_education_service.dart';
+import '../../../../shared/widgets/security_feature_toggle.dart';
 import '../bloc/auth_bloc.dart';
 
 /// Login Page - Clean version with email/password authentication only
@@ -23,6 +25,81 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
+  
+  // Security education service
+  final SecurityEducationService _securityService = SecurityEducationService();
+  
+  // Security feature states - start with defaults, don't wait for backend
+  bool _mfaEnabled = true;
+  bool _rateLimitingEnabled = true;
+  bool _jwtAuthEnabled = true;
+  bool _sessionManagementEnabled = true;
+  bool _isLoadingFeatures = false;  // Don't show loading - toggles work immediately
+  bool _showSecurityPanel = false;  // Default collapsed, user expands when needed
+
+  @override
+  void initState() {
+    super.initState();
+    // Load in background, but don't block UI
+    _loadSecurityFeatures();
+  }
+
+  Future<void> _loadSecurityFeatures() async {
+    // Sync with backend if available, but UI already shows toggles
+    try {
+      final config = await _securityService.getSecurityConfig();
+      if (config != null && mounted) {
+        setState(() {
+          _mfaEnabled = SecurityEducationService.isFeatureEnabled('mfa_totp');
+          _rateLimitingEnabled = SecurityEducationService.isFeatureEnabled('rate_limiting');
+          _jwtAuthEnabled = SecurityEducationService.isFeatureEnabled('jwt_authentication');
+          _sessionManagementEnabled = SecurityEducationService.isFeatureEnabled('session_management');
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading security features: $e');
+    }
+  }
+
+  Future<void> _toggleFeature(String featureId, bool enabled) async {
+    // Update UI immediately - don't wait for backend
+    setState(() {
+      switch (featureId) {
+        case 'mfa_totp':
+          _mfaEnabled = enabled;
+          break;
+        case 'rate_limiting':
+          _rateLimitingEnabled = enabled;
+          break;
+        case 'jwt_authentication':
+          _jwtAuthEnabled = enabled;
+          break;
+        case 'session_management':
+          _sessionManagementEnabled = enabled;
+          break;
+      }
+    });
+    
+    // Update local state in service (for consistency)
+    SecurityEducationService.toggleFeatureLocally(featureId, enabled);
+    
+    // Show feedback
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(enabled 
+              ? '✅ $featureId enabled'
+              : '⚠️ $featureId disabled (INSECURE!) - Backend feature, requires deployment'),
+          backgroundColor: enabled ? Colors.green : Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+    
+    // Try to sync with backend (fire and forget)
+    _securityService.toggleSecurityFeature(featureId, enabled);
+  }
 
   @override
   void dispose() {
@@ -77,6 +154,10 @@ class _LoginPageState extends State<LoginPage> {
 
                     // Password Field
                     _buildPasswordField(),
+                    SizedBox(height: 8.h),
+
+                    // Security Education Section
+                    _buildSecurityEducationSection(),
                     SizedBox(height: 8.h),
 
                     // Forgot Password Link
@@ -191,28 +272,78 @@ class _LoginPageState extends State<LoginPage> {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, state) {
         final isLoading = state is AuthLoading;
+        final hasDisabledFeatures = !_mfaEnabled || !_rateLimitingEnabled;
         
-        return ElevatedButton(
-          onPressed: isLoading ? null : _handleLogin,
-          style: ElevatedButton.styleFrom(
-            padding: EdgeInsets.symmetric(vertical: 16.h),
-          ),
-          child: isLoading
-              ? SizedBox(
-                  height: 20.h,
-                  width: 20.w,
-                  child: const CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : Text(
-                  'Login',
-                  style: FontUtils.body(
-                    context: context,
-                    fontWeight: FontWeight.w600,
-                  ),
+        return Column(
+          children: [
+            // Warning banner when features disabled
+            if (hasDisabledFeatures && _showSecurityPanel) ...[  
+              Container(
+                margin: EdgeInsets.only(bottom: 12.h),
+                padding: EdgeInsets.all(12.w),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8.r),
+                  border: Border.all(color: Colors.orange, width: 2),
                 ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.warning_amber, color: Colors.orange, size: 20.sp),
+                        SizedBox(width: 8.w),
+                        Text(
+                          '⚠️ SECURITY REDUCED',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14.sp,
+                            color: Colors.orange.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 8.h),
+                    if (!_mfaEnabled)
+                      Text(
+                        '• MFA disabled: Password-only authentication',
+                        style: TextStyle(fontSize: 12.sp, color: Colors.orange.shade700),
+                      ),
+                    if (!_rateLimitingEnabled)
+                      Text(
+                        '• Rate limiting disabled: Unlimited login attempts',
+                        style: TextStyle(fontSize: 12.sp, color: Colors.orange.shade700),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            
+            // Login button
+            ElevatedButton(
+              onPressed: isLoading ? null : _handleLogin,
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(vertical: 16.h),
+                backgroundColor: hasDisabledFeatures ? Colors.orange : null,
+              ),
+              child: isLoading
+                  ? SizedBox(
+                      height: 20.h,
+                      width: 20.w,
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : Text(
+                      hasDisabledFeatures ? 'Login (INSECURE!)' : 'Login',
+                      style: FontUtils.body(
+                        context: context,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+            ),
+          ],
         );
       },
     );
@@ -247,6 +378,20 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
+    // Educational logging for disabled features
+    if (!_mfaEnabled) {
+      SecurityEducationService.logEducational(
+        'MFA DISABLED',
+        'Login without MFA! If credentials are stolen, attacker gains full access.',
+      );
+    }
+    if (!_rateLimitingEnabled) {
+      SecurityEducationService.logEducational(
+        'RATE LIMITING DISABLED',
+        'No brute-force protection! Attacker could try unlimited passwords.',
+      );
+    }
+
     // Dispatch login event to AuthBloc
     final authBloc = BlocProvider.of<AuthBloc>(context, listen: false);
     authBloc.add(
@@ -259,10 +404,13 @@ class _LoginPageState extends State<LoginPage> {
 
   void _showMfaDialog(BuildContext context, String tempToken) {
     final codeController = TextEditingController();
+    // Capture the AuthBloc from the page context BEFORE opening the dialog,
+    // so we don't rely on the dialog's context after it's dismissed.
+    final authBloc = BlocProvider.of<AuthBloc>(context, listen: false);
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('MFA Verification'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -281,14 +429,14 @@ class _LoginPageState extends State<LoginPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
               if (codeController.text.isNotEmpty) {
-                Navigator.pop(context); // Close dialog
-                BlocProvider.of<AuthBloc>(context).add(
+                Navigator.pop(dialogContext); // Close dialog
+                authBloc.add(
                   MfaLoginRequested(
                     tempToken: tempToken,
                     code: codeController.text.trim(),
@@ -300,6 +448,121 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Build the security education section with toggleable features
+  Widget _buildSecurityEducationSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Toggle to show/hide security panel
+        InkWell(
+          onTap: () => setState(() => _showSecurityPanel = !_showSecurityPanel),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.school,
+                  color: AppColors.primary,
+                  size: 18.sp,
+                ),
+                SizedBox(width: 8.w),
+                Text(
+                  '🔐 Security Education Lab',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13.sp,
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                  _showSecurityPanel ? Icons.expand_less : Icons.expand_more,
+                  color: AppColors.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
+        
+        // Security features panel (expanded)
+        if (_showSecurityPanel) ...[
+          SizedBox(height: 12.h),
+          
+          if (_isLoadingFeatures)
+            const Center(child: CircularProgressIndicator())
+          else ...[
+            // MFA Toggle
+            SecurityFeatureToggleCompact(
+              featureName: 'Two-Factor Auth (MFA)',
+              isEnabled: _mfaEnabled,
+              tip: _mfaEnabled 
+                  ? 'TOTP code required after password' 
+                  : '⚠️ Password only - vulnerable to credential theft!',
+              onToggle: (enabled) => _toggleFeature('mfa_totp', enabled),
+            ),
+            
+            // Rate Limiting Toggle
+            SecurityFeatureToggleCompact(
+              featureName: 'Brute-Force Protection',
+              isEnabled: _rateLimitingEnabled,
+              tip: _rateLimitingEnabled 
+                  ? '5 attempts max, then 60s lockout' 
+                  : '⚠️ Unlimited attempts - vulnerable to password guessing!',
+              onToggle: (enabled) => _toggleFeature('rate_limiting', enabled),
+            ),
+            
+            // JWT Auth indicator (read-only)
+            SecurityFeatureToggleCompact(
+              featureName: 'JWT Authentication',
+              isEnabled: _jwtAuthEnabled,
+              tip: 'Secure token-based session management',
+              isReadOnly: true,
+            ),
+            
+            // Session Management (read-only - JWT expiry is always enforced)
+            SecurityFeatureToggleCompact(
+              featureName: 'Session Management',
+              isEnabled: _sessionManagementEnabled,
+              tip: 'Token expiry + secure refresh (always active, core security)',
+              isReadOnly: true,
+            ),
+            
+            // Educational tip
+            Container(
+              margin: EdgeInsets.only(top: 8.h),
+              padding: EdgeInsets.all(8.w),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.lightbulb_outline, color: Colors.blue, size: 16.sp),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: Text(
+                      'Try 6 wrong passwords to trigger lockout!',
+                      style: TextStyle(
+                        fontSize: 11.sp,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ],
     );
   }
 }

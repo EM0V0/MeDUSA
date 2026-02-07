@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
+import '../../../../shared/services/network_service.dart';
 import '../../../admin/data/services/admin_api_service.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -412,6 +416,62 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                     ),
                   ),
                 ),
+              ),
+            ),
+            SizedBox(height: 40.h),
+            _buildSectionHeader('Danger Zone', isMobile),
+            SizedBox(height: 16.h),
+            Container(
+              padding: EdgeInsets.all(16.w),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Delete Account',
+                    style: FontUtils.body(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.error,
+                      context: context,
+                    ),
+                  ),
+                  SizedBox(height: 8.h),
+                  Text(
+                    'Permanently delete your account and all associated data. This action cannot be undone.',
+                    style: FontUtils.caption(
+                      color: AppColors.lightOnSurfaceVariant,
+                      context: context,
+                    ),
+                  ),
+                  SizedBox(height: 16.h),
+                  Center(
+                    child: SizedBox(
+                      width: isMobile ? double.infinity : 200.w,
+                      height: isMobile ? 56.h : 48.h,
+                      child: ElevatedButton(
+                        onPressed: _confirmDeleteAccount,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.error,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
+                        ),
+                        child: Text(
+                          'Delete My Account',
+                          style: FontUtils.body(
+                            fontWeight: FontWeight.w600,
+                            context: context,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -864,6 +924,72 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  void _confirmDeleteAccount() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_rounded, color: AppColors.error, size: 24.sp),
+            SizedBox(width: 8.w),
+            const Text('Delete Account'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to permanently delete your account?\n\n'
+          'This will remove all your data and cannot be undone. '
+          'You will be logged out immediately.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _deleteAccount();
+            },
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteAccount() async {
+    try {
+      final networkService = NetworkServiceImpl.secure();
+      final response = await networkService.delete('/auth/account');
+      
+      if (response.statusCode == 200 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Account deleted successfully')),
+        );
+        // Logout and navigate to login
+        final authBloc = BlocProvider.of<AuthBloc>(context, listen: false);
+        authBloc.add(LogoutRequested());
+        await Future.delayed(const Duration(milliseconds: 200));
+        if (mounted && context.mounted) {
+          context.go('/login');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete account: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }

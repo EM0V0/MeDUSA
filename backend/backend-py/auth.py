@@ -141,7 +141,15 @@ OPEN_PATH_SUFFIXES = [
     "/auth/send-verification-code",  # Legacy - keep for compatibility
     "/auth/send-password-reset-code",  # Legacy
     "/current-session",  # Allow Pi devices to poll for current session
-    "/security/nonce"    # Nonce endpoint for replay protection
+    "/security/nonce",   # Nonce endpoint for replay protection
+    "/security/config",  # Security config for educational purposes
+    "/security/mode",    # Security mode toggle for education
+    "/security/logging",   # Security logging toggle
+]
+
+# Paths that allow partial matching (for paths with parameters)
+OPEN_PATH_PREFIXES = [
+    "/api/v1/security/features/",  # All feature toggle endpoints
 ]
 
 async def auth_middleware(request: Request, call_next):
@@ -150,8 +158,15 @@ async def auth_middleware(request: Request, call_next):
         return await call_next(request)
     
     path = request.url.path
+    
+    # Check exact suffix matches
     if any(path.endswith(suf) for suf in OPEN_PATH_SUFFIXES):
         return await call_next(request)
+    
+    # Check prefix matches (for parameterized paths)
+    if any(path.startswith(pfx) or path.find(pfx) >= 0 for pfx in OPEN_PATH_PREFIXES):
+        return await call_next(request)
+    
     bearer = request.headers.get("Authorization", "")
     if not bearer.startswith("Bearer "):
         return JSONResponse(status_code=401, content={"code":"AUTH_REQUIRED","message":"missing bearer token"})

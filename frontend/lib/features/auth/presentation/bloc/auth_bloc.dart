@@ -35,12 +35,14 @@ class RegisterRequested extends AuthEvent {
   final String email;
   final String password;
   final String role;
+  final String? verificationCode;
 
   RegisterRequested({
     required this.name,
     required this.email,
     required this.password,
     required this.role,
+    this.verificationCode,
   });
 }
 
@@ -216,6 +218,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         event.email,
         event.password,
         event.role,
+        verificationCode: event.verificationCode,
       );
       
       // Initialize role service with user

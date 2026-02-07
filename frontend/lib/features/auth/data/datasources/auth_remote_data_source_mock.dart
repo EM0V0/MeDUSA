@@ -97,7 +97,7 @@ class AuthRemoteDataSourceMock implements AuthRemoteDataSource {
   }
 
   @override
-  Future<User> register(String name, String email, String password, String role) async {
+  Future<User> register(String name, String email, String password, String role, {String? verificationCode}) async {
     // Simulate network delay
     await Future.delayed(const Duration(milliseconds: 800));
 
@@ -154,6 +154,12 @@ class AuthRemoteDataSourceMock implements AuthRemoteDataSource {
     // In real implementation, this would update the password in the database
     debugPrint('[Mock] Password reset successful for: $email');
     return;
+  }
+
+  @override
+  Future<bool> requestVerification(String email, String type) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    return true;
   }
 }
 

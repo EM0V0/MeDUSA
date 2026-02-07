@@ -4,7 +4,7 @@ abstract class AuthRepository {
   // Authentication
   Future<User> login(String email, String password);
   Future<User> mfaLogin(String tempToken, String code);
-  Future<User> register(String name, String email, String password, String role);
+  Future<User> register(String name, String email, String password, String role, {String? verificationCode});
   Future<void> logout();
   Future<User?> getCurrentUser();
   Future<bool> isLoggedIn();

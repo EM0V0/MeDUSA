@@ -7,7 +7,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
+import '../../../../shared/services/security_education_service.dart';
 import '../../../../shared/services/tremor_simulation_service.dart';
+import '../../../../shared/widgets/security_feature_toggle.dart';
 import '../../../patients/data/datasources/tremor_api_service.dart';
 import '../../../patients/data/models/tremor_analysis.dart';
 import '../../../patients/presentation/widgets/tremor_chart.dart';
@@ -23,10 +25,15 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   final TremorApiService _tremorApi = TremorApiService();
   final TremorSimulationService _simulationService = TremorSimulationService();
+  final SecurityEducationService _securityService = SecurityEducationService();
   
   String? _patientId;  // Will be set from authenticated user
   String _patientName = 'Patient';  // Will be updated from authenticated user
   String _selectedTimeRange = '1m';
+
+  // Security feature states
+  bool _rbacEnabled = true;
+  bool _showSecurityPanel = false;
   
   bool _isLoading = false;
   String? _error;
@@ -46,6 +53,32 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     // Patient ID will be loaded from AuthBloc in build method
     // We'll call _loadData() after getting patient ID
+    _loadSecurityFeatures();
+  }
+
+  Future<void> _loadSecurityFeatures() async {
+    try {
+      final config = await _securityService.getSecurityConfig();
+      if (config != null && mounted) {
+        setState(() {
+          _rbacEnabled = SecurityEducationService.isFeatureEnabled('rbac');
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading security features: $e');
+    }
+  }
+
+  void _toggleDashboardFeature(String featureId, bool enabled) {
+    setState(() {
+      switch (featureId) {
+        case 'rbac':
+          _rbacEnabled = enabled;
+          break;
+      }
+    });
+    SecurityEducationService.toggleFeatureLocally(featureId, enabled);
+    _securityService.toggleSecurityFeature(featureId, enabled);
   }
 
   @override
@@ -349,6 +382,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
                 // Recent Activity
                 _buildRecentActivity(),
+                SizedBox(height: 20.h),
+
+                // Security Education Section
+                _buildDashboardSecuritySection(),
                 SizedBox(height: 20.h),
               ],
             ),
@@ -1091,5 +1128,81 @@ class _DashboardPageState extends State<DashboardPage> {
     if (score < 30) return AppColors.success;
     if (score < 50) return AppColors.warning;
     return AppColors.error;
+  }
+
+  Widget _buildDashboardSecuritySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _showSecurityPanel = !_showSecurityPanel),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12.r),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.school, color: AppColors.primary, size: 20.sp),
+                SizedBox(width: 8.w),
+                Text(
+                  '🔐 Security Education Lab',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14.sp,
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                  _showSecurityPanel ? Icons.expand_less : Icons.expand_more,
+                  color: AppColors.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_showSecurityPanel) ...[
+          SizedBox(height: 12.h),
+
+          // RBAC Toggle
+          SecurityFeatureToggleCompact(
+            featureName: 'Role-Based Access Control',
+            isEnabled: _rbacEnabled,
+            tip: _rbacEnabled
+                ? 'Patients/Doctors/Admins have different permissions'
+                : '⚠️ No access control - everyone sees everything!',
+            onToggle: (enabled) => _toggleDashboardFeature('rbac', enabled),
+          ),
+
+          // Educational tip
+          Container(
+            margin: EdgeInsets.only(top: 8.h),
+            padding: EdgeInsets.all(8.w),
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8.r),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.lightbulb_outline, color: Colors.blue, size: 16.sp),
+                SizedBox(width: 8.w),
+                Expanded(
+                  child: Text(
+                    'Try disabling RBAC then access admin-only endpoints as a patient!',
+                    style: TextStyle(
+                      fontSize: 11.sp,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }

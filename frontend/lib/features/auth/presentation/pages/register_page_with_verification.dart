@@ -8,6 +8,9 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
+import '../../../../core/utils/password_validator.dart';
+import '../../../../shared/services/security_education_service.dart';
+import '../../../../shared/widgets/security_feature_toggle.dart';
 import '../bloc/auth_bloc.dart';
 
 /// Register Page with Email Verification - Two-step registration flow
@@ -33,6 +36,51 @@ class _RegisterPageWithVerificationState extends State<RegisterPageWithVerificat
   bool _isVerificationStep = false;
   String _selectedRole = 'patient';  // Default to patient (admin not available for self-registration)
   String _registrationEmail = '';
+
+  // Security education
+  final SecurityEducationService _securityService = SecurityEducationService();
+  bool _passwordComplexityEnabled = true;
+  bool _passwordHashingEnabled = true;
+  bool _inputValidationEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSecurityFeatures();
+  }
+
+  Future<void> _loadSecurityFeatures() async {
+    try {
+      final config = await _securityService.getSecurityConfig();
+      if (config != null && mounted) {
+        setState(() {
+          _passwordComplexityEnabled = SecurityEducationService.isFeatureEnabled('password_complexity');
+          _passwordHashingEnabled = SecurityEducationService.isFeatureEnabled('password_hashing');
+          _inputValidationEnabled = SecurityEducationService.isFeatureEnabled('input_validation');
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading security features: $e');
+    }
+  }
+
+  void _toggleFeature(String featureId, bool enabled) {
+    setState(() {
+      switch (featureId) {
+        case 'password_complexity':
+          _passwordComplexityEnabled = enabled;
+          break;
+        case 'password_hashing':
+          _passwordHashingEnabled = enabled;
+          break;
+        case 'input_validation':
+          _inputValidationEnabled = enabled;
+          break;
+      }
+    });
+    SecurityEducationService.toggleFeatureLocally(featureId, enabled);
+    _securityService.toggleSecurityFeature(featureId, enabled);
+  }
 
   @override
   void dispose() {
@@ -74,15 +122,20 @@ class _RegisterPageWithVerificationState extends State<RegisterPageWithVerificat
             // Trigger registration
             _handleCompleteRegistration();
           } else if (state is AuthAuthenticated) {
-            // Registration complete
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Account created successfully!'),
-                backgroundColor: AppColors.success,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-            GoRouter.of(context).go('/dashboard');
+            // Registration complete - show MFA secret if available
+            final mfaSecret = state.user.mfaSecret;
+            if (mfaSecret != null && mfaSecret.isNotEmpty) {
+              _showMfaSecretDialog(context, mfaSecret, state.user.email);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Account created successfully!'),
+                  backgroundColor: AppColors.success,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+              GoRouter.of(context).go('/dashboard');
+            }
           } else if (state is AuthError) {
             // Show error message
             ScaffoldMessenger.of(context).showSnackBar(
@@ -279,8 +332,15 @@ class _RegisterPageWithVerificationState extends State<RegisterPageWithVerificat
             if (value == null || value.isEmpty) {
               return 'Please enter your email';
             }
-            if (!value.contains('@')) {
-              return 'Please enter a valid email';
+            if (_inputValidationEnabled) {
+              if (!RegExp(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$').hasMatch(value)) {
+                return 'Please enter a valid email address';
+              }
+            } else {
+              SecurityEducationService.logEducational(
+                'Input Validation DISABLED',
+                'No email format validation! Malformed input accepted.',
+              );
             }
             return null;
           },
@@ -308,7 +368,37 @@ class _RegisterPageWithVerificationState extends State<RegisterPageWithVerificat
             });
           },
         ),
-        SizedBox(height: 16.h),
+        SizedBox(height: 12.h),
+
+        // Password Complexity Toggle - always visible
+        SecurityFeatureToggleCompact(
+          featureName: 'Password Strength Check',
+          isEnabled: _passwordComplexityEnabled,
+          tip: _passwordComplexityEnabled
+              ? 'Requires 8+ chars, upper, lower, digit, special'
+              : '⚠️ Any password accepted - vulnerable to guessing!',
+          onToggle: (enabled) => _toggleFeature('password_complexity', enabled),
+        ),
+
+        // Password Hashing Toggle (read-only for safety)
+        SecurityFeatureToggleCompact(
+          featureName: 'Argon2id Password Hashing',
+          isEnabled: _passwordHashingEnabled,
+          tip: 'Industry-leading hash algorithm (always enabled for safety)',
+          isReadOnly: true,
+        ),
+
+        // Input Validation Toggle
+        SecurityFeatureToggleCompact(
+          featureName: 'Input Validation',
+          isEnabled: _inputValidationEnabled,
+          tip: _inputValidationEnabled
+              ? 'Validates all input data formats'
+              : '⚠️ No validation - vulnerable to injection!',
+          onToggle: (enabled) => _toggleFeature('input_validation', enabled),
+        ),
+
+        SizedBox(height: 8.h),
 
         // Password Field
         TextFormField(
@@ -333,16 +423,25 @@ class _RegisterPageWithVerificationState extends State<RegisterPageWithVerificat
               },
             ),
           ),
+          onChanged: (value) {
+            setState(() {});
+          },
           validator: (value) {
             if (value == null || value.isEmpty) {
               return 'Please enter your password';
             }
-            if (value.length < AppConstants.passwordMinLength) {
-              return 'Password must be at least ${AppConstants.passwordMinLength} characters';
+            if (_passwordComplexityEnabled) {
+              return PasswordValidator.validate(value);
             }
+            // Complexity disabled - accept any password
+            SecurityEducationService.logEducational(
+              'Password Complexity DISABLED',
+              'Weak password accepted! This would be rejected in secure mode.',
+            );
             return null;
           },
         ),
+
         SizedBox(height: 16.h),
 
         // Confirm Password Field
@@ -574,8 +673,135 @@ class _RegisterPageWithVerificationState extends State<RegisterPageWithVerificat
         email: _registrationEmail,
         password: _passwordController.text,
         role: _selectedRole,
+        verificationCode: _codeController.text.trim(),
+      ),
+    );
+  }
+
+  void _showMfaSecretDialog(BuildContext context, String mfaSecret, String email) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.security, color: AppColors.primary, size: 28.sp),
+            SizedBox(width: 8.w),
+            const Text('MFA Setup Required'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Your account has been created! Please save your MFA secret to set up two-factor authentication.',
+                style: TextStyle(fontSize: 14.sp),
+              ),
+              SizedBox(height: 16.h),
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(16.w),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8.r),
+                  border: Border.all(color: Colors.green),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      '🔑 Your MFA Secret',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade800,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    SelectableText(
+                      mfaSecret,
+                      style: TextStyle(
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                        letterSpacing: 2,
+                        color: Colors.green.shade900,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Container(
+                padding: EdgeInsets.all(12.w),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Setup Instructions:',
+                      style: TextStyle(
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    Text(
+                      '1. Open Google Authenticator or Authy\n'
+                      '2. Tap "+" to add a new account\n'
+                      '3. Choose "Enter setup key"\n'
+                      '4. Account: $email\n'
+                      '5. Key: Copy the secret above\n'
+                      '6. Type: Time-based (TOTP)',
+                      style: TextStyle(fontSize: 12.sp, height: 1.5),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 12.h),
+              Container(
+                padding: EdgeInsets.all(12.w),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8.r),
+                  border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber, color: Colors.orange, size: 20.sp),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: Text(
+                        '⚠️ Save this secret now! You will need it to log in. A welcome email with this secret has also been sent.',
+                        style: TextStyle(fontSize: 11.sp, color: Colors.orange.shade800),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              GoRouter.of(context).go('/dashboard');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('I\'ve saved my secret - Continue'),
+          ),
+        ],
       ),
     );
   }
 }
-

@@ -9,7 +9,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
 import '../../../../core/utils/password_validator.dart';
+import '../../../../shared/services/security_education_service.dart';
 import '../../../../shared/widgets/password_strength_indicator.dart';
+import '../../../../shared/widgets/security_feature_toggle.dart';
 import '../bloc/auth_bloc.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -28,6 +30,76 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   String _selectedRole = 'patient';  // Default to patient (admin not available for self-registration)
+  
+  // Security education service
+  final SecurityEducationService _securityService = SecurityEducationService();
+  
+  // Security feature states - start with defaults, don't wait for backend
+  bool _passwordComplexityEnabled = true;
+  bool _passwordHashingEnabled = true;
+  bool _inputValidationEnabled = true;
+  bool _isLoadingFeatures = false;  // Don't show loading - toggles work immediately
+  bool _showSecurityPanel = false;  // Default collapsed, user expands when needed
+
+  @override
+  void initState() {
+    super.initState();
+    // Load in background, but don't block UI
+    _loadSecurityFeatures();
+  }
+
+  Future<void> _loadSecurityFeatures() async {
+    // Sync with backend if available, but UI already shows toggles
+    try {
+      final config = await _securityService.getSecurityConfig();
+      if (config != null && mounted) {
+        setState(() {
+          _passwordComplexityEnabled = SecurityEducationService.isFeatureEnabled('password_complexity');
+          _passwordHashingEnabled = SecurityEducationService.isFeatureEnabled('password_hashing');
+          _inputValidationEnabled = SecurityEducationService.isFeatureEnabled('input_validation');
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading security features: $e');
+    }
+  }
+
+  Future<void> _toggleFeature(String featureId, bool enabled) async {
+    // Update UI immediately - don't wait for backend
+    setState(() {
+      switch (featureId) {
+        case 'password_complexity':
+          _passwordComplexityEnabled = enabled;
+          break;
+        case 'password_hashing':
+          _passwordHashingEnabled = enabled;
+          break;
+        case 'input_validation':
+          _inputValidationEnabled = enabled;
+          break;
+      }
+    });
+    
+    // Update local state in service (for consistency)
+    SecurityEducationService.toggleFeatureLocally(featureId, enabled);
+    
+    // Show feedback
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(enabled 
+              ? '✅ $featureId enabled'
+              : '⚠️ $featureId disabled (INSECURE!)'),
+          backgroundColor: enabled ? Colors.green : Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+    
+    // Try to sync with backend (fire and forget)
+    _securityService.toggleSecurityFeature(featureId, enabled);
+  }
 
   @override
   void dispose() {
@@ -180,6 +252,18 @@ class _RegisterPageState extends State<RegisterPage> {
 
                   SizedBox(height: 16.h),
 
+                  // Password Complexity Toggle - visible above password field
+                  SecurityFeatureToggleCompact(
+                    featureName: 'Password Strength Check',
+                    isEnabled: _passwordComplexityEnabled,
+                    tip: _passwordComplexityEnabled
+                        ? 'Requires 8+ chars, upper, lower, digit, special'
+                        : '⚠️ Any password accepted - vulnerable to guessing!',
+                    onToggle: (enabled) => _toggleFeature('password_complexity', enabled),
+                  ),
+
+                  SizedBox(height: 8.h),
+
                   // Password Field
                   TextFormField(
                     controller: _passwordController,
@@ -211,18 +295,48 @@ class _RegisterPageState extends State<RegisterPage> {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your password';
                       }
-                      // Use enhanced password validator
-                      return PasswordValidator.validate(value);
+                      // Only validate password complexity if feature is enabled
+                      if (_passwordComplexityEnabled) {
+                        return PasswordValidator.validate(value);
+                      }
+                      // When disabled, accept ANY password (insecure!)
+                      SecurityEducationService.logEducational(
+                        'Password Complexity DISABLED',
+                        'Weak password "$value" accepted! This would be rejected in secure mode.',
+                      );
+                      return null;
                     },
                   ),
 
-                  SizedBox(height: 12.h),
+                  SizedBox(height: 8.h),
 
-                  // Password Strength Indicator
-                  PasswordStrengthIndicator(
-                    password: _passwordController.text,
-                    showRequirements: true,
-                  ),
+                  // Password Strength Indicator (only show when complexity enabled)
+                  if (_passwordComplexityEnabled)
+                    PasswordStrengthIndicator(
+                      password: _passwordController.text,
+                      showRequirements: true,
+                    )
+                  else
+                    Container(
+                      padding: EdgeInsets.all(12.w),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8.r),
+                        border: Border.all(color: Colors.orange),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber, color: Colors.orange, size: 20.sp),
+                          SizedBox(width: 8.w),
+                          Expanded(
+                            child: Text(
+                              '⚠️ Password complexity DISABLED - any password accepted!',
+                              style: TextStyle(fontSize: 12.sp, color: Colors.orange.shade800),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
                   SizedBox(height: 16.h),
 
@@ -260,34 +374,86 @@ class _RegisterPageState extends State<RegisterPage> {
                     },
                   ),
 
+                  SizedBox(height: 16.h),
+
+                  // Security Education Section
+                  _buildSecurityEducationSection(),
+
                   SizedBox(height: 24.h),
 
                   // Register Button
                   BlocBuilder<AuthBloc, AuthState>(
                     builder: (context, state) {
                       final isLoading = state is AuthLoading;
+                      final hasDisabledFeatures = !_passwordComplexityEnabled || !_inputValidationEnabled;
                       
-                      return ElevatedButton(
-                        onPressed: isLoading ? null : _handleRegister,
-                        style: ElevatedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 16.h),
-                        ),
-                        child: isLoading
-                            ? SizedBox(
-                                height: 20.h,
-                                width: 20.w,
-                                child: const CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            : Text(
-                                'Create Account',
-                                style: FontUtils.body(
-                                  context: context,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                      return Column(
+                        children: [
+                          if (hasDisabledFeatures) ...[
+                            Container(
+                              margin: EdgeInsets.only(bottom: 12.h),
+                              padding: EdgeInsets.all(12.w),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8.r),
+                                border: Border.all(color: Colors.orange, width: 2),
                               ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.warning_amber, color: Colors.orange, size: 20.sp),
+                                      SizedBox(width: 8.w),
+                                      Text(
+                                        '⚠️ SECURITY REDUCED',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14.sp,
+                                          color: Colors.orange.shade800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  SizedBox(height: 8.h),
+                                  if (!_passwordComplexityEnabled)
+                                    Text(
+                                      '• Password complexity disabled: weak passwords OK',
+                                      style: TextStyle(fontSize: 12.sp, color: Colors.orange.shade700),
+                                    ),
+                                  if (!_inputValidationEnabled)
+                                    Text(
+                                      '• Input validation disabled: vulnerable to injection',
+                                      style: TextStyle(fontSize: 12.sp, color: Colors.orange.shade700),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          ElevatedButton(
+                            onPressed: isLoading ? null : _handleRegister,
+                            style: ElevatedButton.styleFrom(
+                              padding: EdgeInsets.symmetric(vertical: 16.h),
+                              backgroundColor: hasDisabledFeatures ? Colors.orange : null,
+                            ),
+                            child: isLoading
+                                ? SizedBox(
+                                    height: 20.h,
+                                    width: 20.w,
+                                    child: const CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : Text(
+                                    hasDisabledFeatures ? 'Create Account (INSECURE!)' : 'Create Account',
+                                    style: FontUtils.body(
+                                      context: context,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -325,6 +491,113 @@ class _RegisterPageState extends State<RegisterPage> {
         password: _passwordController.text,
         role: _selectedRole,
       ),
+    );
+  }
+
+  /// Build the security education section for registration
+  Widget _buildSecurityEducationSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Toggle to show/hide security panel
+        InkWell(
+          onTap: () => setState(() => _showSecurityPanel = !_showSecurityPanel),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.school,
+                  color: AppColors.primary,
+                  size: 18.sp,
+                ),
+                SizedBox(width: 8.w),
+                Text(
+                  '🔐 Security Education Lab',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13.sp,
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                  _showSecurityPanel ? Icons.expand_less : Icons.expand_more,
+                  color: AppColors.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
+        
+        // Security features panel (expanded)
+        if (_showSecurityPanel) ...[
+          SizedBox(height: 12.h),
+          
+          if (_isLoadingFeatures)
+            const Center(child: CircularProgressIndicator())
+          else ...[
+            // Password Complexity Toggle
+            SecurityFeatureToggleCompact(
+              featureName: 'Password Complexity',
+              isEnabled: _passwordComplexityEnabled,
+              tip: _passwordComplexityEnabled 
+                  ? 'Requires 8+ chars, upper, lower, digit, special' 
+                  : '⚠️ Any password accepted - vulnerable to guessing!',
+              onToggle: (enabled) => _toggleFeature('password_complexity', enabled),
+            ),
+            
+            // Password Hashing Toggle (read-only due to safety)
+            SecurityFeatureToggleCompact(
+              featureName: 'Argon2id Password Hashing',
+              isEnabled: _passwordHashingEnabled,
+              tip: 'Industry-leading hash algorithm (always enabled for safety)',
+              isReadOnly: true,
+            ),
+            
+            // Input Validation Toggle
+            SecurityFeatureToggleCompact(
+              featureName: 'Input Validation',
+              isEnabled: _inputValidationEnabled,
+              tip: _inputValidationEnabled 
+                  ? 'Validates all input data formats' 
+                  : '⚠️ No validation - vulnerable to injection!',
+              onToggle: (enabled) => _toggleFeature('input_validation', enabled),
+            ),
+            
+            // Educational tip
+            Container(
+              margin: EdgeInsets.only(top: 8.h),
+              padding: EdgeInsets.all(8.w),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.lightbulb_outline, color: Colors.blue, size: 16.sp),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: Text(
+                      'Try disabling password complexity and register with "123"!',
+                      style: TextStyle(
+                        fontSize: 11.sp,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ],
     );
   }
 }

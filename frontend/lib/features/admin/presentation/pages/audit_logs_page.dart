@@ -3,6 +3,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
+import '../../../../shared/services/security_education_service.dart';
+import '../../../../shared/widgets/security_feature_toggle.dart';
 import '../../data/services/admin_api_service.dart';
 
 /// Audit Logs Page for Admin
@@ -25,11 +27,34 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
   bool _isLoading = true;
   String? _error;
   String? _nextToken;
+
+  // Security Education
+  bool _auditLoggingEnabled = true;
   
   @override
   void initState() {
     super.initState();
     _loadLogs();
+    _loadSecurityFeatures();
+  }
+
+  Future<void> _loadSecurityFeatures() async {
+    final audit = SecurityEducationService.isFeatureEnabled('audit_logging');
+    if (mounted) {
+      setState(() {
+        _auditLoggingEnabled = audit;
+      });
+    }
+  }
+
+  Future<void> _toggleAuditFeature(bool enabled) async {
+    SecurityEducationService.toggleFeatureLocally('audit_logging', enabled);
+    // Sync to backend so audit_service respects the toggle
+    final svc = SecurityEducationService();
+    svc.toggleSecurityFeature('audit_logging', enabled);
+    setState(() {
+      _auditLoggingEnabled = enabled;
+    });
   }
   
   Future<void> _loadLogs({bool loadMore = false}) async {
@@ -91,6 +116,17 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
       body: Column(
         children: [
           _buildHeader(),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+            child: SecurityFeatureToggleCompact(
+              featureName: 'Audit Logging',
+              isEnabled: _auditLoggingEnabled,
+              tip: _auditLoggingEnabled
+                  ? 'All actions recorded for forensic analysis & compliance'
+                  : '⚠️ Audit logging disabled - no incident investigation trail!',
+              onToggle: (enabled) => _toggleAuditFeature(enabled),
+            ),
+          ),
           _buildFiltersAndSearch(),
           Expanded(child: _buildContent()),
         ],

@@ -137,6 +137,16 @@ def get_user(user_id: str) -> Optional[Dict[str,Any]]:
     resp = T_USERS.get_item(Key=_user_key(user_id))
     return resp.get("Item")
 
+def delete_user(user_id: str) -> bool:
+    """Hard-delete a user record from DynamoDB."""
+    if USE_MEMORY:
+        return _users.pop(user_id, None) is not None
+    try:
+        T_USERS.delete_item(Key=_user_key(user_id))
+        return True
+    except Exception:
+        return False
+
 def list_users(role: Optional[str] = None, limit: int = 50, next_token: Optional[str] = None) -> Tuple[List[Dict[str,Any]], Optional[str]]:
     """
     List users with optional role filter.

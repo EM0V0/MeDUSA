@@ -301,6 +301,13 @@ def require_nonce(func):
     """
     @wraps(func)
     async def wrapper(*args, **kwargs):
+        # Check if replay protection feature is enabled (security education mode)
+        from security_config import security_config
+        if not security_config.is_feature_enabled("replay_protection"):
+            security_config.log_security_check("replay_protection", False,
+                f"⚠️ BYPASSED - Replay protection disabled, nonce not checked for {func.__name__}")
+            return await func(*args, **kwargs)
+
         # Find request object
         request = None
         for arg in args:

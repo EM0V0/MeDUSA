@@ -24,6 +24,13 @@ def require_role(*allowed_roles: str):
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
+            # Check if RBAC feature is enabled (security education mode)
+            from security_config import security_config
+            if not security_config.is_feature_enabled("rbac"):
+                security_config.log_security_check("rbac", False, 
+                    f"⚠️ BYPASSED - RBAC disabled, allowing any role to access {func.__name__}")
+                return await func(*args, **kwargs)
+
             # Find request object in args or kwargs
             request = None
             for arg in args:
@@ -53,6 +60,8 @@ def require_role(*allowed_roles: str):
                     }
                 )
             
+            security_config.log_security_check("rbac", True, 
+                f"Role '{user_role}' authorized for {func.__name__}")
             # Call the original function
             return await func(*args, **kwargs)
         

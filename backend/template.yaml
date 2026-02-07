@@ -44,6 +44,7 @@ Globals:
         # Environment
         ENVIRONMENT: 'production'
         USE_MEMORY: 'false'  # Use real AWS services in production
+        SECURITY_MODE: 'educational'  # Allow security feature toggles for demonstration
     Architectures:
       - x86_64
 

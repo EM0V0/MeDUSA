@@ -8,6 +8,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
 import '../../../../shared/services/bluetooth_service.dart' show MedicalBluetoothService;
+import '../../../../shared/services/security_education_service.dart';
+import '../../../../shared/widgets/security_feature_toggle.dart';
 
 class DeviceConnectionPage extends StatefulWidget {
   const DeviceConnectionPage({super.key});
@@ -34,12 +36,19 @@ class _DeviceConnectionPageState extends State<DeviceConnectionPage> with Ticker
   double _averageTemperature = 0.0;
   String _lastDataTime = 'Never';
 
+  // Security Education
+  bool _replayProtectionEnabled = true;
+  bool _tlsEnabled = true;
+  bool _certPinningEnabled = true;
+  bool _showSecurityPanel = false;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _setupSubscriptions();
     _checkConnection();
+    _loadSecurityFeatures();
   }
 
   void _setupSubscriptions() {
@@ -114,6 +123,7 @@ class _DeviceConnectionPageState extends State<DeviceConnectionPage> with Ticker
       body: Column(
         children: [
           _buildHeader(),
+          _buildDeviceSecurityPanel(),
           _buildTabBar(),
           Expanded(
             child: TabBarView(
@@ -126,6 +136,92 @@ class _DeviceConnectionPageState extends State<DeviceConnectionPage> with Ticker
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Security Education Section — always visible above tabs
+  Widget _buildDeviceSecurityPanel() {
+    return Container(
+      color: Colors.white,
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _showSecurityPanel = !_showSecurityPanel),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8.r),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.school, color: AppColors.primary, size: 18.sp),
+                  SizedBox(width: 8.w),
+                  Text(
+                    'Security Education Lab',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.sp,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    _showSecurityPanel ? Icons.expand_less : Icons.expand_more,
+                    color: AppColors.primary,
+                    size: 20.sp,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_showSecurityPanel) ...[
+            SizedBox(height: 8.h),
+            SecurityFeatureToggleCompact(
+              featureName: 'Replay Protection',
+              isEnabled: _replayProtectionEnabled,
+              tip: _replayProtectionEnabled
+                  ? 'Nonce prevents duplicate command replay attacks'
+                  : '⚠️ Commands can be intercepted and replayed!',
+              onToggle: (enabled) => _toggleDeviceFeature('replay_protection', enabled),
+            ),
+            SecurityFeatureToggleCompact(
+              featureName: 'TLS/HTTPS Encryption',
+              isEnabled: _tlsEnabled,
+              tip: 'Infrastructure-level encryption (always active, managed by API Gateway)',
+              isReadOnly: true,
+            ),
+            SecurityFeatureToggleCompact(
+              featureName: 'Certificate Pinning',
+              isEnabled: _certPinningEnabled,
+              tip: 'Client-side certificate verification (always active, managed at HTTP client level)',
+              isReadOnly: true,
+            ),
+            Container(
+              margin: EdgeInsets.only(top: 4.h, bottom: 4.h),
+              padding: EdgeInsets.all(8.w),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.lightbulb_outline, color: Colors.blue, size: 14.sp),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: Text(
+                      'Disable replay protection then try sending the same command twice!',
+                      style: TextStyle(fontSize: 11.sp, color: Colors.blue.shade700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -823,6 +919,41 @@ class _DeviceConnectionPageState extends State<DeviceConnectionPage> with Ticker
         ],
       ),
     );
+  }
+
+  Future<void> _loadSecurityFeatures() async {
+    final replay = SecurityEducationService.isFeatureEnabled('replay_protection');
+    final tls = SecurityEducationService.isFeatureEnabled('tls_https');
+    final certPin = SecurityEducationService.isFeatureEnabled('certificate_pinning');
+    if (mounted) {
+      setState(() {
+        _replayProtectionEnabled = replay;
+        _tlsEnabled = tls;
+        _certPinningEnabled = certPin;
+      });
+    }
+  }
+
+  Future<void> _toggleDeviceFeature(String feature, bool enabled) async {
+    SecurityEducationService.toggleFeatureLocally(feature, enabled);
+    // Also sync to backend for features that have backend checks
+    if (feature == 'replay_protection') {
+      final svc = SecurityEducationService();
+      svc.toggleSecurityFeature(feature, enabled);
+    }
+    setState(() {
+      switch (feature) {
+        case 'replay_protection':
+          _replayProtectionEnabled = enabled;
+          break;
+        case 'tls_https':
+          _tlsEnabled = enabled;
+          break;
+        case 'certificate_pinning':
+          _certPinningEnabled = enabled;
+          break;
+      }
+    });
   }
 
   Widget _buildSettingsTab() {
