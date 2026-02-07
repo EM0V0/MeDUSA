@@ -20,10 +20,11 @@
    - [Patient Management](#patient-management)
    - [Device Management](#device-management)
    - [Tremor Monitoring](#tremor-monitoring)
-5. [Data Models](#data-models)
-6. [Error Handling](#error-handling)
-7. [Rate Limiting](#rate-limiting)
-8. [Examples](#examples)
+5. [Security Education API](#security-education-api)
+6. [Data Models](#data-models)
+7. [Error Handling](#error-handling)
+8. [Rate Limiting](#rate-limiting)
+9. [Examples](#examples)
 
 ---
 
@@ -940,6 +941,150 @@ GET /api/v1/tremor/statistics?patient_id=PAT-001&start_time=2025-11-15T00:00:00Z
 - `moderate`: Tremor score 4-6
 - `severe`: Tremor score 6-8
 - `very_severe`: Tremor score > 8
+
+---
+
+## Security Education API
+
+> **Educational Feature**: These endpoints support runtime security mode switching for educational purposes, allowing instructors and students to observe security feature impacts without restarting the server.
+
+### Security Mode Management
+
+#### Get Current Security Configuration
+
+```http
+GET /api/v1/security/config
+```
+
+**Response**:
+```json
+{
+  "mode": "educational",
+  "educational_logging": true,
+  "features": {
+    "authentication_required": true,
+    "session_validation": true,
+    "rate_limiting": true,
+    "input_validation": true,
+    "audit_logging": true,
+    "encryption_at_rest": true,
+    "tls_required": true,
+    "mfa_required": false,
+    "password_complexity": true,
+    "token_expiration": true,
+    "replay_protection": true,
+    "cors_strict": true
+  },
+  "security_score": 83,
+  "enabled_count": 10,
+  "total_count": 12
+}
+```
+
+#### Switch Security Mode (Runtime)
+
+```http
+POST /api/v1/security/mode?mode=<mode>
+```
+
+**Query Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| mode | string | Yes | One of: `secure`, `educational`, `insecure` |
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Security mode changed to: educational",
+  "previous_mode": "secure",
+  "new_mode": "educational",
+  "features": {
+    "authentication_required": true,
+    "session_validation": true,
+    "rate_limiting": true,
+    "...": "..."
+  }
+}
+```
+
+**Mode Behaviors**:
+- `secure`: All security features enabled (production recommended)
+- `educational`: Most features enabled with detailed logging for learning
+- `insecure`: Most features disabled (NEVER use in production)
+
+#### Toggle Educational Logging (Runtime)
+
+```http
+POST /api/v1/security/logging?enabled=<bool>
+```
+
+**Query Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| enabled | boolean | Yes | `true` or `false` |
+
+**Response**:
+```json
+{
+  "success": true,
+  "educational_logging": true,
+  "message": "Educational logging is now: enabled"
+}
+```
+
+#### Get Live Security Status
+
+```http
+GET /api/v1/security/live-status
+```
+
+**Response**:
+```json
+{
+  "mode": "educational",
+  "timestamp": "2026-02-03T10:30:00.000Z",
+  "security_score": 83,
+  "features": {
+    "authentication_required": { "enabled": true, "description": "Require valid JWT tokens" },
+    "session_validation": { "enabled": true, "description": "Validate session state" },
+    "rate_limiting": { "enabled": true, "description": "Prevent brute-force attacks" },
+    "...": "..."
+  },
+  "educational_logging": true,
+  "warnings": ["MFA is disabled", "CORS strict mode is disabled"]
+}
+```
+
+### Demo Endpoints (Educational Mode Only)
+
+> **Note**: These endpoints are only available when the system is running in `educational` or `insecure` mode.
+
+#### Demo: SQL Injection Vulnerability
+
+```http
+GET /api/v1/demo/vulnerable/sql-injection?user_id=<input>
+```
+
+Demonstrates SQL injection risks. In `insecure` mode, shows raw query construction; in `educational` mode, shows the vulnerability with explanatory logging.
+
+#### Demo: Insecure Authentication
+
+```http
+POST /api/v1/demo/vulnerable/weak-auth
+```
+
+Demonstrates weak authentication patterns for educational comparison with secure implementations.
+
+#### Demo: Secure vs Insecure Comparison
+
+```http
+GET /api/v1/demo/compare/authentication
+GET /api/v1/demo/compare/input-validation
+GET /api/v1/demo/compare/session-management
+```
+
+Provides side-by-side comparisons of secure vs insecure implementations with detailed explanations.
 
 ---
 

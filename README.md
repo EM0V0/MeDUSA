@@ -259,11 +259,27 @@ docker logs -f medusa-backend-educational
 docker-compose -f docker-compose.insecure.yml up -d
 ```
 
-**Security Mode Environment Variable:**
+### 🔄 Runtime Mode Switching (No Restart Needed!)
+
+Once the server is running, switch modes instantly via API or UI:
+
 ```bash
-SECURITY_MODE=secure      # All features enabled (default)
-SECURITY_MODE=educational # Secure + verbose logging
-SECURITY_MODE=insecure    # Allows disabling features for demos
+# Switch modes via API
+curl -X POST "http://localhost:8080/api/v1/security/mode?mode=educational"
+curl -X POST "http://localhost:8080/api/v1/security/mode?mode=insecure"
+curl -X POST "http://localhost:8080/api/v1/security/mode?mode=secure"
+
+# Toggle individual security features (educational/insecure mode only)
+curl -X POST "http://localhost:8080/api/v1/security/features/password_hashing/toggle?enabled=false"
+
+# Check real-time security status
+curl "http://localhost:8080/api/v1/security/live-status"
+```
+
+Or use the **Security Lab UI** (Admin → Security Lab):
+- Click **SECURE / EDUCATIONAL / INSECURE** buttons to switch modes
+- Use **toggle switches** on each feature to enable/disable
+- View real-time security score and console logging
 
 See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for comprehensive deployment instructions.
 

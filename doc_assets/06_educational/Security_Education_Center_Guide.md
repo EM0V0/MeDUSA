@@ -52,38 +52,45 @@ curl -X GET "https://api.medusa.example/api/v1/security/features/password_hashin
 
 ## Security Modes
 
-MeDUSA supports three security modes controlled by the `SECURITY_MODE` environment variable:
+MeDUSA supports three security modes. **Modes can be switched at RUNTIME without restarting the server!**
 
 ### SECURE Mode (Default)
 
-```bash
-SECURITY_MODE=secure
-```
-
-- All 12 security features are enabled
+- All 12 security features are enabled and **cannot be toggled off**
 - No educational logging overhead
 - **Suitable for production deployment**
 
+### EDUCATIONAL Mode (Recommended for Learning)
+
+- All security features are enabled
+- Verbose console logging explains each security check
+- Features can be toggled on/off for demonstration
+- **Ideal for learning and development**
+
 ### INSECURE Mode
 
-```bash
-SECURITY_MODE=insecure
-```
+- Security features can be disabled to demonstrate vulnerabilities
+- **⚠️ FOR EDUCATIONAL USE ONLY - NEVER USE IN PRODUCTION**
 
-- Selected security features can be disabled
-- Demonstrates vulnerabilities for educational purposes
-- **⚠️ NEVER USE IN PRODUCTION**
+### 🔄 Runtime Mode Switching (No Restart Needed!)
 
-### EDUCATIONAL Mode
+Switch modes instantly via API:
 
 ```bash
-SECURITY_MODE=educational
-EDUCATIONAL_LOGGING=true
+# Switch to EDUCATIONAL mode
+curl -X POST "http://localhost:8080/api/v1/security/mode?mode=educational"
+
+# Switch to INSECURE mode (for vulnerability demos)
+curl -X POST "http://localhost:8080/api/v1/security/mode?mode=insecure"
+
+# Switch back to SECURE mode
+curl -X POST "http://localhost:8080/api/v1/security/mode?mode=secure"
+
+# Toggle educational logging
+curl -X POST "http://localhost:8080/api/v1/security/logging?enabled=true"
 ```
 
-- All security features remain enabled
-- Verbose console logging explains each security check
-- **Ideal for learning and development**
+Or use the **Frontend UI**: Navigate to Security Lab → click mode buttons (SECURE / EDUCATIONAL / INSECURE)
 
 ---
 
@@ -266,6 +273,14 @@ The Security Education Center includes structured learning content:
 
 ## API Reference
 
+### Runtime Control Endpoints (No Restart Needed!)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/security/mode?mode={mode}` | **Switch security mode instantly** (secure/educational/insecure) |
+| POST | `/api/v1/security/logging?enabled={bool}` | **Toggle educational logging** |
+| GET | `/api/v1/security/live-status` | Get real-time security status with score |
+
 ### Configuration Endpoints
 
 | Method | Endpoint | Description |
@@ -273,7 +288,7 @@ The Security Education Center includes structured learning content:
 | GET | `/api/v1/security/config` | Get full security configuration |
 | GET | `/api/v1/security/features` | List all features by category |
 | GET | `/api/v1/security/features/{id}` | Get specific feature details |
-| POST | `/api/v1/security/features/{id}/toggle` | Toggle feature (admin only) |
+| POST | `/api/v1/security/features/{id}/toggle` | Toggle feature (educational/insecure mode only) |
 
 ### Demo Endpoints
 
