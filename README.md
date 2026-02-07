@@ -70,6 +70,21 @@ The medical device industry faces a critical shortage of cybersecurity professio
 
 MeDUSA supports a progressive learning path for medical device security:
 
+### 🔬 Security Education Center (Interactive)
+
+Access the **Security Education Center** in the Admin dashboard to:
+
+- **Explore 12 Security Features**: Toggle between secure/insecure modes to understand vulnerabilities
+- **Interactive Demonstrations**: 
+  - Password hashing comparison (MD5 vs SHA256 vs Argon2id)
+  - JWT token structure breakdown
+  - RBAC permission matrix
+  - Replay attack prevention with nonces
+- **Educational Console Logging**: Set `SECURITY_MODE=educational` for verbose security explanations
+- **FDA Compliance Mapping**: Each feature links to FDA 2025 cybersecurity requirements
+
+📖 See [Security_Education_Center_Guide.md](doc_assets/06_educational/Security_Education_Center_Guide.md) for detailed documentation.
+
 ### Module 1: Foundations
 - Understanding medical device regulations (FDA, IEC 62443)
 - Introduction to the STRIDE threat model
@@ -218,6 +233,37 @@ Edit `frontend/lib/core/constants/app_constants.dart` with your API Gateway URL.
 | `USERS_TABLE` | DynamoDB users table name |
 | `SENDER_EMAIL` | Verified SES email address |
 | `USE_SES` | Enable AWS SES (`true`/`false`) |
+
+### Docker Compose Deployment
+
+MeDUSA provides three Docker Compose configurations for different use cases:
+
+#### Secure Mode (Production)
+```bash
+# All security features enabled
+docker-compose -f docker-compose.secure.yml up -d
+```
+
+#### Educational Mode (Learning with Verbose Logging)
+```bash
+# Security enabled + detailed console explanations
+docker-compose -f docker-compose.educational.yml up -d
+
+# View security education logs
+docker logs -f medusa-backend-educational
+```
+
+#### Insecure Mode (Vulnerability Demonstrations)
+```bash
+# ⚠️ EDUCATIONAL USE ONLY - Security features can be toggled off
+docker-compose -f docker-compose.insecure.yml up -d
+```
+
+**Security Mode Environment Variable:**
+```bash
+SECURITY_MODE=secure      # All features enabled (default)
+SECURITY_MODE=educational # Secure + verbose logging
+SECURITY_MODE=insecure    # Allows disabling features for demos
 
 See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for comprehensive deployment instructions.
 

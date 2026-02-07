@@ -38,7 +38,8 @@ doc_assets/
 │   └── API_DOCUMENTATION.md
 │
 └── 06_educational/                        # Educational resources
-    └── Cybersecurity_Risk_Assessment_Worksheet.md
+    ├── Cybersecurity_Risk_Assessment_Worksheet.md
+    └── Security_Education_Center_Guide.md
 ```
 
 ---
@@ -95,11 +96,12 @@ API and system architecture documentation.
 
 ### 6. Educational Resources (`06_educational/`)
 
-Materials for hands-on learning exercises.
+Materials for hands-on learning exercises and security education.
 
 | Document | Description |
 |----------|-------------|
 | [Cybersecurity_Risk_Assessment_Worksheet.md](06_educational/Cybersecurity_Risk_Assessment_Worksheet.md) | Student exercise worksheet |
+| [Security_Education_Center_Guide.md](06_educational/Security_Education_Center_Guide.md) | Interactive security feature demonstrations |
 
 ---
 

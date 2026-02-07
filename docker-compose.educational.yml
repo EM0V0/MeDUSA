@@ -1,0 +1,146 @@
+# MeDUSA Docker Compose - EDUCATIONAL Mode (Secure with Verbose Logging)
+#
+# This configuration runs MeDUSA with all security features enabled
+# AND detailed educational logging to help understand each security check.
+#
+# Usage:
+#   docker-compose -f docker-compose.educational.yml up -d
+#
+# Environment: SECURITY_MODE=educational + EDUCATIONAL_LOGGING=true
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Backend API Service - EDUCATIONAL MODE
+  # =============================================================================
+  backend:
+    build:
+      context: ./backend/backend-py
+      dockerfile: Dockerfile
+    container_name: medusa-backend-educational
+    environment:
+      # 📚 EDUCATIONAL MODE - Secure with verbose logging
+      - SECURITY_MODE=educational
+      - EDUCATIONAL_LOGGING=true
+      
+      # Authentication (production-grade)
+      - JWT_SECRET=${JWT_SECRET:-EDUCATIONAL_SECRET_CHANGE_FOR_PROD}
+      - JWT_EXPIRE_SECONDS=3600
+      - REFRESH_TTL_SECONDS=604800
+      
+      # Replay Protection
+      - HMAC_SECRET=${HMAC_SECRET:-${JWT_SECRET:-EDUCATIONAL_SECRET_CHANGE_FOR_PROD}}
+      - NONCE_TTL_SECONDS=300
+      
+      # AWS Configuration (LocalStack for local)
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=localstack
+      - AWS_SECRET_ACCESS_KEY=localstack
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - DDB_TABLE_USERS=medusa-users-edu
+      - DDB_TABLE_DEVICES=medusa-devices-edu
+      - DDB_TABLE_SESSIONS=medusa-sessions-edu
+      - DDB_TABLE_NONCES=medusa-nonces-edu
+      - S3_BUCKET=medusa-data-edu
+      
+      # Use in-memory for local dev
+      - USE_MEMORY=true
+      
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - medusa-edu-network
+    restart: unless-stopped
+    # Attach to see educational output in real-time
+    tty: true
+    stdin_open: true
+
+  # =============================================================================
+  # LocalStack (AWS Services Emulator)
+  # =============================================================================
+  localstack:
+    image: localstack/localstack:latest
+    container_name: medusa-localstack-edu
+    environment:
+      - SERVICES=dynamodb,s3,secretsmanager
+      - DEFAULT_REGION=us-east-1
+      - EDGE_PORT=4566
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack-edu-data:/var/lib/localstack
+    networks:
+      - medusa-edu-network
+
+  # =============================================================================
+  # DynamoDB Admin (for data inspection)
+  # =============================================================================
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin
+    container_name: medusa-dynamodb-admin-edu
+    environment:
+      - DYNAMO_ENDPOINT=http://localstack:4566
+    ports:
+      - "8001:8001"
+    depends_on:
+      - localstack
+    networks:
+      - medusa-edu-network
+
+networks:
+  medusa-edu-network:
+    driver: bridge
+
+volumes:
+  localstack-edu-data:
+
+# =============================================================================
+# 📚 Educational Logging Output Examples
+# =============================================================================
+#
+# When EDUCATIONAL_LOGGING=true, you'll see detailed output like:
+#
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║ 🔐 SECURITY CHECK: Password Hashing                                         ║
+# ╠══════════════════════════════════════════════════════════════════════════════╣
+# ║ Feature: password_hashing                                                   ║
+# ║ Status: ENABLED ✅                                                          ║
+# ║ Action: Hashing password with Argon2id                                      ║
+# ║                                                                             ║
+# ║ Parameters:                                                                 ║
+# ║   - Algorithm: Argon2id                                                     ║
+# ║   - Memory: 64 MB                                                           ║
+# ║   - Iterations: 3                                                           ║
+# ║   - Parallelism: 4                                                          ║
+# ║                                                                             ║
+# ║ Why This Matters:                                                           ║
+# ║   Argon2id is resistant to GPU/ASIC attacks due to memory requirements.     ║
+# ║   Each hash takes ~100ms intentionally to slow down brute force attempts.   ║
+# ║                                                                             ║
+# ║ FDA Reference: Pre-market Guidance 2025 - Industry-standard cryptography    ║
+# ║ CWE Reference: CWE-916 (Insufficient Password Hashing)                      ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+#
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║ 🔒 SECURITY CHECK: RBAC Authorization                                       ║
+# ╠══════════════════════════════════════════════════════════════════════════════╣
+# ║ Feature: rbac                                                               ║
+# ║ Status: ENABLED ✅                                                          ║
+# ║ User: dr.smith@hospital.org                                                 ║
+# ║ Role: doctor                                                                ║
+# ║ Endpoint: GET /api/v1/patients                                              ║
+# ║ Required Roles: ["doctor", "admin"]                                         ║
+# ║ Result: ACCESS GRANTED ✅                                                   ║
+# ║                                                                             ║
+# ║ Why This Matters:                                                           ║
+# ║   RBAC ensures users can only access resources appropriate for their role.  ║
+# ║   A patient cannot access doctor-only endpoints.                            ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+#
+# =============================================================================
