@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
+import '../../../../core/di/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../shared/services/network_service.dart';
@@ -967,7 +968,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
 
   Future<void> _deleteAccount() async {
     try {
-      final networkService = NetworkServiceImpl.secure();
+      final networkService = serviceLocator.get<NetworkService>();
       final response = await networkService.delete('/auth/account');
       
       if (response.statusCode == 200 && mounted) {

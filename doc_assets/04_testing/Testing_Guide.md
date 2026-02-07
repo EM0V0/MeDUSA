@@ -263,6 +263,101 @@ if ($response.userId -and $response.accessJwt) {
 
 ---
 
+#### TC-AUTH-005: MFA Setup During Registration
+
+| Attribute | Value |
+|-----------|-------|
+| **Test ID** | TC-AUTH-005 |
+| **Priority** | Critical |
+| **Precondition** | Fresh registration completed |
+
+**Test Steps:**
+
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Complete registration with valid email verification | MFA dialog shown with TOTP secret |
+| 2 | Add secret to authenticator app | Authenticator generates 6-digit codes |
+| 3 | Enter valid TOTP code and click "Verify TOTP Code" | Green verification success, "Continue to Dashboard" enabled |
+| 4 | Enter invalid TOTP code | Error message shown, can retry |
+| 5 | Click "Continue to Dashboard" after verification | Navigates to dashboard |
+
+---
+
+#### TC-AUTH-006: MFA Login Flow
+
+| Attribute | Value |
+|-----------|-------|
+| **Test ID** | TC-AUTH-006 |
+| **Priority** | Critical |
+| **Precondition** | MFA-enabled user account |
+
+**Test Steps:**
+
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | POST `/api/v1/auth/login` with valid credentials | 200 OK with `mfaRequired: true` and `tempToken` |
+| 2 | POST `/api/v1/auth/mfa/login` with valid TOTP code | 200 OK with `accessJwt`, `refreshToken` |
+| 3 | POST `/api/v1/auth/mfa/login` with invalid TOTP code | 400 Bad Request |
+| 4 | POST `/api/v1/auth/mfa/login` with expired `tempToken` | 401 Unauthorized |
+
+---
+
+#### TC-AUTH-007: Self-Service Account Deletion
+
+| Attribute | Value |
+|-----------|-------|
+| **Test ID** | TC-AUTH-007 |
+| **Priority** | High |
+| **Precondition** | Authenticated user (any role) |
+
+**Test Steps:**
+
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | Navigate to Settings > Security > Danger Zone | "Delete My Account" button visible |
+| 2 | Click "Delete My Account" | Confirmation dialog shown |
+| 3 | Confirm deletion | Account removed, user logged out, redirected to login |
+| 4 | Attempt login with deleted credentials | 401 Invalid credentials |
+
+---
+
+#### TC-AUTH-008: Admin Account Deletion
+
+| Attribute | Value |
+|-----------|-------|
+| **Test ID** | TC-AUTH-008 |
+| **Priority** | High |
+| **Precondition** | Authenticated admin user |
+
+**Test Steps:**
+
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | DELETE `/api/v1/admin/users/{user_id}` for another user | 200 OK, user deleted |
+| 2 | DELETE `/api/v1/admin/users/{own_user_id}` | 400 Bad Request (self-delete prevented) |
+| 3 | DELETE `/api/v1/admin/users/{nonexistent_id}` | 404 Not Found |
+
+---
+
+#### TC-AUTH-009: Security Feature Toggle
+
+| Attribute | Value |
+|-----------|-------|
+| **Test ID** | TC-AUTH-009 |
+| **Priority** | Medium |
+| **Precondition** | System in educational mode |
+
+**Test Steps:**
+
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | POST `/api/v1/security/features/rate_limiting/toggle?enabled=false` | Feature disabled, security score decreases |
+| 2 | Attempt rapid login attempts | No rate limiting enforced |
+| 3 | POST `/api/v1/security/features/rate_limiting/toggle?enabled=true` | Feature re-enabled, security score increases |
+| 4 | Attempt rapid login attempts | Rate limiting enforced |
+
+---
+
 ### 3.2 Patient Management Module
 
 #### TC-PAT-001: Create Patient Profile

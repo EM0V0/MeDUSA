@@ -9,6 +9,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/font_utils.dart';
 import '../../../../core/utils/icon_utils.dart';
 import '../../../../core/utils/password_validator.dart';
+import '../../../../core/di/service_locator.dart';
+import '../../../../shared/services/network_service.dart';
 import '../../../../shared/services/security_education_service.dart';
 import '../../../../shared/widgets/security_feature_toggle.dart';
 import '../bloc/auth_bloc.dart';
@@ -679,128 +681,241 @@ class _RegisterPageWithVerificationState extends State<RegisterPageWithVerificat
   }
 
   void _showMfaSecretDialog(BuildContext context, String mfaSecret, String email) {
+    final totpController = TextEditingController();
+    bool isVerifying = false;
+    bool isVerified = false;
+    String? errorMessage;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.security, color: AppColors.primary, size: 28.sp),
-            SizedBox(width: 8.w),
-            const Text('MFA Setup Required'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Row(
             children: [
-              Text(
-                'Your account has been created! Please save your MFA secret to set up two-factor authentication.',
-                style: TextStyle(fontSize: 14.sp),
-              ),
-              SizedBox(height: 16.h),
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(16.w),
-                decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(color: Colors.green),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      '🔑 Your MFA Secret',
-                      style: TextStyle(
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green.shade800,
-                      ),
-                    ),
-                    SizedBox(height: 8.h),
-                    SelectableText(
-                      mfaSecret,
-                      style: TextStyle(
-                        fontSize: 18.sp,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
-                        letterSpacing: 2,
-                        color: Colors.green.shade900,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 16.h),
-              Container(
-                padding: EdgeInsets.all(12.w),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8.r),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Setup Instructions:',
-                      style: TextStyle(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade800,
-                      ),
-                    ),
-                    SizedBox(height: 8.h),
-                    Text(
-                      '1. Open Google Authenticator or Authy\n'
-                      '2. Tap "+" to add a new account\n'
-                      '3. Choose "Enter setup key"\n'
-                      '4. Account: $email\n'
-                      '5. Key: Copy the secret above\n'
-                      '6. Type: Time-based (TOTP)',
-                      style: TextStyle(fontSize: 12.sp, height: 1.5),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 12.h),
-              Container(
-                padding: EdgeInsets.all(12.w),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning_amber, color: Colors.orange, size: 20.sp),
-                    SizedBox(width: 8.w),
-                    Expanded(
-                      child: Text(
-                        '⚠️ Save this secret now! You will need it to log in. A welcome email with this secret has also been sent.',
-                        style: TextStyle(fontSize: 11.sp, color: Colors.orange.shade800),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              Icon(Icons.security, color: AppColors.primary, size: 28.sp),
+              SizedBox(width: 8.w),
+              const Text('MFA Setup Required'),
             ],
           ),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              GoRouter.of(context).go('/dashboard');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your account has been created! Please save your MFA secret and verify your authenticator app.',
+                  style: TextStyle(fontSize: 14.sp),
+                ),
+                SizedBox(height: 16.h),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(16.w),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8.r),
+                    border: Border.all(color: Colors.green),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        '🔑 Your MFA Secret',
+                        style: TextStyle(
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade800,
+                        ),
+                      ),
+                      SizedBox(height: 8.h),
+                      SelectableText(
+                        mfaSecret,
+                        style: TextStyle(
+                          fontSize: 18.sp,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'monospace',
+                          letterSpacing: 2,
+                          color: Colors.green.shade900,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 16.h),
+                Container(
+                  padding: EdgeInsets.all(12.w),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Setup Instructions:',
+                        style: TextStyle(
+                          fontSize: 13.sp,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                      SizedBox(height: 8.h),
+                      Text(
+                        '1. Open Google Authenticator or Authy\n'
+                        '2. Tap "+" to add a new account\n'
+                        '3. Choose "Enter setup key"\n'
+                        '4. Account: $email\n'
+                        '5. Key: Copy the secret above\n'
+                        '6. Type: Time-based (TOTP)',
+                        style: TextStyle(fontSize: 12.sp, height: 1.5),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 16.h),
+
+                // TOTP Verification Input
+                Text(
+                  'Verify your authenticator:',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 8.h),
+                TextField(
+                  controller: totpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  enabled: !isVerified && !isVerifying,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Enter 6-digit code',
+                    hintText: '000000',
+                    counterText: '',
+                    prefixIcon: Icon(Icons.pin, size: 20.sp),
+                    suffixIcon: isVerified
+                        ? Icon(Icons.check_circle, color: Colors.green, size: 24.sp)
+                        : null,
+                    border: const OutlineInputBorder(),
+                    errorText: errorMessage,
+                  ),
+                ),
+                SizedBox(height: 8.h),
+
+                // Verify Button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: isVerified || isVerifying || totpController.text.trim().length != 6
+                        ? null
+                        : () async {
+                            setDialogState(() {
+                              isVerifying = true;
+                              errorMessage = null;
+                            });
+                            try {
+                              final networkService = serviceLocator.get<NetworkService>();
+                              final response = await networkService.post(
+                                '/auth/mfa/verify-setup',
+                                data: {'code': totpController.text.trim()},
+                              );
+                              if (response.statusCode == 200) {
+                                setDialogState(() {
+                                  isVerified = true;
+                                  isVerifying = false;
+                                });
+                              }
+                            } catch (e) {
+                              setDialogState(() {
+                                isVerifying = false;
+                                errorMessage = 'Invalid code. Check your authenticator and try again.';
+                              });
+                            }
+                          },
+                    icon: isVerifying
+                        ? SizedBox(
+                            width: 16.w, height: 16.h,
+                            child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : isVerified
+                            ? Icon(Icons.check, size: 18.sp)
+                            : Icon(Icons.verified_user, size: 18.sp),
+                    label: Text(isVerified ? 'Verified!' : 'Verify TOTP Code'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isVerified ? Colors.green : AppColors.primary,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+
+                if (isVerified) ...[
+                  SizedBox(height: 12.h),
+                  Container(
+                    padding: EdgeInsets.all(12.w),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8.r),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green, size: 20.sp),
+                        SizedBox(width: 8.w),
+                        Expanded(
+                          child: Text(
+                            '✅ Your authenticator is set up correctly! You can now proceed.',
+                            style: TextStyle(fontSize: 11.sp, color: Colors.green.shade800),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                if (!isVerified) ...[
+                  SizedBox(height: 12.h),
+                  Container(
+                    padding: EdgeInsets.all(12.w),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8.r),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning_amber, color: Colors.orange, size: 20.sp),
+                        SizedBox(width: 8.w),
+                        Expanded(
+                          child: Text(
+                            '⚠️ Please verify your TOTP code before continuing. You will need it to log in.',
+                            style: TextStyle(fontSize: 11.sp, color: Colors.orange.shade800),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
             ),
-            child: const Text('I\'ve saved my secret - Continue'),
           ),
-        ],
+          actions: [
+            ElevatedButton(
+              onPressed: isVerified
+                  ? () {
+                      totpController.dispose();
+                      Navigator.of(dialogContext).pop();
+                      GoRouter.of(context).go('/dashboard');
+                    }
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Continue to Dashboard'),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,9 +1,9 @@
 # MeDUSA Backend API Documentation
 
-**Version**: 3.0  
+**Version**: 3.1  
 **Base URL**: `https://<API-GATEWAY-ID>.execute-api.us-east-1.amazonaws.com/Prod`  
 **Tremor API Base URL**: `https://<API-GATEWAY-ID>.execute-api.us-east-1.amazonaws.com/Prod`  
-**Last Updated**: February 2, 2026  
+**Last Updated**: February 7, 2026  
 **Status**: Production
 
 > **Note**: The actual API Gateway ID changes with each deployment. The current production API endpoint is configured in `frontend/lib/core/constants/app_constants.dart`. Update the Flutter app configuration to match your deployed API Gateway URL.
@@ -351,9 +351,222 @@ Authorization: Bearer <access_token>
 
 ---
 
-### Patient Management
+### Multi-Factor Authentication (MFA)
 
-#### POST /patients
+#### POST /auth/mfa/setup
+
+Initialize TOTP MFA for the current user. Returns a secret key and provisioning URI.
+
+**Permissions**: Authenticated user (any role)
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "secret": "JBSWY3DPEHPK3PXP",
+  "provisioningUri": "otpauth://totp/MeDUSA:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=MeDUSA",
+  "message": "Scan QR code with authenticator app, then verify with a code"
+}
+```
+
+#### POST /auth/mfa/verify-setup
+
+Verify TOTP setup during registration. Confirms the user's authenticator app is generating valid codes against the already-active MFA secret. Does NOT change any MFA state.
+
+**Permissions**: Authenticated user (any role)
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request:**
+```json
+{
+  "code": "123456"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "TOTP verified successfully. Your authenticator is set up correctly."
+}
+```
+
+**Error (400):**
+```json
+{
+  "detail": {
+    "code": "MFA_INVALID",
+    "message": "Invalid TOTP code. Please check your authenticator app and try again."
+  }
+}
+```
+
+#### POST /auth/mfa/verify
+
+Verify and enable MFA for the current user (after `/auth/mfa/setup`). Moves pending secret to active.
+
+**Permissions**: Authenticated user (any role)
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request:**
+```json
+{
+  "code": "123456"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "MFA enabled successfully"
+}
+```
+
+#### POST /auth/mfa/login
+
+Complete MFA login with TOTP code. Required when login returns `mfaRequired: true`.
+
+**Request:**
+```json
+{
+  "tempToken": "<temp_token_from_login>",
+  "code": "123456"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "accessJwt": "<jwt_token>",
+  "refreshToken": "<refresh_token>",
+  "expiresIn": 3600,
+  "userId": "usr_abc123",
+  "role": "doctor",
+  "email": "user@example.com"
+}
+```
+
+#### GET /auth/mfa/status
+
+Check MFA enrollment status for the current user.
+
+**Permissions**: Authenticated user (any role)
+
+**Response (200 OK):**
+```json
+{
+  "mfaEnabled": true,
+  "hasPendingSetup": false
+}
+```
+
+#### DELETE /auth/mfa
+
+Disable MFA for the current user.
+
+**Permissions**: Authenticated user (any role)
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "MFA disabled"
+}
+```
+
+---
+
+### Account Management
+
+#### DELETE /auth/account
+
+Self-service account deletion. Permanently removes the authenticated user's account from the system.
+
+**Permissions**: Authenticated user (any role: admin, doctor, patient)
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Account deleted successfully"
+}
+```
+
+#### DELETE /admin/users/{user_id}
+
+Admin-initiated account deletion. Permanently removes a specified user account. Admin cannot delete their own account.
+
+**Permissions**: Admin only
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "User usr_abc123 deleted"
+}
+```
+
+**Error (400 - Self-delete attempt):**
+```json
+{
+  "detail": {
+    "code": "SELF_DELETE",
+    "message": "Cannot delete your own account via admin endpoint"
+  }
+}
+```
+
+---
+
+### Email Verification
+
+#### POST /auth/request-verification
+
+Request a verification code for email verification during registration.
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "type": "registration"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Verification code sent to email",
+  "expiresIn": 600
+}
+```
+
+---
+
+### Patient Management
 
 Create new patient profile.
 
@@ -1059,6 +1272,38 @@ GET /api/v1/security/live-status
 ### Demo Endpoints (Educational Mode Only)
 
 > **Note**: These endpoints are only available when the system is running in `educational` or `insecure` mode.
+
+#### Toggle Individual Security Feature
+
+```http
+POST /api/v1/security/features/{feature_id}/toggle?enabled=<bool>
+```
+
+Toggle a specific security feature on or off at runtime for educational purposes.
+
+**Path Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| feature_id | string | Yes | One of: `rate_limiting`, `input_validation`, `password_complexity`, `password_hashing`, `mfa_totp`, `replay_protection`, `audit_logging`, `session_validation`, `tls_https`, `certificate_pinning`, `cors_protection`, `brute_force_protection` |
+
+**Query Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| enabled | boolean | Yes | `true` to enable, `false` to disable |
+
+**Response (200 OK)**:
+```json
+{
+  "success": true,
+  "feature": "rate_limiting",
+  "enabled": false,
+  "message": "Feature 'rate_limiting' has been disabled",
+  "security_score": 75,
+  "warning": "Disabling security features is for educational purposes only!"
+}
+```
+
+**Frontend Integration**: Security feature toggles are embedded across 5 pages (Login, Register, Dashboard, Device, Settings) allowing interactive demonstration of each feature's impact.
 
 #### Demo: SQL Injection Vulnerability
 

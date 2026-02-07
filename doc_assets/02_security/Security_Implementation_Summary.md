@@ -18,12 +18,12 @@ This document provides a comprehensive overview of all security measures in the 
 
 | Feature | Implementation | Location | Status |
 |---------|---------------|----------|--------|
-| Password Hashing | Argon2id (memory-hard algorithm) | `backend/backend-py/auth.py` | âœ?Implemented |
-| Minimum Length | 8 characters | `password_validator.py` | âœ?Implemented |
-| Uppercase Required | At least 1 character | `password_validator.py` | âœ?Implemented |
-| Lowercase Required | At least 1 character | `password_validator.py` | âœ?Implemented |
-| Digit Required | At least 1 number | `password_validator.py` | âœ?Implemented |
-| Special Character Required | At least 1 special character | `password_validator.py` | âœ?Implemented |
+| Password Hashing | Argon2id (memory-hard algorithm) | `backend/backend-py/auth.py` | ï¿½?Implemented |
+| Minimum Length | 8 characters | `password_validator.py` | ï¿½?Implemented |
+| Uppercase Required | At least 1 character | `password_validator.py` | ï¿½?Implemented |
+| Lowercase Required | At least 1 character | `password_validator.py` | ï¿½?Implemented |
+| Digit Required | At least 1 number | `password_validator.py` | ï¿½?Implemented |
+| Special Character Required | At least 1 special character | `password_validator.py` | ï¿½?Implemented |
 
 **Implementation Code** (`auth.py`):
 ```python
@@ -57,10 +57,10 @@ def verify_pw(pw: str, hashed: str) -> bool:
 
 | Feature | Implementation | Status |
 |---------|---------------|--------|
-| Verification Code | 6-digit random code | âœ?Implemented |
-| Code Expiration | 10 minutes | âœ?Implemented |
-| Email Provider | AWS SES | âœ?Implemented |
-| Rate Limiting | 5 requests/minute | âœ?Implemented |
+| Verification Code | 6-digit random code | ï¿½?Implemented |
+| Code Expiration | 10 minutes | ï¿½?Implemented |
+| Email Provider | AWS SES | ï¿½?Implemented |
+| Rate Limiting | 5 requests/minute | ï¿½?Implemented |
 
 ---
 
@@ -95,10 +95,10 @@ def require_role(*allowed_roles: str):
 
 | Control | Implementation | Status |
 |---------|---------------|--------|
-| User ID extraction | `get_user_id(request)` | âœ?Implemented |
-| Role verification | `get_user_role(request)` | âœ?Implemented |
-| Ownership check | `check_resource_ownership()` | âœ?Implemented |
-| Combined check | `require_ownership_or_role()` | âœ?Implemented |
+| User ID extraction | `get_user_id(request)` | ï¿½?Implemented |
+| Role verification | `get_user_role(request)` | ï¿½?Implemented |
+| Ownership check | `check_resource_ownership()` | ï¿½?Implemented |
+| Combined check | `require_ownership_or_role()` | ï¿½?Implemented |
 
 ---
 
@@ -109,10 +109,10 @@ def require_role(*allowed_roles: str):
 **Frontend** (`secure_network_service.dart`):
 | Feature | Implementation | Status |
 |---------|---------------|--------|
-| TLS Version | TLS 1.3 enforced | âœ?Implemented |
-| Certificate Validation | System trust store | âœ?Implemented |
-| Certificate Pinning | Configurable fingerprints | âœ?Implemented |
-| Bad Certificate Handler | Strict rejection (except localhost) | âœ?Implemented |
+| TLS Version | TLS 1.3 enforced | ï¿½?Implemented |
+| Certificate Validation | System trust store | ï¿½?Implemented |
+| Certificate Pinning | Configurable fingerprints | ï¿½?Implemented |
+| Bad Certificate Handler | Strict rejection (except localhost) | ï¿½?Implemented |
 
 **Security Headers**:
 ```dart
@@ -153,9 +153,9 @@ Cors:
 
 | Service | Encryption Method | Status |
 |---------|------------------|--------|
-| DynamoDB | Server-Side Encryption (SSE) | âœ?Enabled |
-| S3 | AES-256 Server-Side Encryption | âœ?Enabled |
-| Flutter Secure Storage | Platform encryption | âœ?Enabled |
+| DynamoDB | Server-Side Encryption (SSE) | ï¿½?Enabled |
+| S3 | AES-256 Server-Side Encryption | ï¿½?Enabled |
+| Flutter Secure Storage | Platform encryption | ï¿½?Enabled |
 
 **DynamoDB Configuration**:
 ```yaml
@@ -175,9 +175,9 @@ BucketEncryption:
 
 | Layer | Protocol | Status |
 |-------|----------|--------|
-| API Gateway | HTTPS only | âœ?Enforced |
-| S3 Presigned URLs | HTTPS only | âœ?Enforced |
-| Flutter Client | TLS 1.3 | âœ?Enforced |
+| API Gateway | HTTPS only | ï¿½?Enforced |
+| S3 Presigned URLs | HTTPS only | ï¿½?Enforced |
+| Flutter Client | TLS 1.3 | ï¿½?Enforced |
 
 ### 4.3 Client-Side Encryption Service
 
@@ -333,20 +333,20 @@ MedusaWebACL:
 
 | Feature | Configuration | Status |
 |---------|--------------|--------|
-| Block Public ACLs | `BlockPublicAcls: true` | âœ?Enabled |
-| Block Public Policy | `BlockPublicPolicy: true` | âœ?Enabled |
-| Ignore Public ACLs | `IgnorePublicAcls: true` | âœ?Enabled |
-| Restrict Public Buckets | `RestrictPublicBuckets: true` | âœ?Enabled |
-| Versioning | `Status:` | âœ?Enabled |
-| Lifecycle Rules | 30-day noncurrent version expiration | âœ?Enabled |
+| Block Public ACLs | `BlockPublicAcls: true` | ï¿½?Enabled |
+| Block Public Policy | `BlockPublicPolicy: true` | ï¿½?Enabled |
+| Ignore Public ACLs | `IgnorePublicAcls: true` | ï¿½?Enabled |
+| Restrict Public Buckets | `RestrictPublicBuckets: true` | ï¿½?Enabled |
+| Versioning | `Status:` | ï¿½?Enabled |
+| Lifecycle Rules | 30-day noncurrent version expiration | ï¿½?Enabled |
 
 ### 7.3 DynamoDB Security
 
 | Feature | Configuration | Status |
 |---------|--------------|--------|
-| Server-Side Encryption | `SSEEnabled: true` | âœ?All tables |
-| Point-in-Time Recovery | `PointInTimeRecoveryEnabled: true` | âœ?All tables |
-| TTL for Refresh Tokens | `AttributeName: expiresAt` | âœ?Enabled |
+| Server-Side Encryption | `SSEEnabled: true` | ï¿½?All tables |
+| Point-in-Time Recovery | `PointInTimeRecoveryEnabled: true` | ï¿½?All tables |
+| TTL for Refresh Tokens | `AttributeName: expiresAt` | ï¿½?Enabled |
 
 ### 7.4 IAM Least Privilege
 
@@ -364,10 +364,10 @@ MedusaWebACL:
 **C++ Plugin** (`windows_ble_pairing_plugin.cpp`):
 | Feature | Implementation | Status |
 |---------|---------------|--------|
-| PIN-based Pairing | `DevicePairingKinds::ProvidePin` | âœ?Implemented |
-| Encryption Required | `DevicePairingProtectionLevel::EncryptionAndAuthentication` | âœ?Implemented |
-| Thread Safety | MTA initialization + mutex | âœ?Implemented |
-| PIN Length Logging Only | Removed actual PIN debug output | âœ?Secured |
+| PIN-based Pairing | `DevicePairingKinds::ProvidePin` | ï¿½?Implemented |
+| Encryption Required | `DevicePairingProtectionLevel::EncryptionAndAuthentication` | ï¿½?Implemented |
+| Thread Safety | MTA initialization + mutex | ï¿½?Implemented |
+| PIN Length Logging Only | Removed actual PIN debug output | ï¿½?Secured |
 
 **Supported Pairing Modes**:
 ```cpp
@@ -452,28 +452,28 @@ static const Duration lockoutDuration = Duration(minutes: 15);
 
 | Category | Controls | | Verified |
 |----------|----------|-------------|----------|
-| Authentication | 6 | 6 | âœ?|
-| Authorization | 4 | 4 | âœ?|
-| Network Security | 4 | 4 | âœ?|
-| Data Encryption | 4 | 4 | âœ?|
-| Audit Logging | 4 | 4 | âœ?|
-| Input Validation | 2 | 2 | âœ?|
-| Infrastructure | 4 | 4 | âœ?|
-| Device Security | 4 | 4 | âœ?|
-| Rate Limiting | 2 | 2 | âœ?|
-| Replay Protection | 2 | 2 | âœ?|
-| Firmware Verification | 3 | 3 | âœ?|
-| Device Integrity | 3 | 3 | âœ?|
-| **Total** | **42** | **42** | âœ?|
+| Authentication | 6 | 6 | ï¿½?|
+| Authorization | 4 | 4 | ï¿½?|
+| Network Security | 4 | 4 | ï¿½?|
+| Data Encryption | 4 | 4 | ï¿½?|
+| Audit Logging | 4 | 4 | ï¿½?|
+| Input Validation | 2 | 2 | ï¿½?|
+| Infrastructure | 4 | 4 | ï¿½?|
+| Device Security | 4 | 4 | ï¿½?|
+| Rate Limiting | 2 | 2 | ï¿½?|
+| Replay Protection | 2 | 2 | ï¿½?|
+| Firmware Verification | 3 | 3 | ï¿½?|
+| Device Integrity | 3 | 3 | ï¿½?|
+| **Total** | **42** | **42** | ï¿½?|
 
 ### 11.2 Security Compliance Matrix
 
 | Standard | Requirement | Status |
 |----------|-------------|--------|
-| FDA 2025 Premarket Cybersecurity | SPDF Sections 1-10 | âœ?Compliant |
-| HIPAA Security Rule | Technical Safeguards | âœ?Compliant |
-| NIST Cybersecurity Framework | Identify, Protect, Detect, Respond, Recover | âœ?Aligned |
-| OWASP Top 10 2021 | All categories addressed | âœ?Mitigated |
+| FDA 2025 Premarket Cybersecurity | SPDF Sections 1-10 | ï¿½?Compliant |
+| HIPAA Security Rule | Technical Safeguards | ï¿½?Compliant |
+| NIST Cybersecurity Framework | Identify, Protect, Detect, Respond, Recover | ï¿½?Aligned |
+| OWASP Top 10 2021 | All categories addressed | ï¿½?Mitigated |
 
 ---
 
@@ -527,19 +527,53 @@ async def sensitive_endpoint(request: Request):
 
 | Feature | Status |
 |---------|--------|
-| SHA-256 Fingerprint Calculation | âœ?Implemented |
-| Trusted Fingerprint Matching | âœ?Implemented |
-| Connection Testing | âœ?Implemented |
+| SHA-256 Fingerprint Calculation | ï¿½?Implemented |
+| Trusted Fingerprint Matching | ï¿½?Implemented |
+| Connection Testing | ï¿½?Implemented |
 
 ---
 
-## 13. Recommended Future Enhancements
+## 13. Recently Implemented Features (February 2026)
 
-1. **Multi-Factor Authentication (MFA)**: Add TOTP-based MFA for high-risk operations
-2. **Anomaly Detection**: Implement behavioral analytics for suspicious activity detection
-3. **Key Rotation**: Automate JWT secret and encryption key rotation
-4. **Security Scanning**: Integrate SAST/DAST tools into CI/CD pipeline
-5. **Penetration Testing**: Schedule regular third-party security assessments
+### 13.1 Multi-Factor Authentication (TOTP) â€” âœ… Implemented
+
+MFA is now **mandatory** for all accounts. Implementation details:
+
+- **Registration Flow**: MFA secret generated at account creation. User must verify TOTP code in authenticator app before accessing the system.
+- **Login Flow**: After password authentication, MFA challenge issued with `tempToken`. User must provide valid 6-digit TOTP code via `POST /api/v1/auth/mfa/login`.
+- **Backend**: `pyotp` library for TOTP generation/verification. Secrets stored in DynamoDB.
+- **Endpoints**: `POST /auth/mfa/setup`, `POST /auth/mfa/verify-setup`, `POST /auth/mfa/verify`, `POST /auth/mfa/login`, `GET /auth/mfa/status`, `DELETE /auth/mfa`
+
+### 13.2 Account Deletion â€” âœ… Implemented
+
+- **Self-service**: Any authenticated user can delete their own account via `DELETE /api/v1/auth/account`
+- **Admin-initiated**: Admins can delete user accounts via `DELETE /api/v1/admin/users/{user_id}` (with self-delete protection)
+- **Frontend**: "Danger Zone" section in Settings > Security tab with double-confirmation dialog
+
+### 13.3 Security Education UI â€” âœ… Implemented
+
+Interactive security feature toggles embedded across 5 application pages:
+
+| Page | Features | Interactive |
+|------|----------|-------------|
+| Login | rate_limiting, mfa_totp, brute_force_protection, session_validation | Yes (mfa_totp, session_validation read-only) |
+| Register | password_complexity, password_hashing, input_validation | Yes (password_hashing read-only) |
+| Dashboard | audit_logging, cors_protection | Yes |
+| Device | replay_protection, tls_https, certificate_pinning | Yes (tls_https, certificate_pinning read-only) |
+| Settings | All 12 features visible in Security Lab | Yes |
+
+- **Security Lab Page**: Centralized security education hub accessible from Admin dashboard
+- **Security Log Panel**: Real-time security event display widget
+- **Toggle Endpoint**: `POST /api/v1/security/features/{feature_id}/toggle?enabled=true/false`
+
+---
+
+## 14. Recommended Future Enhancements
+
+1. **Anomaly Detection**: Implement behavioral analytics for suspicious activity detection
+2. **Key Rotation**: Automate JWT secret and encryption key rotation
+3. **Security Scanning**: Integrate SAST/DAST tools into CI/CD pipeline
+4. **Penetration Testing**: Schedule regular third-party security assessments
 
 ---
 

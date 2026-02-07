@@ -1250,6 +1250,35 @@ def mfa_setup(request: Request):
     )
 
 
+@app.post("/api/v1/auth/mfa/verify-setup")
+def mfa_verify_setup(req: MfaVerifyReq, request: Request):
+    """
+    Verify TOTP setup during registration.
+    
+    Confirms the user's authenticator app is generating valid codes
+    against the already-active MFA secret. Does NOT change any MFA state.
+    """
+    user_id = get_user_id(request)
+    u = db.get_user(user_id)
+    if not u:
+        raise HTTPException(404, detail={"code": "USER_NOT_FOUND", "message": "user not found"})
+    
+    mfa_secret = u.get("mfaSecret")
+    if not mfa_secret:
+        raise HTTPException(400, detail={"code": "MFA_NOT_SETUP", "message": "MFA not configured"})
+    
+    if not verify_mfa_code(mfa_secret, req.code):
+        raise HTTPException(400, detail={"code": "MFA_INVALID", "message": "Invalid TOTP code. Please check your authenticator app and try again."})
+    
+    audit_log_if_enabled(
+        event_type=AuditEventType.MFA_ENABLED,
+        user_id=user_id,
+        details={"action": "mfa_setup_verified"}
+    )
+    
+    return {"success": True, "message": "TOTP verified successfully. Your authenticator is set up correctly."}
+
+
 @app.post("/api/v1/auth/mfa/verify")
 def mfa_verify(req: MfaVerifyReq, request: Request):
     """
@@ -1364,14 +1393,19 @@ def refresh(req: RefreshReq):
     )
 
 @app.post("/api/v1/auth/logout", status_code=200)
-def logout(req: RefreshReq):
+async def logout(request: Request):
     """
     Logout user - API v3 compliant (204/200)
-    Revokes refresh token
+    Revokes refresh token if provided in body.
     """
-    # API v3 uses camelCase
-    _ = db.take_refresh(req.refreshToken)
-    # API v3 doc shows 204, but returning 200 with success message
+    # Try to parse refresh token from body, but don't fail if missing
+    try:
+        body = await request.json()
+        refresh_token = body.get("refreshToken")
+        if refresh_token:
+            _ = db.take_refresh(refresh_token)
+    except Exception:
+        pass  # Logout succeeds even without refresh token revocation
     return {"success": True, "message": "Successfully logged out"}
 
 
