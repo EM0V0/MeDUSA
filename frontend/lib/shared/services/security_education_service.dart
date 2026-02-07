@@ -229,6 +229,69 @@ class SecurityEducationService {
     }
   }
 
+  /// Get live security status (for real-time dashboard updates)
+  Future<Map<String, dynamic>?> getLiveStatus() async {
+    try {
+      final response = await _networkService.get('/security/live-status');
+      if (response.statusCode == 200) {
+        final data = response.data is String 
+            ? jsonDecode(response.data as String) 
+            : response.data;
+        return data as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('SecurityEducationService: Error getting live status: $e');
+      return null;
+    }
+  }
+
+  /// Switch security mode at RUNTIME (no restart needed!)
+  /// 
+  /// Modes:
+  /// - 'secure': All features enabled, cannot be toggled
+  /// - 'educational': All features enabled + verbose logging + can toggle
+  /// - 'insecure': Features can be disabled for demos
+  Future<Map<String, dynamic>?> setSecurityMode(String mode) async {
+    try {
+      final response = await _networkService.post(
+        '/security/mode?mode=$mode',
+        data: {},
+      );
+      if (response.statusCode == 200) {
+        final data = response.data is String 
+            ? jsonDecode(response.data as String) 
+            : response.data;
+        logEducational('Mode Switch', 'Security mode changed to: $mode');
+        return data as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('SecurityEducationService: Error setting mode: $e');
+      return null;
+    }
+  }
+
+  /// Toggle educational logging at RUNTIME
+  Future<Map<String, dynamic>?> setEducationalLogging(bool enabled) async {
+    try {
+      final response = await _networkService.post(
+        '/security/logging?enabled=$enabled',
+        data: {},
+      );
+      if (response.statusCode == 200) {
+        final data = response.data is String 
+            ? jsonDecode(response.data as String) 
+            : response.data;
+        return data as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('SecurityEducationService: Error setting logging: $e');
+      return null;
+    }
+  }
+
   /// Get a specific security feature by ID
   Future<SecurityFeature?> getSecurityFeature(String featureId) async {
     try {

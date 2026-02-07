@@ -115,6 +115,76 @@ async def get_security_config():
     return security_config.get_config_json()
 
 
+@app.post("/api/v1/security/mode")
+async def set_security_mode(mode: str, request: Request):
+    """
+    Switch security mode at RUNTIME (no restart needed).
+    
+    Modes:
+    - secure: All features enabled, cannot be toggled (production)
+    - educational: All features enabled, verbose logging, can be toggled
+    - insecure: Features can be disabled for vulnerability demos
+    
+    ⚠️ This is for educational purposes only!
+    """
+    try:
+        new_mode = SecurityMode(mode.lower())
+    except ValueError:
+        raise HTTPException(400, detail={
+            "code": "INVALID_MODE",
+            "message": f"Invalid mode '{mode}'. Use: secure, educational, or insecure"
+        })
+    
+    old_mode = security_config.mode
+    security_config.mode = new_mode
+    
+    return {
+        "success": True,
+        "previousMode": old_mode.value,
+        "currentMode": new_mode.value,
+        "message": f"Security mode changed from {old_mode.value.upper()} to {new_mode.value.upper()}",
+        "warning": "⚠️ Mode change takes effect immediately - no restart needed!" if new_mode != SecurityMode.SECURE else None
+    }
+
+
+@app.post("/api/v1/security/logging")
+async def toggle_educational_logging(enabled: bool = True):
+    """
+    Toggle educational logging at RUNTIME.
+    
+    When enabled, all security checks output detailed explanations
+    to the console/logs for learning purposes.
+    """
+    security_config.educational_logging = enabled
+    return {
+        "success": True,
+        "educationalLogging": enabled,
+        "message": f"Educational logging {'ENABLED' if enabled else 'DISABLED'}"
+    }
+
+
+@app.get("/api/v1/security/live-status")
+async def get_live_security_status():
+    """
+    Get real-time security status for dashboard display.
+    Shows current mode, enabled/disabled features, and security score.
+    """
+    features = security_config.get_all_features()
+    enabled_count = sum(1 for f in features if f.enabled)
+    total_count = len(features)
+    
+    return {
+        "mode": security_config.mode.value,
+        "educationalLogging": security_config.educational_logging,
+        "securityScore": round((enabled_count / total_count) * 100),
+        "enabledFeatures": enabled_count,
+        "totalFeatures": total_count,
+        "features": {f.id: {"enabled": f.enabled, "name": f.name, "category": f.category} for f in features},
+        "canToggleFeatures": security_config.mode != SecurityMode.SECURE,
+        "timestamp": int(time.time())
+    }
+
+
 @app.get("/api/v1/security/features")
 async def get_security_features():
     """

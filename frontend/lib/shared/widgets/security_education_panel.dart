@@ -170,31 +170,109 @@ class _SecurityEducationPanelState extends State<SecurityEducationPanel>
       color: cardColor.withValues(alpha: 0.1),
       child: Padding(
         padding: EdgeInsets.all(16.w),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(modeIcon, size: 48, color: cardColor),
-            SizedBox(width: 16.w),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Security Mode: ${mode.toUpperCase()}',
-                    style: TextStyle(
-                      fontSize: 18.sp,
-                      fontWeight: FontWeight.bold,
-                      color: cardColor,
-                    ),
+            Row(
+              children: [
+                Icon(modeIcon, size: 48, color: cardColor),
+                SizedBox(width: 16.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Security Mode: ${mode.toUpperCase()}',
+                        style: TextStyle(
+                          fontSize: 18.sp,
+                          fontWeight: FontWeight.bold,
+                          color: cardColor,
+                        ),
+                      ),
+                      SizedBox(height: 4.h),
+                      Text(modeDescription),
+                    ],
                   ),
-                  SizedBox(height: 4.h),
-                  Text(modeDescription),
-                ],
-              ),
+                ),
+              ],
             ),
+            SizedBox(height: 16.h),
+            _buildModeSwitcher(),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildModeSwitcher() {
+    final currentMode = _config?.mode ?? 'secure';
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '🔄 Switch Mode (No Restart Needed!)',
+          style: TextStyle(
+            fontSize: 14.sp,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SizedBox(height: 8.h),
+        Wrap(
+          spacing: 8.w,
+          runSpacing: 8.h,
+          children: [
+            _buildModeButton('secure', 'SECURE', Icons.shield, Colors.green, currentMode),
+            _buildModeButton('educational', 'EDUCATIONAL', Icons.school, Colors.blue, currentMode),
+            _buildModeButton('insecure', 'INSECURE', Icons.warning, Colors.orange, currentMode),
+          ],
+        ),
+        SizedBox(height: 8.h),
+        Text(
+          '💡 Educational mode is recommended for learning. Insecure mode demonstrates vulnerabilities.',
+          style: TextStyle(fontSize: 11.sp, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModeButton(String mode, String label, IconData icon, Color color, String currentMode) {
+    final isSelected = mode == currentMode;
+    
+    return ElevatedButton.icon(
+      onPressed: isSelected ? null : () => _switchMode(mode),
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isSelected ? color : Colors.grey.shade200,
+        foregroundColor: isSelected ? Colors.white : Colors.grey.shade700,
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+      ),
+    );
+  }
+
+  Future<void> _switchMode(String newMode) async {
+    setState(() => _isLoading = true);
+    
+    final result = await _service.setSecurityMode(newMode);
+    
+    if (result != null && result['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Mode switched to ${newMode.toUpperCase()} - No restart needed!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _loadConfig(); // Refresh the config
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Failed to switch mode'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      setState(() => _isLoading = false);
+    }
   }
 
   Widget _buildSecurityScore() {
@@ -292,6 +370,8 @@ class _SecurityEducationPanelState extends State<SecurityEducationPanel>
   }
 
   Widget _buildFeatureCard(SecurityFeature feature) {
+    final canToggle = _config?.mode != 'secure';
+    
     return Card(
       margin: EdgeInsets.only(bottom: 8.h),
       child: ExpansionTile(
@@ -299,9 +379,21 @@ class _SecurityEducationPanelState extends State<SecurityEducationPanel>
           feature.enabled ? Icons.check_circle : Icons.cancel,
           color: feature.enabled ? Colors.green : Colors.red,
         ),
-        title: Text(
-          feature.name,
-          style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14.sp),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                feature.name,
+                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14.sp),
+              ),
+            ),
+            if (canToggle)
+              Switch(
+                value: feature.enabled,
+                onChanged: (value) => _toggleFeature(feature.id, value),
+                activeColor: Colors.green,
+              ),
+          ],
         ),
         subtitle: Text(
           feature.description,
@@ -315,6 +407,30 @@ class _SecurityEducationPanelState extends State<SecurityEducationPanel>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (canToggle && !feature.enabled) ...[
+                  Container(
+                    padding: EdgeInsets.all(12.w),
+                    margin: EdgeInsets.only(bottom: 12.h),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.lightbulb, color: Colors.orange),
+                        SizedBox(width: 8.w),
+                        Expanded(
+                          child: Text(
+                            '💡 This feature is DISABLED for educational demonstration. '
+                            'Toggle it back ON to see the security difference.',
+                            style: TextStyle(fontSize: 11.sp),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 _buildInfoSection('📍 Code Location', feature.codeLocation),
                 if (feature.cweReference != null)
                   _buildInfoSection('🔗 CWE Reference', feature.cweReference!),
@@ -349,6 +465,30 @@ class _SecurityEducationPanelState extends State<SecurityEducationPanel>
         ],
       ),
     );
+  }
+
+  Future<void> _toggleFeature(String featureId, bool enabled) async {
+    final result = await _service.toggleSecurityFeature(featureId, enabled);
+    
+    if (result != null && result['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(enabled 
+            ? '✅ $featureId ENABLED - Security restored!'
+            : '⚠️ $featureId DISABLED - Vulnerability exposed for learning'),
+          backgroundColor: enabled ? Colors.green : Colors.orange,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      await _loadConfig(); // Refresh to show updated state
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to toggle feature. Make sure you are in Educational or Insecure mode.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildInfoSection(String label, String content) {

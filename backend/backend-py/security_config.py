@@ -868,9 +868,30 @@ Retry-After: 45
     def mode(self) -> SecurityMode:
         return self._mode
     
+    @mode.setter
+    def mode(self, new_mode: SecurityMode):
+        """Allow runtime mode switching for educational purposes"""
+        old_mode = self._mode
+        self._mode = new_mode
+        if self._educational_logging or new_mode == SecurityMode.EDUCATIONAL:
+            print(f"\n🔄 SECURITY MODE CHANGED: {old_mode.value.upper()} → {new_mode.value.upper()}")
+            if new_mode == SecurityMode.INSECURE:
+                print("   ⚠️  WARNING: Insecure mode - security features can be disabled!")
+            elif new_mode == SecurityMode.SECURE:
+                print("   ✅ Secure mode - all features enforced, cannot be disabled")
+                # Re-enable all features when switching to secure mode
+                for feature in self._features.values():
+                    feature.enabled = True
+    
     @property
     def educational_logging(self) -> bool:
         return self._educational_logging
+    
+    @educational_logging.setter
+    def educational_logging(self, enabled: bool):
+        """Toggle educational logging at runtime"""
+        self._educational_logging = enabled
+        print(f"\n📚 Educational Logging: {'ENABLED' if enabled else 'DISABLED'}")
     
     def is_feature_enabled(self, feature_id: str) -> bool:
         """Check if a security feature is enabled"""
